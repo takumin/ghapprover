@@ -1,0 +1,386 @@
+# ghapprover Specification
+
+A Cloudflare Workers application that automatically approves GitHub pull requests.
+
+**What it does:**
+
+- Acts as a GitHub App and automatically approves PRs created by the organization /
+  repository owner themselves or by allowed bots (Renovate / Dependabot)
+- This satisfies the required-review rules of branch protection / rulesets
+
+**Intended use case:** solo development or small teams that want to keep a
+"1 required review" branch protection rule without blocking merges of their own PRs
+and dependency-update PRs.
+
+## Table of Contents
+
+1. [Architecture Overview](#1-architecture-overview)
+2. [GitHub App Configuration](#2-github-app-configuration)
+3. [Approval Conditions](#3-approval-conditions)
+   - [3.1 Trusted Principals](#31-trusted-principals)
+   - [3.2 Commit Verification](#32-commit-verification)
+   - [3.3 Race Condition Mitigation (TOCTOU)](#33-race-condition-mitigation-toctou)
+   - [3.4 Prerequisite Branch Protection / Ruleset Configuration](#34-prerequisite-branch-protection--ruleset-configuration-users-responsibility)
+4. [Processing Flow](#4-processing-flow)
+5. [Configuration](#5-configuration)
+6. [Idempotency and Duplicate Deliveries](#6-idempotency-and-duplicate-deliveries)
+7. [Authentication and Secret Management](#7-authentication-and-secret-management)
+8. [Observability](#8-observability)
+9. [Error Handling](#9-error-handling)
+10. [Out of Scope](#10-out-of-scope)
+11. [Implementation Notes (Informative)](#11-implementation-notes-informative)
+
+## 1. Architecture Overview
+
+```mermaid
+flowchart TD
+    GH["GitHub (pull_request webhook)"]
+    API["GitHub REST API"]
+
+    subgraph W["Cloudflare Workers (ghapprover)"]
+        V["Verify webhook signature"]
+        E["Evaluate approval conditions<br>(in-code constants + GitHub API)"]
+        P["Post an APPROVE review to the PR"]
+        V --> E --> P
+    end
+
+    GH -->|"POST (signed with X-Hub-Signature-256)"| V
+    P -->|"authenticated with an installation token"| API
+```
+
+Components:
+
+| Component | Role |
+|---|---|
+| GitHub App | Source of webhook deliveries and principal for API authentication. Approval reviews are posted under the App's bot user |
+| Cloudflare Workers | Webhook receiving endpoint. Performs evaluation and approval |
+| Workers Secrets | Storage for the App private key and webhook secret |
+
+> [!NOTE]
+> There is no dynamic configuration. Neither KV nor environment variables (vars) are
+> used; the allowed bot list is an in-code constant, and target repositories are
+> controlled via the App's installation scope and rulesets (§2, §3.4, §5).
+
+## 2. GitHub App Configuration
+
+### Permissions (least privilege)
+
+| Permission | Access | Purpose |
+|---|---|---|
+| Pull requests | Read & write | Fetch PR information and the PR's commit list, and post reviews (APPROVE) |
+| Organization members | Read | Determine org owners (role=admin) |
+| Metadata | Read | (Mandatory default permission) |
+
+### Webhook
+
+- Subscribe events: `pull_request` only
+- Webhook URL: the Workers endpoint (e.g. `https://ghapprover.<subdomain>.workers.dev/webhook`)
+- Webhook secret: required. Stored as a Workers Secret; every request is verified with HMAC-SHA256
+
+### Installation
+
+Install on the target organization / personal account. Choose one of the following
+installation scopes:
+
+- **Only select repositories** — the installation scope itself controls which
+  repositories are targeted. Repositories outside the scope receive no webhook
+  deliveries and are never approved
+- **All repositories** — targets all repositories (including ones created in the
+  future), with effective per-repository control handled on the ruleset side (§3.4)
+
+> [!NOTE]
+> Whichever is chosen, the approval conditions (§3) are evaluated per PR and fail
+> closed, so widening the installation scope never creates a new approval path.
+
+## 3. Approval Conditions
+
+Approve only when **all** of the following are satisfied. If any condition is not met
+or cannot be determined, do not approve (fail closed).
+
+1. **Event condition**: a `pull_request` event whose action is one of `opened` /
+   `reopened` / `synchronize` / `ready_for_review`
+2. **PR state**: the PR is open and not a draft
+3. **Author condition**: the PR author (`pull_request.user`) is a "trusted principal" (§3.1)
+4. **Commit condition**: every commit in the PR passes verification (§3.2)
+5. **Duplication condition**: no review whose `user` is the App's own bot user
+   (`<app-slug>[bot]`), whose `state` is `APPROVED`, and whose `commit_id` equals the
+   payload's `head.sha` exists yet (if one exists, do nothing and finish successfully).
+   Reviews in the `DISMISSED` state do not suppress re-approval: after a manual
+   dismissal, the PR can be approved again on the next in-scope event. The reviews
+   list API is paginated; fetch all pages
+6. **Live-state condition**: immediately before posting the review, the live PR still
+   matches the payload (§3.3)
+
+> [!NOTE]
+> No target-repository filtering is performed at runtime. GitHub does not deliver
+> webhooks for repositories outside the installation scope, so the only repository
+> control on the Worker side is the App's installation scope (§2). When installed with
+> "All repositories", per-repository control is handled on the ruleset side (§3.4).
+>
+> Fork PRs are evaluated under exactly the same conditions (author and commit checks).
+> If `pull_request.head.repo` is `null` (e.g. the fork was deleted), do not approve.
+
+### 3.1 Trusted Principals
+
+An account that, in the context of the PR, falls under any of the following:
+
+- **The repository owner themselves**: for personal repositories, a user matching
+  `repository.owner.login`
+- **An organization owner**: for org repositories, a user for whom
+  `GET /orgs/{org}/memberships/{username}` returns `state=active` and `role=admin`.
+  The `author_association` field of the webhook payload is not used for org-owner
+  determination (it only reveals MEMBER)
+- **An allowed bot**: a bot account whose login is included in the in-code allowlist
+  constant (§5) (`renovate[bot]`, `dependabot[bot]`). Also verify that
+  `user.type == "Bot"` and that the numeric user `id` matches the allowlisted one
+  (defense in depth against lookalike logins)
+
+Notes:
+
+- The definition is applied both to the PR author (condition 3) and to every commit
+  author / committer (§3.2). Memoize membership API results per delivery (in memory)
+  so each distinct user is looked up at most once
+- Bots outside the allowlist (e.g. `github-actions[bot]`) are never trusted; commits
+  created by them intentionally block approval
+
+### 3.2 Commit Verification
+
+On every action (`opened`, `synchronize`, etc.), verify all commits of the PR before
+approving (`GET /repos/{owner}/{repo}/pulls/{n}/commits`).
+
+Fetch every page of the endpoint (`per_page=100`; at most 3 pages given the 250-commit
+cap below). Then:
+
+- If `pull_request.commits` is 0, do not approve (`no-commits`)
+- If the number of commits fetched differs from `pull_request.commits`, do not approve
+  (`commit-count-mismatch`, fail closed)
+
+For each commit:
+
+- `commit.verification.verified` is `true`. The `author` / `committer` user objects
+  are derived solely from the commit's email addresses, so anyone with push access can
+  impersonate a trusted principal — or the `web-flow` user, via `noreply@github.com` —
+  by forging the email. A verified signature guarantees the attribution is backed by a
+  key registered to the attributed account, or by GitHub itself (web UI / API commits)
+- `author` (the author mapped to a GitHub user) is not null and its login is a trusted principal
+- `committer` is a trusted principal, or `web-flow` (a commit made via the GitHub web
+  UI; genuine web-flow commits are always GitHub-signed, which the `verified` check
+  above enforces)
+
+If even one commit fails these checks, do not approve. This ensures that if third-party
+commits get mixed into a trusted principal's PR (e.g. someone other than the maintainer
+pushes to a bot branch), it is not approved.
+
+> [!IMPORTANT]
+> The PR commits API returns at most 250 commits. A PR whose `pull_request.commits`
+> exceeds 250 cannot be fully verified and is therefore not approved (fail closed).
+
+### 3.3 Race Condition Mitigation (TOCTOU)
+
+New commits may be pushed to the PR while evaluation is in progress, and GitHub's
+review semantics do not close this window by themselves:
+
+- The `commit_id` field of `POST /repos/{owner}/{repo}/pulls/{n}/reviews` only anchors
+  what the review is displayed against (and where inline comments attach). GitHub does
+  not document it as scoping whether the approval counts for the PR's current head
+- "Dismiss stale pull request approvals" snapshots the diff at the moment a review is
+  submitted. An approval submitted after an interleaved push therefore snapshots the
+  new diff and is not dismissed by that push
+
+Mitigation:
+
+1. Immediately before posting the review, fetch the live PR
+   (`GET /repos/{owner}/{repo}/pulls/{n}`) and confirm that it is still open, not a
+   draft, and that its `head.sha` equals the payload's `head.sha`. On any mismatch, do
+   not approve (200, reason `head-moved`). This also protects against redelivery of
+   outdated payloads and against posting reviews to PRs that were closed or merged in
+   the meantime
+2. Still pass the payload's `head.sha` as `commit_id` so the review is anchored to the
+   verified commit for display and audit purposes
+3. The remaining window (between the live check and the POST completing) is accepted
+   as residual risk: an interleaved push is processed as its own `synchronize` event,
+   and an unsigned interleaved commit cannot be merged anyway under the required
+   "Require signed commits" rule (§3.4)
+
+### 3.4 Prerequisite Branch Protection / Ruleset Configuration (User's Responsibility)
+
+**Require signed commits:**
+
+- Enable "Require signed commits". §3.2 requires `verification.verified == true` on
+  every commit, so the repository owner must sign their own commits (a GPG/SSH key
+  registered on GitHub) or commit via the GitHub web UI; otherwise their own PRs are
+  never approved. This rule keeps day-to-day operation consistent with that requirement
+- The allowed bots satisfy it: Mend-hosted Renovate creates commits via the GitHub API
+  (`platformCommit: "auto"` resolves to enabled for GitHub App tokens), so its commits
+  are GitHub-signed; Dependabot signs its own commits by default. A self-hosted
+  Renovate pushing unsigned commits over git is not approved (its login also differs
+  from `renovate[bot]`, §5)
+- Merge strategy caveat: GitHub does not sign the commits it creates for the rebase
+  merge strategy. Use squash or merge-commit merges when this rule is enabled
+
+**Dismiss stale approvals:**
+
+- Enable "Dismiss stale pull request approvals when new commits are pushed"
+  (both branch protection and rulesets have an equivalent option)
+- ghapprover re-verifies all commits and re-approves on every push, so with this
+  setting enabled, a PR stays approved only while all of its commits are trusted
+
+**Keeping human review required under "All repositories":**
+
+When installed with "All repositories", ghapprover posts APPROVE on target PRs in every
+repository. Rulesets cannot prevent the approval itself from being posted, so for
+repositories where human review must remain required, configure one of the following
+rulesets so that ghapprover's approval alone does not satisfy the required-review
+requirement:
+
+- Set Required approvals to 2 or more (ghapprover's approval counts as 1)
+- Enable Require review from Code Owners (the App's bot cannot be a code owner, so its
+  approval does not satisfy this requirement)
+
+In that case, do not add the owner or the App to the bypass actors.
+
+> [!NOTE]
+> Organization-level rulesets are limited to Enterprise Cloud; repository-level
+> rulesets are available from Free for public repositories and from Pro / Team and
+> above for private repositories. Repositories without a ruleset fall back to the
+> default behavior where "one approval from ghapprover satisfies the required review".
+
+**Operational caveats:**
+
+- "Update branch" creates a merge commit authored by the user who clicked it. If
+  someone other than a trusted principal clicks it on a bot PR, that commit fails §3.2
+  and the PR is no longer re-approved until the branch is rebased
+- Retargeting a PR to a different base branch (`pull_request.edited`) changes the
+  merge base, which dismisses existing approvals under "Dismiss stale approvals".
+  Retargeting emits no `synchronize` event, so re-approval happens on the next push or
+  via manual redelivery
+- "Require approval of the most recent reviewable push" is evaluated temporally (was
+  an approval submitted after the latest push), so it does not mitigate the race in
+  §3.3 and is not part of this configuration
+
+**Merging:**
+
+- ghapprover only approves; it does not merge. Enabling auto-merge is left to the
+  user's operational practice
+
+## 4. Processing Flow
+
+```mermaid
+flowchart TD
+    A["POST /webhook"] --> B{"1. Verify X-Hub-Signature-256"}
+    B -->|invalid| R401["401"]
+    B -->|valid| C{"2. Check event type and action"}
+    C -->|out of scope| R200A["200 (log the reason)"]
+    C -->|in scope| D["3. Obtain an installation token"]
+    D --> E{"4. Evaluate the author condition<br>(membership API if needed)"}
+    E -->|unsatisfied| R200B["200 (log the reason)"]
+    E -->|satisfied| F{"5. Fetch and verify all commits"}
+    F -->|unsatisfied| R200C["200 (log the reason)"]
+    F -->|verified| G{"6. Check existing reviews<br>(suppress duplicate approvals)"}
+    G -->|already approved| R200D["200 (already approved)"]
+    G -->|not yet approved| H{"7. Fetch the live PR:<br>open, non-draft, head.sha unchanged?"}
+    H -->|mismatch| R200F["200 (head-moved)"]
+    H -->|unchanged| I["8. Post APPROVE with commit_id=head.sha"]
+    I --> R200E["9. Return 200"]
+```
+
+- Processing is **synchronous** (not deferred to `ctx.waitUntil`). GitHub API calls per
+  delivery: token issuance, commit list (up to 3 pages), membership checks (one per
+  distinct non-bot author/committer, memoized within the delivery, §3.1), existing
+  reviews (paginated), the live PR fetch, and the review POST — typically under 10
+  calls for PRs authored by the owner or an allowed bot, which fits within the webhook
+  timeout (10 seconds). Being synchronous means the outcome is
+  recorded as-is in GitHub's Recent Deliveries, and failures can be safely re-executed via
+  manual redelivery (the approval process is idempotent as described in §6).
+- "Not approving" is a normal outcome (200), and its reason must always be logged.
+  5xx is reserved for cases where the evaluation could not be completed (e.g. transient GitHub
+  API failures).
+
+## 5. Configuration
+
+There is no dynamic configuration. Neither KV nor environment variables (vars) are used;
+the information needed for evaluation comes from the following.
+
+| Decision | Source |
+|---|---|
+| Target repositories | The GitHub App's installation scope (§2). Webhooks are simply not delivered from outside the scope. With "All repositories", per-repository control is handled via rulesets (§3.4) |
+| Repository / org owner | Webhook payload + GitHub API (§3.1) |
+| Allowed bots | In-code constant pairing login and numeric user id (e.g. `ALLOWED_BOTS = [{ login: "renovate[bot]", id: 29139614 }, { login: "dependabot[bot]", id: 49699333 }] as const`) |
+
+- To change the allowed bots, edit the constant and redeploy. The configuration is
+  version-controlled in Git, and no path exists to rewrite the approval conditions at runtime
+- The allowlist matches the Mend-hosted Renovate app's bot user. Self-hosted Renovate
+  deployments run under a different login (their own app slug, or a PAT user of type
+  `User`) and are not matched by design
+- No runtime configuration loading, schema validation, or "configuration missing" branches are
+  needed. Constants are verified at build time by TypeScript's type checking
+
+## 6. Idempotency and Duplicate Deliveries
+
+- Duplicate webhook deliveries and redeliveries are assumed. Before approving, check the App's
+  own existing reviews and do nothing if an APPROVE for the current head SHA already exists
+- Even if the duplication check is somehow bypassed, re-approving the same `commit_id` merely
+  adds an extra review and has no safety impact
+
+## 7. Authentication and Secret Management
+
+| Secret | Storage | Purpose |
+|---|---|---|
+| GitHub App private key | Workers Secret | Signing the JWT used to issue installation tokens |
+| Webhook secret | Workers Secret | Signature verification |
+
+- An installation token is issued per event for the installation identified by the
+  payload's `installation.id`, using an App JWT (RS256, valid for at most 10
+  minutes). Token caching is not required (if done as an optimization, keep it in memory only
+  and never persist it)
+- Signature verification uses a timing-safe comparison
+
+## 8. Observability
+
+Emit at least the following to structured logs (Workers Logs):
+
+- `deliveryId` (X-GitHub-Delivery), `repo`, `prNumber`, `action`, `headSha`
+- `decision` (approved / skipped / error) and `reason`
+  (e.g. `author-not-trusted`, `untrusted-commit`, `unverified-commit`,
+  `already-approved`, `too-many-commits`, `commit-count-mismatch`, `no-commits`,
+  `head-moved`)
+
+> [!WARNING]
+> Never log tokens, private keys, or the full webhook payload.
+
+## 9. Error Handling
+
+| Situation | Response | Notes |
+|---|---|---|
+| Invalid signature / missing signature header | 401 | Do not process the body |
+| Out-of-scope event / action | 200 | Log the reason |
+| Approval conditions unsatisfied | 200 | Normal outcome. Log the reason |
+| Membership API returns 404 (author is not an org member) | 200 | Normal outcome (`author-not-trusted`), not an error |
+| Review POST returns 422 (PR closed / merged in the meantime) | 200 | Normally prevented by the live PR check (§3.3); treated as a skip |
+| Transient GitHub API failure | 500 | Fail closed. Retryable via redelivery |
+| Other GitHub API 4xx (401/403: insufficient permissions, rate limits) | 500 | Distinguish in logs as a configuration problem |
+
+No automatic retries inside the Worker (set timeouts on GitHub API calls).
+Re-execution is consolidated into manual redelivery on the GitHub side.
+
+> [!NOTE]
+> GitHub does not automatically redeliver failed webhook deliveries. A transient
+> failure on, say, a bot's `opened` event leaves the PR unapproved until a human
+> redelivers it manually or a new push triggers `synchronize`. This is an accepted
+> limitation.
+
+## 10. Out of Scope
+
+- Merging PRs or enabling auto-merge
+- Checking CI status (required checks are the responsibility of branch protection)
+- Decisions based on PR body or diff content
+- Interactive operations such as comment commands
+- Revoking approvals (dismissing stale reviews is the responsibility of branch protection)
+
+## 11. Implementation Notes (Informative)
+
+- Runtime: Cloudflare Workers (TypeScript)
+- Webhook signature verification and JWT signing can be implemented with the Web Crypto API.
+  If dependencies are added, keep them to Workers-compatible `@octokit/*` packages at most
+- Testing: extract the decision logic (trusted principals, commit verification) as pure
+  functions so it can be unit-tested without mocking the GitHub API
