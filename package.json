@@ -14,14 +14,15 @@
 		"deploy": "wrangler deploy",
 		"typegen": "wrangler types",
 		"typecheck": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
-		"lint": "oxlint",
-		"lint:fix": "oxlint --fix",
+		"lint": "oxlint --type-aware",
+		"lint:fix": "oxlint --type-aware --fix",
 		"format": "oxfmt && yamlfmt",
 		"format:check": "oxfmt --check && yamlfmt -lint",
 		"test": "vitest run"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "0.18.8",
+		"oxlint-tsgolint": "7.0.2001",
 		"typescript": "7.0.2",
 		"vitest": "4.1.10",
 		"wrangler": "4.114.0"
