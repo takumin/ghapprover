@@ -1,0 +1,3 @@
+---
+packages:
+- name: pnpm/pnpm@v11.17.0
