@@ -50,11 +50,11 @@ flowchart TD
 
 Components:
 
-| Component | Role |
-|---|---|
-| GitHub App | Source of webhook deliveries and principal for API authentication. Approval reviews are posted under the App's bot user |
-| Cloudflare Workers | Webhook receiving endpoint. Performs evaluation and approval |
-| Workers Secrets | Storage for the App private key and webhook secret |
+| Component          | Role                                                                                                                    |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| GitHub App         | Source of webhook deliveries and principal for API authentication. Approval reviews are posted under the App's bot user |
+| Cloudflare Workers | Webhook receiving endpoint. Performs evaluation and approval                                                            |
+| Workers Secrets    | Storage for the App private key and webhook secret                                                                      |
 
 > [!NOTE]
 > There is no dynamic configuration. Neither KV nor environment variables (vars) are
@@ -65,11 +65,11 @@ Components:
 
 ### Permissions (least privilege)
 
-| Permission | Access | Purpose |
-|---|---|---|
-| Pull requests | Read & write | Fetch PR information and the PR's commit list, and post reviews (APPROVE) |
-| Organization members | Read | Determine org owners (role=admin) |
-| Metadata | Read | (Mandatory default permission) |
+| Permission           | Access       | Purpose                                                                   |
+| -------------------- | ------------ | ------------------------------------------------------------------------- |
+| Pull requests        | Read & write | Fetch PR information and the PR's commit list, and post reviews (APPROVE) |
+| Organization members | Read         | Determine org owners (role=admin)                                         |
+| Metadata             | Read         | (Mandatory default permission)                                            |
 
 ### Webhook
 
@@ -301,11 +301,11 @@ flowchart TD
 There is no dynamic configuration. Neither KV nor environment variables (vars) are used;
 the information needed for evaluation comes from the following.
 
-| Decision | Source |
-|---|---|
-| Target repositories | The GitHub App's installation scope (§2). Webhooks are simply not delivered from outside the scope. With "All repositories", per-repository control is handled via rulesets (§3.4) |
-| Repository / org owner | Webhook payload + GitHub API (§3.1) |
-| Allowed bots | In-code constant pairing login and numeric user id (e.g. `ALLOWED_BOTS = [{ login: "renovate[bot]", id: 29139614 }, { login: "dependabot[bot]", id: 49699333 }] as const`) |
+| Decision               | Source                                                                                                                                                                             |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Target repositories    | The GitHub App's installation scope (§2). Webhooks are simply not delivered from outside the scope. With "All repositories", per-repository control is handled via rulesets (§3.4) |
+| Repository / org owner | Webhook payload + GitHub API (§3.1)                                                                                                                                                |
+| Allowed bots           | In-code constant pairing login and numeric user id (e.g. `ALLOWED_BOTS = [{ login: "renovate[bot]", id: 29139614 }, { login: "dependabot[bot]", id: 49699333 }] as const`)         |
 
 - To change the allowed bots, edit the constant and redeploy. The configuration is
   version-controlled in Git, and no path exists to rewrite the approval conditions at runtime
@@ -324,10 +324,10 @@ the information needed for evaluation comes from the following.
 
 ## 7. Authentication and Secret Management
 
-| Secret | Storage | Purpose |
-|---|---|---|
+| Secret                 | Storage        | Purpose                                           |
+| ---------------------- | -------------- | ------------------------------------------------- |
 | GitHub App private key | Workers Secret | Signing the JWT used to issue installation tokens |
-| Webhook secret | Workers Secret | Signature verification |
+| Webhook secret         | Workers Secret | Signature verification                            |
 
 - An installation token is issued per event for the installation identified by the
   payload's `installation.id`, using an App JWT (RS256, valid for at most 10
@@ -350,15 +350,15 @@ Emit at least the following to structured logs (Workers Logs):
 
 ## 9. Error Handling
 
-| Situation | Response | Notes |
-|---|---|---|
-| Invalid signature / missing signature header | 401 | Do not process the body |
-| Out-of-scope event / action | 200 | Log the reason |
-| Approval conditions unsatisfied | 200 | Normal outcome. Log the reason |
-| Membership API returns 404 (author is not an org member) | 200 | Normal outcome (`author-not-trusted`), not an error |
-| Review POST returns 422 (PR closed / merged in the meantime) | 200 | Normally prevented by the live PR check (§3.3); treated as a skip |
-| Transient GitHub API failure | 500 | Fail closed. Retryable via redelivery |
-| Other GitHub API 4xx (401/403: insufficient permissions, rate limits) | 500 | Distinguish in logs as a configuration problem |
+| Situation                                                             | Response | Notes                                                             |
+| --------------------------------------------------------------------- | -------- | ----------------------------------------------------------------- |
+| Invalid signature / missing signature header                          | 401      | Do not process the body                                           |
+| Out-of-scope event / action                                           | 200      | Log the reason                                                    |
+| Approval conditions unsatisfied                                       | 200      | Normal outcome. Log the reason                                    |
+| Membership API returns 404 (author is not an org member)              | 200      | Normal outcome (`author-not-trusted`), not an error               |
+| Review POST returns 422 (PR closed / merged in the meantime)          | 200      | Normally prevented by the live PR check (§3.3); treated as a skip |
+| Transient GitHub API failure                                          | 500      | Fail closed. Retryable via redelivery                             |
+| Other GitHub API 4xx (401/403: insufficient permissions, rate limits) | 500      | Distinguish in logs as a configuration problem                    |
 
 No automatic retries inside the Worker (set timeouts on GitHub API calls).
 Re-execution is consolidated into manual redelivery on the GitHub side.
