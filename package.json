@@ -16,6 +16,8 @@
 		"typecheck": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
 		"lint": "oxlint",
 		"lint:fix": "oxlint --fix",
+		"format": "oxfmt && yamlfmt",
+		"format:check": "oxfmt --check && yamlfmt -lint",
 		"test": "vitest run"
 	},
 	"devDependencies": {
