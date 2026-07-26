@@ -1,0 +1,3 @@
+---
+packages:
+- name: oxc-project/oxc/oxlint@apps_v1.75.0
