@@ -1,14 +1,33 @@
 {
 	"$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
-	"plugins": ["typescript", "unicorn", "oxc"],
-	"categories": { "correctness": "error" },
-	"env": { "builtin": true },
-	"rules": {},
+	"plugins": ["typescript", "unicorn", "oxc", "promise", "import"],
+	"categories": {
+		"correctness": "error",
+		"suspicious": "error",
+		"perf": "error",
+		"pedantic": "error",
+		"style": "error"
+	},
+	"options": {
+		"typeAware": true,
+		"typeCheck": true,
+		"reportUnusedDisableDirectives": "error"
+	},
+	"ignorePatterns": ["worker-configuration.d.ts"],
+	"rules": {
+		"eslint/require-await": "off",
+		"typescript/no-floating-promises": ["error", { "ignoreVoid": false }],
+		"typescript/no-misused-promises": "error",
+		"typescript/prefer-readonly-parameter-types": "off",
+		"typescript/require-await": "off"
+	},
 	"overrides": [
 		{
-			"files": ["test/**/*.ts", "vitest.config.mts"],
+			"files": ["vitest.config.mts", "test/**/*.ts"],
 			"plugins": ["vitest"],
-			"env": { "vitest": true }
+			"rules": {
+				"vitest/no-importing-vitest-globals": "off"
+			}
 		}
 	]
 }
