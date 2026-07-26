@@ -22,11 +22,7 @@
 		},
 		{
 			"groupName": "oxc",
-			"matchPackageNames": [
-				"oxc-project/oxc",
-				"oxc-project/oxc/**",
-				"oxlint-tsgolint"
-			],
+			"matchPackageNames": ["oxfmt", "oxlint", "oxlint-tsgolint"],
 			"separateMajorMinor": false
 		}
 	]
