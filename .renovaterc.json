@@ -19,6 +19,15 @@
 			"groupName": "pnpm",
 			"matchPackageNames": ["pnpm", "pnpm/pnpm"],
 			"separateMajorMinor": false
+		},
+		{
+			"groupName": "oxc",
+			"matchPackageNames": [
+				"oxc-project/oxc",
+				"oxc-project/oxc/**",
+				"oxlint-tsgolint"
+			],
+			"separateMajorMinor": false
 		}
 	]
 }
