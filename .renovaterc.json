@@ -7,5 +7,18 @@
 		"github>aquaproj/aqua-renovate-config:file#2.13.0(.aqua/pkgs/.*\\.ya?ml)"
 	],
 	"timezone": "Asia/Tokyo",
-	"automerge": true
+	"automerge": true,
+	"packageRules": [
+		{
+			"groupName": "node",
+			"matchPackageNames": ["node", "nodejs/node"],
+			"versioning": "node",
+			"separateMajorMinor": false
+		},
+		{
+			"groupName": "pnpm",
+			"matchPackageNames": ["pnpm", "pnpm/pnpm"],
+			"separateMajorMinor": false
+		}
+	]
 }
