@@ -1,4 +1,4 @@
 ---
 packages:
-- name: nodejs/node
-  version: v24.18.0 # renovate: datasource=github-releases depName=nodejs/node
+  - name: nodejs/node
+    version: v24.18.0 # renovate: datasource=github-releases depName=nodejs/node
