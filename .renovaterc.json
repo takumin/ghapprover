@@ -1,23 +1,18 @@
 {
 	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
-	"extends": [
-		"config:best-practices",
-		"github>aquaproj/aqua-renovate-config#2.13.0",
-		"github>aquaproj/aqua-renovate-config:file#2.13.0(.aqua/.*\\.ya?ml)",
-		"github>aquaproj/aqua-renovate-config:file#2.13.0(.aqua/pkgs/.*\\.ya?ml)"
-	],
+	"extends": ["config:best-practices"],
 	"timezone": "Asia/Tokyo",
 	"automerge": true,
 	"packageRules": [
 		{
 			"groupName": "node",
-			"matchPackageNames": ["node", "nodejs/node"],
+			"matchPackageNames": ["node"],
 			"versioning": "node",
 			"separateMajorMinor": false
 		},
 		{
 			"groupName": "pnpm",
-			"matchPackageNames": ["pnpm", "pnpm/pnpm"],
+			"matchPackageNames": ["pnpm"],
 			"separateMajorMinor": false
 		},
 		{
