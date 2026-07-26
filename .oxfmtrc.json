@@ -1,11 +1,4 @@
 {
 	"$schema": "./node_modules/oxfmt/configuration_schema.json",
-	"ignorePatterns": [
-		"**/*.json",
-		"**/*.jsonc",
-		"**/*.md",
-		"**/*.yaml",
-		"**/*.yml",
-		"worker-configuration.d.ts"
-	]
+	"ignorePatterns": ["**/*.md", "**/*.yaml", "**/*.yml", "worker-configuration.d.ts"]
 }
