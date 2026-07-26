@@ -8,5 +8,8 @@
 		"node": "24.18.0",
 		"pnpm": "11.17.0",
 		"npm": "USE_PNPM"
+	},
+	"devDependencies": {
+		"typescript": "^7.0.2"
 	}
 }
