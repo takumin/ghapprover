@@ -30,7 +30,7 @@ Write commit messages in English, following
 | `refactor` | A code change that neither fixes a bug nor adds a feature                      |
 | `perf`     | A performance improvement                                                      |
 | `test`     | Adding or correcting tests                                                     |
-| `build`    | Build system, dependencies, or tooling (`package.json`, aqua, wrangler config) |
+| `build`    | Build system, dependencies, or tooling (`package.json`, mise, wrangler config) |
 | `ci`       | CI configuration and automation (GitHub Actions, Renovate)                     |
 | `chore`    | Maintenance that fits no other type                                            |
 | `revert`   | Reverting a previous commit                                                    |
