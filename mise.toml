@@ -8,6 +8,154 @@ node = "24.18.0"
 pnpm = "11.17.0"
 # maintenance
 pinact = "4.1.0"
+# lint
+# Pinned to the same aqua packages as the sibling rsdebstrap repository. The
+# explicit `aqua:` backend keeps the package identity stable even if the mise
+# registry later remaps a short name to a different source.
+"aqua:reviewdog/reviewdog" = "0.21.0"
+"aqua:editorconfig-checker/editorconfig-checker" = "3.8.0"
+"aqua:rhysd/actionlint" = "1.7.12"
+# Consumed by `actionlint -shellcheck shellcheck` to lint workflow `run:` blocks;
+# there are no shell scripts here, so it is not a reviewdog runner of its own.
+"aqua:koalaman/shellcheck" = "0.11.0"
+"aqua:suzuki-shunsuke/ghalint" = "1.5.6"
+"aqua:zizmorcore/zizmor" = "1.28.0"
+"aqua:jqlang/jq" = "1.8.2"
 
 [settings]
 lockfile = true
+
+################################################################################
+# Setup
+################################################################################
+
+[tasks.setup]
+description = "Install node dependencies"
+sources = ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]
+outputs = ["node_modules/.modules.yaml"]
+run = "pnpm install --frozen-lockfile"
+
+################################################################################
+# Format / generate
+################################################################################
+
+[tasks."format:pinact"]
+description = "Pin GitHub Actions to full-length commit SHAs"
+run = "pinact run"
+
+[tasks."format:oxfmt"]
+description = "Format sources with oxfmt"
+depends = ["setup"]
+run = "pnpm format"
+
+# Sequential on purpose: `depends` runs in parallel, and pinact rewrites the same
+# .github/**/*.yml files that oxfmt reformats. pinact must land first so oxfmt
+# normalises the SHAs it wrote.
+[tasks.format]
+description = "Run every formatter"
+run = [{ task = "format:pinact" }, { task = "format:oxfmt" }]
+
+[tasks.typegen]
+description = "Generate worker-configuration.d.ts from wrangler.jsonc"
+depends = ["setup"]
+run = "pnpm typegen"
+
+# Deliberately not named `lint:fix`: the reviewdog runners live under the
+# `reviewdog:` namespace, and a `lint:` namespace here would be matched by any
+# future `lint:*` glob and pull an autofixer into a read-only gate.
+[tasks.lint-fix]
+description = "Apply oxlint autofixes"
+depends = ["setup"]
+run = "pnpm lint:fix"
+
+################################################################################
+# Verify
+################################################################################
+
+[tasks.typecheck]
+description = "Type-check src and test"
+depends = ["setup"]
+run = "pnpm typecheck"
+
+[tasks.test]
+description = "Run the test suite"
+depends = ["setup"]
+run = "pnpm test"
+
+[tasks.build]
+description = "Bundle the worker without deploying"
+depends = ["setup"]
+run = "pnpm build"
+
+################################################################################
+# Reviewdog
+################################################################################
+
+# The lint gate lives here and only here: -filter-mode nofilter lints the whole
+# tree rather than only changed lines, and -fail-level any turns any finding into
+# a non-zero exit. CI appends to REVIEWDOG_ARGS, so it can add debug output but
+# cannot drop the gate. REVIEWDOG_REPORTER is read from the environment rather
+# than declared in a task `env` table, which would shadow the value CI exports.
+[tasks.reviewdog-run]
+description = "Internal: run a single reviewdog runner"
+hide = true
+run = 'reviewdog -runners "${REVIEWDOG_RUNNER}" -reporter "${REVIEWDOG_REPORTER:-local}" -filter-mode nofilter -log-level warning -fail-level any ${REVIEWDOG_ARGS:-}'
+
+[tasks."reviewdog:oxlint"]
+description = "reviewdog: oxlint"
+depends = ["setup"]
+run = [{ task = "reviewdog-run", env = { REVIEWDOG_RUNNER = "oxlint" } }]
+
+[tasks."reviewdog:editorconfig-checker"]
+description = "reviewdog: editorconfig-checker"
+run = [{ task = "reviewdog-run", env = { REVIEWDOG_RUNNER = "editorconfig-checker" } }]
+
+[tasks."reviewdog:actionlint"]
+description = "reviewdog: actionlint"
+run = [{ task = "reviewdog-run", env = { REVIEWDOG_RUNNER = "actionlint" } }]
+
+[tasks."reviewdog:ghalint-run"]
+description = "reviewdog: ghalint run"
+run = [{ task = "reviewdog-run", env = { REVIEWDOG_RUNNER = "ghalint-run" } }]
+
+[tasks."reviewdog:ghalint-act"]
+description = "reviewdog: ghalint act"
+run = [{ task = "reviewdog-run", env = { REVIEWDOG_RUNNER = "ghalint-act" } }]
+
+[tasks."reviewdog:zizmor"]
+description = "reviewdog: zizmor"
+run = [{ task = "reviewdog-run", env = { REVIEWDOG_RUNNER = "zizmor" } }]
+
+[tasks.reviewdog]
+description = "Run every reviewdog runner"
+depends = ["reviewdog:*"]
+
+# Named outside the `reviewdog:` namespace on purpose. `hide = true` would keep
+# this out of `mise tasks ls --json`, but it would NOT keep it out of
+# `depends = ["reviewdog:*"]`, so it would still run as part of the lint gate.
+# `output = "quiet"` suppresses mise's per-task label prefix so stdout is pure
+# JSON and can be captured straight into $GITHUB_OUTPUT.
+[tasks.reviewdog-matrix]
+description = "Emit the reviewdog runner matrix as JSON for CI"
+output = "quiet"
+run = '''
+mise tasks ls --json | jq -cM '{include: [.[] | select(.name | startswith("reviewdog:")) | {name: (.name | split(":") | last), target: .name}]}'
+'''
+
+################################################################################
+# Aggregate
+################################################################################
+
+# `run` rather than `depends`, because `depends` runs its entries in parallel and
+# the formatters rewrite files the linters read.
+[tasks.default]
+description = "Run the full gate, in the same order as CI"
+alias = "all"
+run = [
+  { task = "format" },
+  { task = "typegen" },
+  { task = "reviewdog" },
+  { task = "typecheck" },
+  { task = "test" },
+  { task = "build" },
+]
