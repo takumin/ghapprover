@@ -1,0 +1,61 @@
+---
+name: CI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+permissions: {}
+jobs:
+  ##############################################################################
+  # Format
+  ##############################################################################
+  format:
+    name: Format
+    permissions:
+      contents: read
+    uses: ./.github/workflows/wc-format.yml
+  ##############################################################################
+  # Reviewdog
+  ##############################################################################
+  reviewdog:
+    name: Reviewdog
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/wc-reviewdog.yml
+  ##############################################################################
+  # Test
+  ##############################################################################
+  test:
+    name: Test
+    permissions:
+      contents: read
+    uses: ./.github/workflows/wc-test.yml
+  ##############################################################################
+  # Build
+  ##############################################################################
+  build:
+    name: Build
+    permissions:
+      contents: read
+    uses: ./.github/workflows/wc-build.yml
+  ##############################################################################
+  # Status Check
+  ##############################################################################
+  # The single check to require in branch protection. It stays green by doing
+  # nothing, and only runs (to fail) when one of the jobs above broke.
+  ci:
+    needs:
+      - format
+      - reviewdog
+      - test
+      - build
+    name: CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    if: ${{ failure() || cancelled() }}
+    steps:
+      - name: Failure Status
+        run: exit 1

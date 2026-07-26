@@ -1,0 +1,28 @@
+---
+name: Build
+on:
+  workflow_call:
+permissions: {}
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup mise
+        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        with:
+          cache_save: ${{ github.ref == 'refs/heads/main' }}
+      # `wrangler deploy --dry-run` bundles the worker without touching
+      # Cloudflare, so no API token is involved.
+      - name: Build
+        run: mise run build
