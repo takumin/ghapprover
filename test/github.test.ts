@@ -9,7 +9,11 @@ import {
 	listPullRequestCommits,
 	listPullRequestReviews,
 } from "../src/github";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { installFetchMock, jsonRoute } from "./fetch-stub";
+
+/** Derived from the harness so "./fetch-stub" stays a single import (no-duplicate-imports). */
+type PlannedRoute = ReturnType<typeof jsonRoute>;
 
 /** GitHub payloads model absent data as null (src/types.ts). */
 // oxlint-disable-next-line unicorn/no-null -- single sanctioned null literal for the contract above
@@ -24,87 +28,6 @@ const INSTALLATION_ID = 12_345;
 const FULL_PAGE = 100;
 const SECOND_PAGE_COUNT = 37;
 const ACCOUNT = { id: 7, login: "octo", type: "User" };
-
-interface PlannedRoute {
-	readonly body: string;
-	readonly method: string;
-	/** Status 0 makes the stub reject like a network failure. */
-	readonly status: number;
-	readonly url: string;
-}
-interface RecordedRequest {
-	readonly body: string;
-	readonly headers: Record<string, string>;
-	readonly method: string;
-	readonly url: string;
-}
-interface FetchMockSession {
-	readonly assertDone: () => void;
-	readonly requests: readonly RecordedRequest[];
-}
-
-/**
- * Strict per-test fetch stub standing in for the retired fetchMock helper
- * (this @cloudflare/vitest-pool-workers version no longer exports it from
- * "cloudflare:test"): serves the planned routes, records every request, and
- * rejects anything unplanned (the disableNetConnect equivalent).
- */
-function takeRoute(pending: PlannedRoute[], request: Request): PlannedRoute {
-	const index = pending.findIndex(
-		(route) => route.method === request.method && route.url === request.url,
-	);
-	const route = pending[index];
-	if (route === undefined) {
-		throw new TypeError(`unplanned request: ${request.method} ${request.url}`);
-	}
-	pending.splice(index, 1);
-	if (route.status === 0) {
-		throw new TypeError("simulated network failure");
-	}
-	return route;
-}
-
-function installFetchMock(routes: readonly PlannedRoute[]): FetchMockSession {
-	const pending = [...routes];
-	const requests: RecordedRequest[] = [];
-	const handler = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-		const request = new Request(input, init);
-		const bodyText = await request.text();
-		const route = takeRoute(pending, request);
-		requests.push({
-			body: bodyText,
-			headers: Object.fromEntries(request.headers),
-			method: request.method,
-			url: request.url,
-		});
-		return new Response(route.body, { status: route.status });
-	};
-	vi.stubGlobal("fetch", handler);
-	return {
-		assertDone: (): void => {
-			if (pending.length > 0) {
-				throw new Error(
-					`unconsumed planned routes: ${pending.map((route) => route.url).join(", ")}`,
-				);
-			}
-		},
-		requests,
-	};
-}
-
-function jsonRoute(route: {
-	method: string;
-	payload: unknown;
-	status: number;
-	url: string;
-}): PlannedRoute {
-	return {
-		body: JSON.stringify(route.payload),
-		method: route.method,
-		status: route.status,
-		url: route.url,
-	};
-}
 
 function commitBody(sha: string): Record<string, unknown> {
 	return { author: ACCOUNT, commit: { verification: { verified: true } }, committer: ACCOUNT, sha };
