@@ -42,7 +42,7 @@ runs:
     - name: Restore pnpm store
       if: inputs.pnpm-install == 'true'
       id: cache
-      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.store.outputs.path }}
         key: pnpm-store-${{ runner.os }}-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml') }}
@@ -64,7 +64,7 @@ runs:
     # still eating into the repository's 10 GB budget.
     - name: Save pnpm store
       if: inputs.pnpm-install == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.store.outputs.path }}
         key: ${{ steps.cache.outputs.cache-primary-key }}
