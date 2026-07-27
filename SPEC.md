@@ -58,7 +58,7 @@ Components:
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
 | GitHub App         | Source of webhook deliveries and principal for API authentication. Approval reviews are posted under the App's bot user |
 | Cloudflare Workers | Webhook receiving endpoint. Performs evaluation and approval                                                            |
-| Workers Secrets    | Storage for the App private key and webhook secret                                                                      |
+| Workers Secrets    | Storage for the App ID, private key, and webhook secret                                                                 |
 
 > [!NOTE]
 > There is no dynamic configuration. Neither KV nor environment variables (vars) are
@@ -330,6 +330,7 @@ the information needed for evaluation comes from the following.
 
 | Secret                 | Storage        | Purpose                                           |
 | ---------------------- | -------------- | ------------------------------------------------- |
+| GitHub App ID          | Workers Secret | App JWT `iss` claim (§5 rules out vars)           |
 | GitHub App private key | Workers Secret | Signing the JWT used to issue installation tokens |
 | Webhook secret         | Workers Secret | Signature verification                            |
 
