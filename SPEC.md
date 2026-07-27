@@ -54,7 +54,7 @@ Components:
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
 | GitHub App         | Source of webhook deliveries and principal for API authentication. Approval reviews are posted under the App's bot user |
 | Cloudflare Workers | Webhook receiving endpoint. Performs evaluation and approval                                                            |
-| Workers Secrets    | Storage for the App private key and webhook secret                                                                      |
+| Workers Secrets    | Storage for the App ID, private key, and webhook secret                                                                 |
 
 > [!NOTE]
 > There is no dynamic configuration. Neither KV nor environment variables (vars) are
@@ -326,6 +326,7 @@ the information needed for evaluation comes from the following.
 
 | Secret                 | Storage        | Purpose                                           |
 | ---------------------- | -------------- | ------------------------------------------------- |
+| GitHub App ID          | Workers Secret | `iss` claim of the App JWT                        |
 | GitHub App private key | Workers Secret | Signing the JWT used to issue installation tokens |
 | Webhook secret         | Workers Secret | Signature verification                            |
 
@@ -333,6 +334,11 @@ the information needed for evaluation comes from the following.
   payload's `installation.id`, using an App JWT (RS256, valid for at most 10
   minutes). Token caching is not required (if done as an optimization, keep it in memory only
   and never persist it)
+- The App ID is not confidential, but it is deployment-specific and this design uses no
+  vars (§5), so it is stored as a Workers Secret alongside the private key
+- Store the private key in PKCS#8 format: GitHub delivers App private keys as PKCS#1,
+  which the Web Crypto API cannot import. Convert once with
+  `openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt` before registering the secret
 - Signature verification uses a timing-safe comparison
 
 ## 8. Observability
@@ -380,7 +386,23 @@ Re-execution is consolidated into manual redelivery on the GitHub side.
 ## 11. Implementation Notes (Informative)
 
 - Runtime: Cloudflare Workers (TypeScript)
-- Webhook signature verification and JWT signing can be implemented with the Web Crypto API.
-  If dependencies are added, keep them to Workers-compatible `@octokit/*` packages at most
+- GitHub integration is built on GitHub's official Octokit libraries rather than
+  hand-rolled Web Crypto / `fetch` code. Runtime dependencies are limited to the
+  following packages, all implemented on the fetch / Web Crypto APIs available in
+  Workers:
+  - `@octokit/core` — typed `request()` calls for the REST endpoints used in §4
+  - `@octokit/auth-app` — App JWT (RS256) signing and installation token issuance
+    (§7). Its default installation-token cache is in-memory only, which satisfies
+    the "never persist" requirement of §7
+  - `@octokit/plugin-paginate-rest` — fetches every page of the commits and
+    reviews endpoints (§3.2, §3 condition 5)
+  - `@octokit/webhooks-methods` — timing-safe `X-Hub-Signature-256` verification
+    (§7) built on Web Crypto
+  - Type-only `@octokit/*` packages (e.g. webhook payload types) may additionally
+    be used as dev dependencies
+- Deliberately not adopted: the `octokit` meta-package and its bundled
+  `@octokit/plugin-retry` / `@octokit/plugin-throttling`. They retry by sleeping
+  inside the request lifecycle, which conflicts with the no-retry policy (§9) and
+  the synchronous processing budget (§4)
 - Testing: extract the decision logic (trusted principals, commit verification) as pure
   functions so it can be unit-tested without mocking the GitHub API
