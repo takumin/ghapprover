@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import { installFetchMock, jsonRoute } from "./fetch-stub";
 import type { GithubAccount } from "../src/types";
 import { MAX_VERIFIABLE_COMMITS } from "../src/allowlist";
+import { privateKeyPemOnce } from "./app-key";
 import worker from "../src/index";
 
 /** Derived from the harness so "./fetch-stub" stays a single import (no-duplicate-imports). */
@@ -35,10 +36,10 @@ const BASE = "https://api.github.com";
 const TOKEN_URL = `${BASE}/app/installations/${INSTALLATION_ID}/access_tokens`;
 const APP_URL = `${BASE}/app`;
 const MEMBERSHIP_URL = `${BASE}/orgs/acme/memberships/octo`;
-const COMMITS_SUFFIX = "/commits?per_page=100&page=1";
-const REVIEWS_SUFFIX = "/reviews?per_page=100&page=1";
-/** App JWT shape: "Bearer" plus three dot-separated base64url segments. */
-const JWT_PATTERN = /^Bearer eyJ[\w-]+\.[\w-]+\.[\w-]+$/u;
+const COMMITS_SUFFIX = "/commits?per_page=100";
+const REVIEWS_SUFFIX = "/reviews?per_page=100";
+/** App JWT authorization: "bearer" plus three dot-separated base64url segments. */
+const JWT_PATTERN = /^bearer eyJ[\w-]+\.[\w-]+\.[\w-]+$/u;
 
 const OWNER: GithubAccount = { id: 7, login: "octo", type: "User" };
 const ORG: GithubAccount = { id: 88, login: "acme", type: "Organization" };
@@ -48,48 +49,8 @@ const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User" };
 const APP_BOT_USER: GithubAccount = { id: 201, login: "ghapprover[bot]", type: "Bot" };
 const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT_USER };
 
-const RSA_PARAMS = {
-	hash: "SHA-256",
-	modulusLength: 2048,
-	name: "RSASSA-PKCS1-v1_5",
-	publicExponent: new Uint8Array([1, 0, 1]),
-};
-const PEM_LINE_WIDTH = 64;
 const HEX_RADIX = 16;
 const HEX_PAD = 2;
-
-function wrapPem(base64: string): string {
-	const lines: string[] = [];
-	for (let offset = 0; offset < base64.length; offset += PEM_LINE_WIDTH) {
-		lines.push(base64.slice(offset, offset + PEM_LINE_WIDTH));
-	}
-	return `-----BEGIN PRIVATE KEY-----\n${lines.join("\n")}\n-----END PRIVATE KEY-----\n`;
-}
-
-async function generatePrivateKeyPem(): Promise<string> {
-	const generated = await crypto.subtle.generateKey(RSA_PARAMS, true, ["sign", "verify"]);
-	if (!("privateKey" in generated)) {
-		throw new Error("expected an RSA key pair");
-	}
-	const exported = await crypto.subtle.exportKey("pkcs8", generated.privateKey);
-	if (!(exported instanceof ArrayBuffer)) {
-		throw new Error("expected an ArrayBuffer export");
-	}
-	const chars = Array.from(new Uint8Array(exported), (byte) => String.fromCodePoint(byte));
-	return wrapPem(btoa(chars.join("")));
-}
-
-/** Generated once and shared across tests; PEM material is never hard-coded. */
-const KEY_CACHE = new Map<string, Promise<string>>();
-async function privateKeyPemOnce(): Promise<string> {
-	const cached = KEY_CACHE.get("pem");
-	if (cached !== undefined) {
-		return cached;
-	}
-	const generated = generatePrivateKeyPem();
-	KEY_CACHE.set("pem", generated);
-	return generated;
-}
 
 async function makeEnv(): Promise<Env> {
 	return {
@@ -170,7 +131,7 @@ function pullsUrl(owner: string, suffix: string): string {
 function tokenRoute(): PlannedRoute {
 	return jsonRoute({
 		method: "POST",
-		payload: { token: INSTALL_TOKEN },
+		payload: { expires_at: "2126-01-01T00:00:00Z", token: INSTALL_TOKEN },
 		status: 201,
 		url: TOKEN_URL,
 	});
@@ -450,10 +411,10 @@ describe("owner approval flow", () => {
 		expect(requestByUrl(session, TOKEN_URL).headers["authorization"]).toMatch(JWT_PATTERN);
 		expect(requestByUrl(session, APP_URL).headers["authorization"]).toMatch(JWT_PATTERN);
 		expect(requestByUrl(session, pullsUrl("octo", COMMITS_SUFFIX)).headers["authorization"]).toBe(
-			"Bearer install-token",
+			"token install-token",
 		);
 		expect(requestByUrl(session, pullsUrl("octo", "/reviews")).headers["authorization"]).toBe(
-			"Bearer install-token",
+			"token install-token",
 		);
 	});
 
@@ -522,9 +483,9 @@ describe("author trust", () => {
 });
 
 describe("commit conditions", () => {
-	it("skips when the declared commit count is zero", async () => {
+	it("skips when the declared commit count is zero, with no api call", async () => {
 		expect.hasAssertions();
-		const session = installFetchMock([tokenRoute()]);
+		const session = installFetchMock([]);
 		const response = await postSigned(buildPayload({ commits: 0 }));
 		await expectReply(response, {
 			body: { decision: "skipped", reason: "no-commits" },
@@ -533,9 +494,9 @@ describe("commit conditions", () => {
 		session.assertDone();
 	});
 
-	it("skips when the declared commit count exceeds the cap", async () => {
+	it("skips when the declared commit count exceeds the cap, with no api call", async () => {
 		expect.hasAssertions();
-		const session = installFetchMock([tokenRoute()]);
+		const session = installFetchMock([]);
 		const response = await postSigned(buildPayload({ commits: MAX_VERIFIABLE_COMMITS + 1 }));
 		await expectReply(response, {
 			body: { decision: "skipped", reason: "too-many-commits" },

@@ -1,7 +1,7 @@
 /**
- * Worker entry point orchestrating the SPEC.md §4 pipeline per webhook
- * delivery. Processing is synchronous (no ctx.waitUntil), so every outcome is
- * recorded as-is in GitHub's Recent Deliveries and redeliverable (§9).
+ * Worker entry point orchestrating the SPEC.md §4 pipeline per webhook delivery.
+ * Processing is synchronous (no ctx.waitUntil), so every outcome is recorded
+ * as-is in GitHub's Recent Deliveries and redeliverable (§9).
  */
 /* The decision contract and Headers.get model absence as null (SPEC.md fails closed), so null literals are deliberate here. */
 /* oxlint-disable unicorn/no-null */
@@ -10,7 +10,7 @@ import type { GithubAccount, PullRequestEventPayload } from "./types";
 import {
 	GithubApiError,
 	createApprovalReview,
-	createInstallationToken,
+	createGithubClient,
 	fetchAppSlug,
 	fetchOrgMembership,
 	fetchPullRequest,
@@ -29,7 +29,6 @@ import {
 	parsePullRequestEvent,
 	precheckCommitCount,
 } from "./decision";
-import { createAppJwt } from "./jwt";
 import { verifyWebhookSignature } from "./webhook";
 
 const HTTP_OK = 200;
@@ -52,7 +51,8 @@ interface Outcome {
 
 /** SPEC.md §8 flat log entry, accumulating fields as they become known per delivery. */
 type LogFields = Record<string, number | string>;
-/** Derived from the client signature so "./github" stays a single value import. */
+/** Derived from the client signatures so "./github" stays a single value import. */
+type GithubClient = ReturnType<typeof createGithubClient>;
 type RepoRef = Parameters<typeof fetchPullRequest>[1];
 
 interface TrustResolver {
@@ -107,7 +107,7 @@ function repoRef(payload: PullRequestEventPayload): RepoRef {
 }
 
 async function evaluateTrust(
-	token: string,
+	client: GithubClient,
 	user: GithubAccount,
 	repoOwner: GithubAccount,
 ): Promise<boolean> {
@@ -118,17 +118,17 @@ async function evaluateTrust(
 	if (evaluation.kind === "untrusted") {
 		return false;
 	}
-	return isOwnerMembership(await fetchOrgMembership(token, evaluation.org, evaluation.login));
+	return isOwnerMembership(await fetchOrgMembership(client, evaluation.org, evaluation.login));
 }
 /** Memoizes per delivery so each distinct login is looked up at most once (SPEC.md §3.1). */
-function createTrustResolver(token: string, repoOwner: GithubAccount): TrustResolver {
+function createTrustResolver(client: GithubClient, repoOwner: GithubAccount): TrustResolver {
 	const resolved = new Map<string, boolean>();
 	const resolve = async (user: GithubAccount): Promise<boolean> => {
 		const known = resolved.get(user.login);
 		if (known !== undefined) {
 			return known;
 		}
-		const trusted = await evaluateTrust(token, user, repoOwner);
+		const trusted = await evaluateTrust(client, user, repoOwner);
 		resolved.set(user.login, trusted);
 		return trusted;
 	};
@@ -138,11 +138,11 @@ function createTrustResolver(token: string, repoOwner: GithubAccount): TrustReso
 /** SPEC.md §4 step 5 (§3.2): fetch all commits and verify every one of them. */
 async function checkCommitCondition(
 	payload: PullRequestEventPayload,
-	token: string,
+	client: GithubClient,
 	trust: TrustResolver,
 ): Promise<Outcome | null> {
 	const { pull_request: pullRequest } = payload;
-	const commits = await listPullRequestCommits(token, repoRef(payload), pullRequest.number);
+	const commits = await listPullRequestCommits(client, repoRef(payload), pullRequest.number);
 	const principals = collectCommitPrincipals(commits);
 	await Promise.all(principals.map(async (account) => trust.resolve(account)));
 	const problem = checkCommits(commits, pullRequest.commits, trust.isTrustedLogin);
@@ -155,7 +155,7 @@ async function checkCommitCondition(
 /** SPEC.md §4 steps 4-5: the author condition, then the commit condition. */
 async function evaluateConditions(
 	payload: PullRequestEventPayload,
-	token: string,
+	client: GithubClient,
 	trust: TrustResolver,
 ): Promise<Outcome | null> {
 	if (!(await trust.resolve(payload.pull_request.user))) {
@@ -165,17 +165,17 @@ async function evaluateConditions(
 	if (countProblem !== null) {
 		return skippedOutcome(countProblem);
 	}
-	return checkCommitCondition(payload, token, trust);
+	return checkCommitCondition(payload, client, trust);
 }
 
 /** SPEC.md §4 steps 7-8: the live TOCTOU check (§3.3), then the review POST. */
-async function submitApproval(token: string, target: ReviewTarget): Promise<Outcome> {
+async function submitApproval(client: GithubClient, target: ReviewTarget): Promise<Outcome> {
 	const { headSha, pullNumber, repo } = target;
-	const live = await fetchPullRequest(token, repo, pullNumber);
+	const live = await fetchPullRequest(client, repo, pullNumber);
 	if (!isLiveStateCurrent(live, headSha)) {
 		return skippedOutcome("head-moved");
 	}
-	const posted = await createApprovalReview(token, repo, pullNumber, headSha);
+	const posted = await createApprovalReview(client, repo, pullNumber, headSha);
 	if (posted === "rejected") {
 		return skippedOutcome("review-rejected");
 	}
@@ -184,35 +184,36 @@ async function submitApproval(token: string, target: ReviewTarget): Promise<Outc
 /** SPEC.md §4 step 6 (§6): an own APPROVE for this head ends the run successfully. */
 async function approvePullRequest(
 	payload: PullRequestEventPayload,
-	appJwt: string,
-	token: string,
+	client: GithubClient,
 ): Promise<Outcome> {
 	const target: ReviewTarget = {
 		headSha: payload.pull_request.head.sha,
 		pullNumber: payload.pull_request.number,
 		repo: repoRef(payload),
 	};
-	const slug = await fetchAppSlug(appJwt);
-	const reviews = await listPullRequestReviews(token, target.repo, target.pullNumber);
+	const slug = await fetchAppSlug(client);
+	const reviews = await listPullRequestReviews(client, target.repo, target.pullNumber);
 	if (hasOwnApproval(reviews, `${slug}[bot]`, target.headSha)) {
 		return skippedOutcome("already-approved");
 	}
-	return submitApproval(token, target);
+	return submitApproval(client, target);
 }
-/** SPEC.md §4 steps 3-8 once the delivery is in scope: authenticate, evaluate, approve. */
+/** SPEC.md §4 steps 3-8: the auth strategy signs the JWT and issues the token on first use. */
 async function approveWhenConditionsHold(
 	payload: PullRequestEventPayload,
 	env: Env,
 	installationId: number,
 ): Promise<Outcome> {
-	const appJwt = await createAppJwt(env.GITHUB_APP_ID, env.GITHUB_APP_PRIVATE_KEY, Date.now());
-	const token = await createInstallationToken(appJwt, installationId);
-	const trust = createTrustResolver(token, payload.repository.owner);
-	const conditions = await evaluateConditions(payload, token, trust);
+	const client = createGithubClient(
+		{ appId: env.GITHUB_APP_ID, privateKeyPem: env.GITHUB_APP_PRIVATE_KEY },
+		installationId,
+	);
+	const trust = createTrustResolver(client, payload.repository.owner);
+	const conditions = await evaluateConditions(payload, client, trust);
 	if (conditions !== null) {
 		return conditions;
 	}
-	return approvePullRequest(payload, appJwt, token);
+	return approvePullRequest(payload, client);
 }
 /** SPEC.md §4 step 2: action scope and PR state precede any API call. */
 async function runPipeline(payload: PullRequestEventPayload, env: Env): Promise<Outcome> {
@@ -223,11 +224,10 @@ async function runPipeline(payload: PullRequestEventPayload, env: Env): Promise<
 	if (stateProblem !== null) {
 		return skippedOutcome(stateProblem);
 	}
-	const { installation } = payload;
-	if (installation === null) {
+	if (payload.installation === undefined || payload.installation === null) {
 		return errorOutcome("missing-installation");
 	}
-	return approveWhenConditionsHold(payload, env, installation.id);
+	return approveWhenConditionsHold(payload, env, payload.installation.id);
 }
 async function processPayload(payload: PullRequestEventPayload, env: Env): Promise<Outcome> {
 	try {

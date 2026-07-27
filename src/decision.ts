@@ -264,7 +264,7 @@ function parseRepository(value: unknown): EventRepository | null {
 	return { full_name: fullName, name, owner: parsedOwner };
 }
 
-function parseInstallation(value: unknown): PullRequestEventPayload["installation"] {
+function parseInstallation(value: unknown): { readonly id: number } | null {
 	if (!isRecord(value)) {
 		return null;
 	}

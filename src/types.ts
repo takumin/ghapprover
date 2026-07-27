@@ -4,8 +4,12 @@
  * Only the fields this Worker actually reads are modeled, with nullability
  * matching the GitHub documentation, so that absence of data is always an
  * explicit branch rather than a runtime surprise (SPEC.md fails closed on
- * anything that cannot be determined).
+ * anything that cannot be determined). The webhook subset is pinned to the
+ * official @octokit/webhooks-types definitions (SPEC.md §11) by the
+ * compile-time projection check at the bottom of this file.
  */
+
+import type { PullRequestEvent } from "@octokit/webhooks-types";
 
 declare global {
 	/**
@@ -48,8 +52,8 @@ export interface PullRequestEventPayload {
 	readonly action: string;
 	readonly pull_request: EventPullRequest;
 	readonly repository: EventRepository;
-	/** Absent when the delivery does not come from an App installation. */
-	readonly installation: { readonly id: number } | null;
+	/** Absent when the delivery does not come from an App installation; parsed to null. */
+	readonly installation?: { readonly id: number } | null;
 }
 
 export interface EventPullRequest {
@@ -108,3 +112,15 @@ export interface OrgMembership {
 	/** "admin" | "member" | "billing_manager" */
 	readonly role: string;
 }
+
+/** Resolves only when Payload is assignable to Subset; used as a compile-time assertion. */
+type ProjectionOf<Payload extends Subset, Subset> = Payload;
+
+/**
+ * Compile-time projection check (SPEC.md §11): every genuine `pull_request`
+ * payload, as defined by the official @octokit/webhooks-types package, must
+ * satisfy the modeled subset above. If either side drifts, this alias stops
+ * compiling. The runtime still validates fail closed (src/decision.ts),
+ * because a verified signature proves origin, not shape.
+ */
+export type PullRequestEventContract = ProjectionOf<PullRequestEvent, PullRequestEventPayload>;

@@ -1,11 +1,14 @@
 /**
- * Minimal fetch-based GitHub REST client (SPEC.md §11, zero dependencies).
- * Responses are parsed as unknown and mapped into the frozen contract types by
- * constructing new objects field-by-field; a response lacking a required field
- * is a broken API contract and throws (fail closed, SPEC.md §9).
+ * GitHub REST access built on the official octokit packages (SPEC.md §11):
+ * @octokit/core issues the requests, @octokit/plugin-paginate-rest follows
+ * the Link header for pagination, and @octokit/auth-app signs the App JWT and
+ * issues installation tokens (cached in memory per client, SPEC.md §7).
+ * Responses are mapped into the frozen contract types by constructing new
+ * objects field-by-field; a response lacking a required field is a broken API
+ * contract and throws (fail closed, SPEC.md §9).
  */
 
-/* oxlint-disable max-lines -- the eight-endpoint frozen API lives in one module by design */
+/* oxlint-disable max-lines -- the client factory, error mapping, and seven-endpoint frozen API live in one module by design */
 
 import type {
 	GithubAccount,
@@ -14,17 +17,19 @@ import type {
 	PullRequestCommit,
 	PullRequestReview,
 } from "./types";
+import { Octokit } from "@octokit/core";
+import { createAppAuth } from "@octokit/auth-app";
+import { paginateRest } from "@octokit/plugin-paginate-rest";
 
-const API_BASE_URL = "https://api.github.com";
 const API_VERSION = "2022-11-28";
 const USER_AGENT = "ghapprover";
 /** SPEC.md §9: no retries inside the Worker, but a timeout on every call. */
 const REQUEST_TIMEOUT_MS = 10_000;
 const PAGE_SIZE = 100;
-/** SPEC.md §3.2: the commits API caps at 250 items, so 3 pages always suffice. */
-const MAX_COMMIT_PAGES = 3;
 /** GithubApiError status representing network-level failures and timeouts. */
 const NETWORK_FAILURE_STATUS = 0;
+/** Item shape errors surface after a successful page, so they carry 200. */
+const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
 const HTTP_UNPROCESSABLE_ENTITY = 422;
 
@@ -32,15 +37,28 @@ const HTTP_UNPROCESSABLE_ENTITY = 422;
 // oxlint-disable-next-line unicorn/no-null -- single sanctioned null literal for the contract above
 const NULL_RESULT = null;
 
+const GithubOctokit = Octokit.plugin(paginateRest);
+
+/** Per-delivery client with App auth and Link-header pagination wired in. */
+export type GithubClient = InstanceType<typeof GithubOctokit>;
+
+export interface AppCredentials {
+	/** GitHub App ID (or client ID), the `iss` claim of the App JWT. */
+	readonly appId: string;
+	/** GitHub App private key PEM, converted to PKCS#8 (SPEC.md §7). */
+	readonly privateKeyPem: string;
+}
+
 export interface RepoRef {
 	readonly owner: string;
 	readonly repo: string;
 }
 
 /**
- * Error for failed GitHub API calls. The endpoint is "METHOD /path" only; the
- * message is built solely from that and a fixed reason — never a token, a
- * query string, or a response body excerpt (SPEC.md §8 warning).
+ * Error for failed GitHub API calls. The endpoint is the "METHOD /path"
+ * route template only; the message is built solely from that and a fixed
+ * reason — never a token, a query string, or a response body excerpt
+ * (SPEC.md §8 warning).
  */
 export class GithubApiError extends Error {
 	public readonly endpoint: string;
@@ -54,67 +72,46 @@ export class GithubApiError extends Error {
 	}
 }
 
-function unexpectedStatusError(endpoint: string, status: number): GithubApiError {
-	return new GithubApiError(endpoint, status, "unexpected response status");
-}
 function shapeError(endpoint: string, status: number): GithubApiError {
 	return new GithubApiError(endpoint, status, "unexpected response shape");
 }
 
-interface GithubRequest {
-	readonly body?: string;
-	/** The label "METHOD /path" without any query string, safe for error messages. */
-	readonly endpoint: string;
-	readonly method: string;
-	/** Path plus query string, appended to API_BASE_URL. */
-	readonly path: string;
-	readonly token: string;
+/**
+ * Creates the per-delivery client. @octokit/auth-app authenticates the app
+ * endpoints (e.g. GET /app) with the App JWT and everything else with an
+ * installation token it issues lazily on first use. A before-request hook
+ * pins the REST API version on every request, including the internal token
+ * request and pagination follow-up pages. The client-level signal bounds
+ * those internal requests; every plain request below additionally carries a
+ * fresh per-call signal (SPEC.md §9, §11).
+ */
+export function createGithubClient(
+	credentials: AppCredentials,
+	installationId: number,
+): GithubClient {
+	const client = new GithubOctokit({
+		auth: {
+			appId: credentials.appId,
+			installationId,
+			privateKey: credentials.privateKeyPem,
+		},
+		authStrategy: createAppAuth,
+		request: { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
+		userAgent: USER_AGENT,
+	});
+	client.hook.before("request", (options) => {
+		options.headers["x-github-api-version"] = API_VERSION;
+	});
+	return client;
 }
 
-async function githubFetch(request: GithubRequest): Promise<Response> {
-	const headers: Record<string, string> = {
-		accept: "application/vnd.github+json",
-		authorization: `Bearer ${request.token}`,
-		"user-agent": USER_AGENT,
-		"x-github-api-version": API_VERSION,
-	};
-	const init: RequestInit = {
-		headers,
-		method: request.method,
-		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-	};
-	if (request.body !== undefined) {
-		headers["content-type"] = "application/json";
-		init.body = request.body;
-	}
-	try {
-		return await fetch(`${API_BASE_URL}${request.path}`, init);
-	} catch {
-		throw new GithubApiError(
-			request.endpoint,
-			NETWORK_FAILURE_STATUS,
-			"network failure or timeout",
-		);
-	}
-}
-
-/** Requires a 2xx status, then parses the body as JSON into unknown. */
-async function parseOkJson(response: Response, endpoint: string): Promise<unknown> {
-	if (!response.ok) {
-		throw unexpectedStatusError(endpoint, response.status);
-	}
-	try {
-		return await response.json();
-	} catch {
-		throw new GithubApiError(endpoint, response.status, "response body is not valid JSON");
-	}
+/** Per-call `request` parameter carrying a fresh timeout signal. */
+function timeoutRequest(): { readonly signal: AbortSignal } {
+	return { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
-}
-function isUnknownArray(value: unknown): value is readonly unknown[] {
-	return Array.isArray(value);
 }
 /** Key-variable accessor so no index-signature property is accessed by name. */
 function field(value: unknown, key: string): unknown {
@@ -136,6 +133,64 @@ function required<Value>(value: Value | undefined, endpoint: string, status: num
 		throw shapeError(endpoint, status);
 	}
 	return value;
+}
+
+interface HttpFailure {
+	readonly hasResponse: boolean;
+	readonly status: number;
+}
+
+/**
+ * Narrows a thrown octokit failure: a RequestError (name "HttpError", with a
+ * response for HTTP failures and without one for transport failures) or an
+ * aborted fetch (the per-call timeout signal firing).
+ */
+function toHttpFailure(error: unknown): HttpFailure | null {
+	if (!(error instanceof Error)) {
+		return NULL_RESULT;
+	}
+	if (error.name === "AbortError" || error.name === "TimeoutError") {
+		return { hasResponse: false, status: NETWORK_FAILURE_STATUS };
+	}
+	if (error.name !== "HttpError") {
+		return NULL_RESULT;
+	}
+	const status = field(error, "status");
+	if (typeof status !== "number") {
+		return NULL_RESULT;
+	}
+	return { hasResponse: field(error, "response") !== undefined, status };
+}
+
+function isHttpStatus(error: unknown, status: number): boolean {
+	const failure = toHttpFailure(error);
+	if (failure === null) {
+		return false;
+	}
+	return failure.hasResponse && failure.status === status;
+}
+
+/**
+ * Maps a thrown octokit failure onto the frozen GithubApiError contract:
+ * transport failures and timeouts become status 0, HTTP failures keep their
+ * status, and anything unrecognized (e.g. an auth configuration failure) is
+ * passed through for the handler's internal-error path (SPEC.md §9).
+ */
+function toApiError(endpoint: string, error: unknown): Error {
+	if (error instanceof GithubApiError) {
+		return error;
+	}
+	const failure = toHttpFailure(error);
+	if (failure === null) {
+		if (error instanceof Error) {
+			return error;
+		}
+		return new GithubApiError(endpoint, NETWORK_FAILURE_STATUS, "network failure or timeout");
+	}
+	if (!failure.hasResponse) {
+		return new GithubApiError(endpoint, NETWORK_FAILURE_STATUS, "network failure or timeout");
+	}
+	return new GithubApiError(endpoint, failure.status, "unexpected response status");
 }
 
 /*
@@ -215,123 +270,101 @@ function toLivePullRequest(value: unknown): LivePullRequest | undefined {
 	return { draft, head: { sha }, state };
 }
 
-function repoPath(repo: RepoRef): string {
-	return `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.repo)}`;
-}
-
-interface PageQuery {
-	readonly endpoint: string;
-	readonly path: string;
-	readonly token: string;
-}
-interface Page {
-	readonly items: readonly unknown[];
-	readonly status: number;
-}
-
-/** Deterministic pagination query string: ?per_page=100&page=N. */
-async function fetchArrayPage(query: PageQuery, page: number): Promise<Page> {
-	const { endpoint, path, token } = query;
-	const search = `${path}?per_page=${PAGE_SIZE}&page=${page}`;
-	const response = await githubFetch({ endpoint, method: "GET", path: search, token });
-	const payload = await parseOkJson(response, endpoint);
-	if (!isUnknownArray(payload)) {
-		throw shapeError(endpoint, response.status);
-	}
-	return { items: payload, status: response.status };
-}
-
-/** Pages are fetched sequentially (recursion) to stop at the first short page. */
-async function fetchCommitPages(query: PageQuery, page: number): Promise<PullRequestCommit[]> {
-	const { items, status } = await fetchArrayPage(query, page);
-	const commits = items.map((item) => required(toCommitItem(item), query.endpoint, status));
-	if (items.length < PAGE_SIZE || page >= MAX_COMMIT_PAGES) {
-		return commits;
-	}
-	return [...commits, ...(await fetchCommitPages(query, page + 1))];
-}
-async function fetchReviewPages(query: PageQuery, page: number): Promise<PullRequestReview[]> {
-	const { items, status } = await fetchArrayPage(query, page);
-	const reviews = items.map((item) => required(toReviewItem(item), query.endpoint, status));
-	if (items.length < PAGE_SIZE) {
-		return reviews;
-	}
-	return [...reviews, ...(await fetchReviewPages(query, page + 1))];
-}
-
 /** GET /app — resolves the App's own non-empty slug (SPEC.md §3 cond. 5). */
-export async function fetchAppSlug(appJwt: string): Promise<string> {
+export async function fetchAppSlug(client: GithubClient): Promise<string> {
 	const endpoint = "GET /app";
-	const response = await githubFetch({ endpoint, method: "GET", path: "/app", token: appJwt });
-	const slug = stringField(await parseOkJson(response, endpoint), "slug");
-	if (slug === undefined || slug === "") {
-		throw shapeError(endpoint, response.status);
+	try {
+		const response = await client.request(endpoint, { request: timeoutRequest() });
+		const slug = stringField(response.data, "slug");
+		if (slug === undefined || slug === "") {
+			throw shapeError(endpoint, response.status);
+		}
+		return slug;
+	} catch (error) {
+		throw toApiError(endpoint, error);
 	}
-	return slug;
 }
 
-/** POST /app/installations/{id}/access_tokens (SPEC.md §7). */
-export async function createInstallationToken(
-	appJwt: string,
-	installationId: number,
-): Promise<string> {
-	const path = `/app/installations/${installationId}/access_tokens`;
-	const endpoint = `POST ${path}`;
-	const response = await githubFetch({ endpoint, method: "POST", path, token: appJwt });
-	const token = stringField(await parseOkJson(response, endpoint), "token");
-	if (token === undefined || token === "") {
-		throw shapeError(endpoint, response.status);
-	}
-	return token;
-}
-
-/** All PR commits: per_page=100, pages 1..3 max, early stop on a short page (SPEC.md §3.2). */
+/** All PR commits via Link-header pagination (SPEC.md §3.2); the 250-commit cap is enforced upstream by precheckCommitCount. */
 export async function listPullRequestCommits(
-	token: string,
+	client: GithubClient,
 	repo: RepoRef,
 	pullNumber: number,
 ): Promise<readonly PullRequestCommit[]> {
-	const path = `${repoPath(repo)}/pulls/${pullNumber}/commits`;
-	return fetchCommitPages({ endpoint: `GET ${path}`, path, token }, 1);
+	const endpoint = "GET /repos/{owner}/{repo}/pulls/{pull_number}/commits";
+	try {
+		const items = await client.paginate(endpoint, {
+			owner: repo.owner,
+			per_page: PAGE_SIZE,
+			pull_number: pullNumber,
+			repo: repo.repo,
+		});
+		return items.map((item) => required(toCommitItem(item), endpoint, HTTP_OK));
+	} catch (error) {
+		throw toApiError(endpoint, error);
+	}
 }
 
 /** GET /orgs/{org}/memberships/{username}; a 404 means "not a member" → null (SPEC.md §9). */
 export async function fetchOrgMembership(
-	token: string,
+	client: GithubClient,
 	org: string,
 	username: string,
 ): Promise<OrgMembership | null> {
-	const path = `/orgs/${encodeURIComponent(org)}/memberships/${encodeURIComponent(username)}`;
-	const endpoint = `GET ${path}`;
-	const response = await githubFetch({ endpoint, method: "GET", path, token });
-	if (response.status === HTTP_NOT_FOUND) {
-		return NULL_RESULT;
+	const endpoint = "GET /orgs/{org}/memberships/{username}";
+	try {
+		const response = await client.request(endpoint, {
+			org,
+			request: timeoutRequest(),
+			username,
+		});
+		return required(toMembership(response.data), endpoint, response.status);
+	} catch (error) {
+		if (isHttpStatus(error, HTTP_NOT_FOUND)) {
+			return NULL_RESULT;
+		}
+		throw toApiError(endpoint, error);
 	}
-	const payload = await parseOkJson(response, endpoint);
-	return required(toMembership(payload), endpoint, response.status);
 }
 
-/** All PR reviews, per_page=100 until a short page (SPEC.md §3 cond. 5). */
+/** All PR reviews via Link-header pagination (SPEC.md §3 cond. 5). */
 export async function listPullRequestReviews(
-	token: string,
+	client: GithubClient,
 	repo: RepoRef,
 	pullNumber: number,
 ): Promise<readonly PullRequestReview[]> {
-	const path = `${repoPath(repo)}/pulls/${pullNumber}/reviews`;
-	return fetchReviewPages({ endpoint: `GET ${path}`, path, token }, 1);
+	const endpoint = "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews";
+	try {
+		const items = await client.paginate(endpoint, {
+			owner: repo.owner,
+			per_page: PAGE_SIZE,
+			pull_number: pullNumber,
+			repo: repo.repo,
+		});
+		return items.map((item) => required(toReviewItem(item), endpoint, HTTP_OK));
+	} catch (error) {
+		throw toApiError(endpoint, error);
+	}
 }
 
 /** GET /repos/{owner}/{repo}/pulls/{n} for the live TOCTOU check (SPEC.md §3.3). */
 export async function fetchPullRequest(
-	token: string,
+	client: GithubClient,
 	repo: RepoRef,
 	pullNumber: number,
 ): Promise<LivePullRequest> {
-	const path = `${repoPath(repo)}/pulls/${pullNumber}`;
-	const endpoint = `GET ${path}`;
-	const response = await githubFetch({ endpoint, method: "GET", path, token });
-	const payload = await parseOkJson(response, endpoint);
-	return required(toLivePullRequest(payload), endpoint, response.status);
+	const endpoint = "GET /repos/{owner}/{repo}/pulls/{pull_number}";
+	try {
+		const response = await client.request(endpoint, {
+			owner: repo.owner,
+			pull_number: pullNumber,
+			repo: repo.repo,
+			request: timeoutRequest(),
+		});
+		return required(toLivePullRequest(response.data), endpoint, response.status);
+	} catch (error) {
+		throw toApiError(endpoint, error);
+	}
 }
 
 /**
@@ -340,20 +373,26 @@ export async function fetchPullRequest(
  */
 // oxlint-disable-next-line max-params -- frozen public API signature
 export async function createApprovalReview(
-	token: string,
+	client: GithubClient,
 	repo: RepoRef,
 	pullNumber: number,
 	commitId: string,
 ): Promise<"created" | "rejected"> {
-	const path = `${repoPath(repo)}/pulls/${pullNumber}/reviews`;
-	const endpoint = `POST ${path}`;
-	const body = JSON.stringify({ commit_id: commitId, event: "APPROVE" });
-	const response = await githubFetch({ body, endpoint, method: "POST", path, token });
-	if (response.ok) {
+	const endpoint = "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews";
+	try {
+		await client.request(endpoint, {
+			commit_id: commitId,
+			event: "APPROVE",
+			owner: repo.owner,
+			pull_number: pullNumber,
+			repo: repo.repo,
+			request: timeoutRequest(),
+		});
 		return "created";
+	} catch (error) {
+		if (isHttpStatus(error, HTTP_UNPROCESSABLE_ENTITY)) {
+			return "rejected";
+		}
+		throw toApiError(endpoint, error);
 	}
-	if (response.status === HTTP_UNPROCESSABLE_ENTITY) {
-		return "rejected";
-	}
-	throw unexpectedStatusError(endpoint, response.status);
 }
