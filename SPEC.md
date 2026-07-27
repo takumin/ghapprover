@@ -16,6 +16,9 @@ and dependency-update PRs.
 
 1. [Architecture Overview](#1-architecture-overview)
 2. [GitHub App Configuration](#2-github-app-configuration)
+   - [2.1 Permissions (least privilege)](#21-permissions-least-privilege)
+   - [2.2 Webhook](#22-webhook)
+   - [2.3 Installation](#23-installation)
 3. [Approval Conditions](#3-approval-conditions)
    - [3.1 Trusted Principals](#31-trusted-principals)
    - [3.2 Commit Verification](#32-commit-verification)
@@ -28,7 +31,8 @@ and dependency-update PRs.
 8. [Observability](#8-observability)
 9. [Error Handling](#9-error-handling)
 10. [Out of Scope](#10-out-of-scope)
-11. [Implementation Notes (Informative)](#11-implementation-notes-informative)
+11. [Dependency Policy](#11-dependency-policy)
+12. [Implementation Notes (Informative)](#12-implementation-notes-informative)
 
 ## 1. Architecture Overview
 
@@ -63,7 +67,7 @@ Components:
 
 ## 2. GitHub App Configuration
 
-### Permissions (least privilege)
+### 2.1 Permissions (least privilege)
 
 | Permission           | Access       | Purpose                                                                   |
 | -------------------- | ------------ | ------------------------------------------------------------------------- |
@@ -71,13 +75,13 @@ Components:
 | Organization members | Read         | Determine org owners (role=admin)                                         |
 | Metadata             | Read         | (Mandatory default permission)                                            |
 
-### Webhook
+### 2.2 Webhook
 
 - Subscribe events: `pull_request` only
 - Webhook URL: the Workers endpoint (e.g. `https://ghapprover.<subdomain>.workers.dev/webhook`)
 - Webhook secret: required. Stored as a Workers Secret; every request is verified with HMAC-SHA256
 
-### Installation
+### 2.3 Installation
 
 Install on the target organization / personal account. Choose one of the following
 installation scopes:
@@ -335,6 +339,16 @@ the information needed for evaluation comes from the following.
   and never persist it)
 - Signature verification uses a timing-safe comparison
 
+> [!IMPORTANT]
+> GitHub serves App private keys in PKCS#1 format (`-----BEGIN RSA PRIVATE KEY-----`),
+> which the Web Crypto API — and therefore the auth library on Workers (§11) — cannot
+> import. Convert the key to PKCS#8 once, before storing it as a Workers Secret:
+>
+> ```sh
+> openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt \
+>   -in private-key.pem -out private-key-pkcs8.key
+> ```
+
 ## 8. Observability
 
 Emit at least the following to structured logs (Workers Logs):
@@ -377,10 +391,44 @@ Re-execution is consolidated into manual redelivery on the GitHub side.
 - Interactive operations such as comment commands
 - Revoking approvals (dismissing stale reviews is the responsibility of branch protection)
 
-## 11. Implementation Notes (Informative)
+## 11. Dependency Policy
 
-- Runtime: Cloudflare Workers (TypeScript)
-- Webhook signature verification and JWT signing can be implemented with the Web Crypto API.
-  If dependencies are added, keep them to Workers-compatible `@octokit/*` packages at most
+Runtime: Cloudflare Workers (TypeScript). External packages are minimized, with one
+class of exceptions: GitHub's official `@octokit/*` packages. Hand-rolling the
+GitHub-facing plumbing is more code to audit than the packages it replaces, so where
+an official package covers a concern, the implementation must delegate to it:
+
+| Concern                              | Package                         | Notes                                                              |
+| ------------------------------------ | ------------------------------- | ------------------------------------------------------------------ |
+| Webhook signature verification (§4)  | `@octokit/webhooks-methods`     | `verify()` is Web Crypto based and timing-safe (§7)                |
+| App JWT and installation tokens (§7) | `@octokit/auth-app`             | RS256 JWT, token issuance, in-memory token cache                   |
+| REST calls (§3, §4)                  | `@octokit/core`                 | per-call timeouts via an `AbortSignal` in the request options (§9) |
+| Pagination (§3.2, §3 condition 5)    | `@octokit/plugin-paginate-rest` | follows the `Link` header; no manual page loops                    |
+| Webhook payload types                | `@octokit/webhooks-types`       | devDependency; type definitions only, never bundled                |
+
+Rules:
+
+1. Direct runtime dependencies are limited to official `@octokit/*` packages, and only
+   the ones the table above requires. The transitive dependencies they pull in (e.g.
+   `universal-github-app-jwt`, `toad-cache`) are part of the package and equally
+   acceptable
+2. Do not reimplement what the table delegates: no hand-rolled Web Crypto HMAC or
+   RS256/JWT code, no bespoke REST client, no manual `Link`-header pagination
+3. No other runtime dependencies. The single route, console JSON logging (§8), and
+   in-code constants (§5) are served by platform primitives; routing, validation, and
+   logging libraries are not
+4. This spec does not pin package versions; Renovate keeps them current
+
+> [!NOTE]
+> The composite packages are deliberately not used: `@octokit/rest` adds generated
+> endpoint methods and request logging this Worker does not need, and `octokit`
+> further bundles webhooks, OAuth, and retry / throttling plugins — automatic retries
+> would even conflict with §9. `@octokit/webhooks` targets long-running Node servers;
+> its verification primitive is published standalone as `@octokit/webhooks-methods`.
+
+## 12. Implementation Notes (Informative)
+
+- The selected packages are fetch- and Web Crypto-based and run on the default
+  Workers runtime without the `nodejs_compat` compatibility flag
 - Testing: extract the decision logic (trusted principals, commit verification) as pure
   functions so it can be unit-tested without mocking the GitHub API
