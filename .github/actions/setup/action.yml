@@ -1,6 +1,6 @@
 ---
 name: Setup
-description: Install the mise toolchain and node dependencies, with the pnpm store restored from cache
+description: Install the mise toolchain, and optionally the node dependencies with a cached pnpm store
 inputs:
   mise-install-locked:
     description: Install the mise tools with `--locked`, failing on a tool that mise.lock does not pin
@@ -18,15 +18,14 @@ runs:
       with:
         install: ${{ inputs.mise-install-locked }}
         cache_save: ${{ github.ref == 'refs/heads/main' }}
-    # mise-action's `install` is the locked install, so turning it off leaves the
-    # tools uninstalled; this puts them back through a plain `mise install`, which
-    # is free to extend mise.lock rather than fail on a tool with no entry yet.
+    # Not optional: mise-action's `install` *is* the locked install, so turning it
+    # off leaves the tools uninstalled rather than installed loosely.
     - name: Install tools
       if: inputs.mise-install-locked != 'true'
       shell: bash
       run: mise install
-    # `pnpm store path` rather than a hardcoded directory: the store lives under
-    # the pnpm-managed data dir, which moves with the pnpm version.
+    # Asked for rather than hardcoded: the store directory is versioned by store
+    # format, not by pnpm release, and is relocatable through pnpm config.
     - name: Resolve pnpm store path
       if: inputs.pnpm-install == 'true'
       id: store
@@ -36,6 +35,10 @@ runs:
     # invalidated by exactly the files that make a reinstall necessary. The
     # prefix fallback still hands back main's store on a lockfile bump, leaving
     # pnpm to fetch only the packages that actually changed.
+    #
+    # Split from the save below, rather than one `actions/cache`, because the save
+    # has to run after the install and a composite action cannot declare a `post`
+    # step to hold it.
     - name: Restore pnpm store
       if: inputs.pnpm-install == 'true'
       id: cache
@@ -57,10 +60,8 @@ runs:
       shell: bash
       run: pnpm store prune
     # Saved on main only, matching mise-action's `cache_save`: a cache written
-    # from a pull request is scoped to that branch, so it is evicted unused and
-    # only eats into the repository's 10 GB budget. A composite action cannot
-    # declare a `post` step, which is why this is the split save action rather
-    # than plain `actions/cache`.
+    # from a pull request is scoped to that branch, so it is evicted unused while
+    # still eating into the repository's 10 GB budget.
     - name: Save pnpm store
       if: inputs.pnpm-install == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0

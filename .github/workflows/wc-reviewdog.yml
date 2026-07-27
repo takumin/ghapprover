@@ -56,8 +56,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Only the runners whose mise task depends on `setup` need node_modules,
-      # so the matrix carries that flag and the rest skip the install entirely.
+      # Whether a shard needs node_modules is derived from its mise task's own
+      # `depends` and carried through the matrix; see `reviewdog-matrix` in
+      # mise.toml.
       - name: Setup
         uses: ./.github/actions/setup
         with:

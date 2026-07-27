@@ -19,11 +19,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # `mise-install-locked: false` because the install must be allowed to
-      # extend mise.lock. A locked install fails outright when a tool in mise.toml
-      # has no lockfile entry yet. Every other workflow keeps the strict locked
-      # install; this job is the one place that regenerates the lockfile, and
-      # autofix commits the result.
+      # The one job that regenerates mise.lock, so its install has to be free to
+      # extend the lockfile; autofix commits whatever it adds. Every other
+      # workflow keeps the strict locked install.
       - name: Setup
         uses: ./.github/actions/setup
         with:
