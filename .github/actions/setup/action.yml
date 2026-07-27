@@ -1,0 +1,69 @@
+---
+name: Setup
+description: Install the mise toolchain and node dependencies, with the pnpm store restored from cache
+inputs:
+  mise-install:
+    description: Let mise-action run the locked `mise install`
+    required: false
+    default: "true"
+  deps:
+    description: Install node dependencies and cache the pnpm store
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Setup mise
+      uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+      with:
+        install: ${{ inputs.mise-install }}
+        cache_save: ${{ github.ref == 'refs/heads/main' }}
+    # For callers that opt out of mise-action's `mise install --locked`, because
+    # the run has to be allowed to extend mise.lock rather than fail on a tool
+    # that has no entry yet.
+    - name: Install tools
+      if: inputs.mise-install != 'true'
+      shell: bash
+      run: mise install
+    # `pnpm store path` rather than a hardcoded directory: the store lives under
+    # the pnpm-managed data dir, which moves with the pnpm version.
+    - name: Resolve pnpm store path
+      if: inputs.deps == 'true'
+      id: store
+      shell: bash
+      run: echo "path=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+    # The key mirrors the `sources` of the mise `setup` task, so the cache is
+    # invalidated by exactly the files that make a reinstall necessary. The
+    # prefix fallback still hands back main's store on a lockfile bump, leaving
+    # pnpm to fetch only the packages that actually changed.
+    - name: Restore pnpm store
+      if: inputs.deps == 'true'
+      id: cache
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml') }}
+        restore-keys: pnpm-store-${{ runner.os }}-
+    # Installing here rather than leaving it to each task's `depends = ["setup"]`
+    # keeps the install between the restore and the save steps below.
+    - name: Install node dependencies
+      if: inputs.deps == 'true'
+      shell: bash
+      run: mise run setup
+    # A prefix-key restore carries every package version the store ever held, so
+    # without a prune the saved archive only grows.
+    - name: Prune pnpm store
+      if: inputs.deps == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: pnpm store prune
+    # Saved on main only, matching mise-action's `cache_save`: a cache written
+    # from a pull request is scoped to that branch, so it is evicted unused and
+    # only eats into the repository's 10 GB budget. A composite action cannot
+    # declare a `post` step, which is why this is the split save action rather
+    # than plain `actions/cache`.
+    - name: Save pnpm store
+      if: inputs.deps == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: ${{ steps.cache.outputs.cache-primary-key }}
