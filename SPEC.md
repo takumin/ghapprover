@@ -16,6 +16,9 @@ and dependency-update PRs.
 
 1. [Architecture Overview](#1-architecture-overview)
 2. [GitHub App Configuration](#2-github-app-configuration)
+   - [2.1 Permissions (least privilege)](#21-permissions-least-privilege)
+   - [2.2 Webhook](#22-webhook)
+   - [2.3 Installation](#23-installation)
 3. [Approval Conditions](#3-approval-conditions)
    - [3.1 Trusted Principals](#31-trusted-principals)
    - [3.2 Commit Verification](#32-commit-verification)
@@ -63,7 +66,7 @@ Components:
 
 ## 2. GitHub App Configuration
 
-### Permissions (least privilege)
+### 2.1 Permissions (least privilege)
 
 | Permission           | Access       | Purpose                                                                   |
 | -------------------- | ------------ | ------------------------------------------------------------------------- |
@@ -71,13 +74,13 @@ Components:
 | Organization members | Read         | Determine org owners (role=admin)                                         |
 | Metadata             | Read         | (Mandatory default permission)                                            |
 
-### Webhook
+### 2.2 Webhook
 
 - Subscribe events: `pull_request` only
 - Webhook URL: the Workers endpoint (e.g. `https://ghapprover.<subdomain>.workers.dev/webhook`)
 - Webhook secret: required. Stored as a Workers Secret; every request is verified with HMAC-SHA256
 
-### Installation
+### 2.3 Installation
 
 Install on the target organization / personal account. Choose one of the following
 installation scopes:
