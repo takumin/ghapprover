@@ -387,22 +387,32 @@ Re-execution is consolidated into manual redelivery on the GitHub side.
 
 - Runtime: Cloudflare Workers (TypeScript)
 - GitHub integration is built on GitHub's official Octokit libraries rather than
-  hand-rolled Web Crypto / `fetch` code. Runtime dependencies are limited to the
-  following packages, all implemented on the fetch / Web Crypto APIs available in
-  Workers:
-  - `@octokit/core` — typed `request()` calls for the REST endpoints used in §4
-  - `@octokit/auth-app` — App JWT (RS256) signing and installation token issuance
-    (§7). Its default installation-token cache is in-memory only, which satisfies
-    the "never persist" requirement of §7
-  - `@octokit/plugin-paginate-rest` — fetches every page of the commits and
-    reviews endpoints (§3.2, §3 condition 5)
-  - `@octokit/webhooks-methods` — timing-safe `X-Hub-Signature-256` verification
-    (§7) built on Web Crypto
-  - Type-only `@octokit/*` packages (e.g. webhook payload types) may additionally
-    be used as dev dependencies
-- Deliberately not adopted: the `octokit` meta-package and its bundled
-  `@octokit/plugin-retry` / `@octokit/plugin-throttling`. They retry by sleeping
-  inside the request lifecycle, which conflicts with the no-retry policy (§9) and
-  the synchronous processing budget (§4)
+  hand-rolled Web Crypto / `fetch` code. The tables below list the packages that are
+  used and the related official packages that are deliberately not used
 - Testing: extract the decision logic (trusted principals, commit verification) as pure
   functions so it can be unit-tested without mocking the GitHub API
+
+**Packages used** (runtime dependencies; all implemented on the fetch / Web Crypto
+APIs available in Workers):
+
+| Package                         | Role                                                                                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `@octokit/core`                 | Typed `request()` calls for the REST endpoints used in §4                                                                            |
+| `@octokit/auth-app`             | App JWT (RS256) signing and installation token issuance (§7). Its default installation-token cache is in-memory only, as §7 requires |
+| `@octokit/plugin-paginate-rest` | Fetches every page of the commits and reviews endpoints (§3.2, §3 condition 5)                                                       |
+| `@octokit/webhooks-methods`     | Timing-safe `X-Hub-Signature-256` verification (§7) built on Web Crypto                                                              |
+
+Type-only `@octokit/*` packages (e.g. webhook payload types) may additionally be used
+as dev dependencies.
+
+**Packages not used** (some still appear as transitive dependencies of the packages
+used):
+
+| Package                                                  | Reason                                                                                                                                              |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@octokit/plugin-retry`, `@octokit/plugin-throttling`    | Retry by sleeping inside the request lifecycle, which conflicts with the no-retry policy (§9) and the synchronous processing budget (§4)            |
+| `octokit` (meta-package)                                 | Bundles the retry and throttling plugins above, plus GraphQL and OAuth surface this Worker never calls                                              |
+| `@octokit/rest`, `@octokit/plugin-rest-endpoint-methods` | Generated methods for every REST endpoint; the few endpoints in §4 are covered by typed `request()` route strings on `@octokit/core`                |
+| `@octokit/app`                                           | High-level wrapper that adds webhook dispatch and OAuth support on top of app authentication; §7 needs only App JWT signing and installation tokens |
+| `@octokit/webhooks`                                      | Event-emitter dispatch across all webhook event types; a single `pull_request` event (§3) needs only `verify()` from `@octokit/webhooks-methods`    |
+| `@octokit/graphql`                                       | Every API call in this specification is REST (§4)                                                                                                   |
