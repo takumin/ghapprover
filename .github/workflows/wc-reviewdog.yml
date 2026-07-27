@@ -28,7 +28,7 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
         with:
-          deps: "false"
+          pnpm-install: "false"
       - name: Generate Matrix
         id: matrix
         run: echo "result=$(mise run reviewdog-matrix)" >> "$GITHUB_OUTPUT"
@@ -61,7 +61,7 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
         with:
-          deps: ${{ matrix.deps }}
+          pnpm-install: ${{ matrix.pnpm-install }}
       - name: Running reviewdog
         env:
           REVIEWDOG_TARGET: ${{ matrix.target }}

@@ -136,11 +136,11 @@ depends = ["reviewdog:*"]
 # `output = "quiet"` suppresses mise's per-task label prefix so stdout is pure
 # JSON and can be captured straight into $GITHUB_OUTPUT.
 #
-# `deps` tells CI whether the shard needs node_modules, derived from the task's
-# own `depends` rather than a second list in the workflow. The `error` guard is
-# there because a silent `false` everywhere would still go green -- the shard
-# would just install uncached inside the task -- and quietly undo the pnpm store
-# cache the moment mise renames the field.
+# `pnpm-install` tells CI whether the shard needs node_modules, derived from the
+# task's own `depends` rather than a second list in the workflow. The `error`
+# guard is there because a silent `false` everywhere would still go green -- the
+# shard would just install uncached inside the task -- and quietly undo the pnpm
+# store cache the moment mise renames the field.
 [tasks.reviewdog-matrix]
 description = "Emit the reviewdog runner matrix as JSON for CI"
 output = "quiet"
@@ -151,10 +151,10 @@ mise tasks ls --json | jq -cM '
     | {
         name: (.name | split(":") | last),
         target: .name,
-        deps: ((((.depends // []) | flatten | index("setup")) != null) | tostring),
+        "pnpm-install": ((((.depends // []) | flatten | index("setup")) != null) | tostring),
       }
   ]
-  | if any(.[]; .deps == "true")
+  | if any(.[]; .["pnpm-install"] == "true")
     then {include: .}
     else error("no reviewdog task depends on setup; mise tasks ls --json shape changed")
     end
