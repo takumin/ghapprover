@@ -25,10 +25,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Setup mise
-        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+      - name: Setup
+        uses: ./.github/actions/setup
         with:
-          cache_save: ${{ github.ref == 'refs/heads/main' }}
+          pnpm-install: "false"
       - name: Generate Matrix
         id: matrix
         run: echo "result=$(mise run reviewdog-matrix)" >> "$GITHUB_OUTPUT"
@@ -56,10 +56,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Setup mise
-        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+      # Whether a shard needs node_modules is derived from its mise task's own
+      # `depends` and carried through the matrix; see `reviewdog-matrix` in
+      # mise.toml.
+      - name: Setup
+        uses: ./.github/actions/setup
         with:
-          cache_save: ${{ github.ref == 'refs/heads/main' }}
+          pnpm-install: ${{ matrix.pnpm-install }}
       - name: Running reviewdog
         env:
           REVIEWDOG_TARGET: ${{ matrix.target }}
