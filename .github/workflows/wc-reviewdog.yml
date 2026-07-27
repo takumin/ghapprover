@@ -63,7 +63,14 @@ jobs:
       - name: Running reviewdog
         env:
           REVIEWDOG_TARGET: ${{ matrix.target }}
-          REVIEWDOG_REPORTER: ${{ github.event_name == 'pull_request' && 'github-pr-review' || 'github-check' }}
+          # A pull_request from a fork gets a read-only GITHUB_TOKEN regardless
+          # of this job's `permissions`, so a review-posting reporter would 403.
+          # Falling back to `local` keeps the -fail-level gate in the task, so a
+          # finding still fails the job; only the inline annotations are lost.
+          REVIEWDOG_REPORTER: >-
+            ${{ github.event_name != 'pull_request' && 'github-check'
+            || github.event.pull_request.head.repo.fork && 'local'
+            || 'github-pr-review' }}
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Appended to the task's own flags, which carry the -fail-level and
           # -filter-mode lint gate; these only add CI debug output.
