@@ -168,7 +168,7 @@ mise tasks ls --json | jq -cM '
 # `run` rather than `depends`, because `depends` runs its entries in parallel and
 # the formatters rewrite files the linters read.
 [tasks.default]
-description = "Run the full gate, in the same order as CI"
+description = "Run every CI gate locally, sequentially"
 alias = "all"
 run = [
   { task = "format" },

@@ -20,7 +20,15 @@ indent_style = space
 [*.toml]
 indent_style = space
 
-[{LICENSE,*.md}]
+# oxfmt owns the layout here, and Markdown indentation is semantic rather than
+# stylistic: ordered-list continuations are 3 spaces wide, and a fenced block
+# carries whatever indentation its own language uses, tabs included.
+[*.md]
+indent_style = unset
+
+# Verbatim upstream text. No formatter here touches it, so nothing should have
+# an opinion on its layout either.
+[LICENSE]
 indent_style = unset
 
 [worker-configuration.d.ts]

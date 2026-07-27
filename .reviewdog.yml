@@ -1,9 +1,12 @@
 ---
 runner:
   oxlint:
+    # Through the `lint` script rather than oxlint directly, so this file and
+    # package.json cannot drift into two different invocations.
+    #
     # `unix` rather than sarif/checkstyle: oxlint emits `file://`-prefixed paths in
     # those formats, which reviewdog cannot map back to repository-relative paths.
-    cmd: pnpm exec oxlint --format=unix
+    cmd: pnpm run lint --format=unix
     errorformat:
       - "%f:%l:%c: %m"
       - "%-G%.%#"
