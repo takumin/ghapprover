@@ -545,6 +545,24 @@ describe("commit verification", () => {
 		});
 		session.assertDone();
 	});
+
+	it("stops before any principal lookup when the first commit is unverified", async () => {
+		expect.hasAssertions();
+		const session = installFetchMock([
+			tokenRoute(),
+			membershipRoute({ payload: { role: "admin", state: "active" }, status: HTTP_OK }),
+			commitsRouteFor("acme", [
+				commitItem({ author: STRANGER, verified: false }),
+				commitItem({ author: STRANGER }),
+			]),
+		]);
+		const response = await postSigned(buildPayload({ commits: 2, repoOwner: ORG }));
+		await expectReply(response, {
+			body: { decision: "skipped", reason: "unverified-commit" },
+			status: HTTP_OK,
+		});
+		session.assertDone();
+	});
 });
 
 describe("duplicate approval check", () => {

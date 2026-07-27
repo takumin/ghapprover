@@ -81,22 +81,24 @@ export function isOwnerMembership(membership: OrgMembership | null): boolean {
 	return membership.state === "active" && membership.role === "admin";
 }
 
-/* Distinct-by-login accounts whose trust must be resolved for SPEC.md §3.2, so the caller queries
- * each membership at most once per delivery (§3.1). web-flow is exempt as committer only: as an
- * author it still needs trust. */
-export function collectCommitPrincipals(
-	commits: readonly PullRequestCommit[],
-): readonly GithubAccount[] {
-	const byLogin = new Map<string, GithubAccount>();
-	for (const { author, committer } of commits) {
-		if (author !== null && !byLogin.has(author.login)) {
-			byLogin.set(author.login, author);
-		}
-		if (committer !== null && committer.login !== WEB_FLOW_LOGIN && !byLogin.has(committer.login)) {
-			byLogin.set(committer.login, committer);
-		}
+/* The accounts whose trust one commit's §3.2 check needs: the author, and the committer unless
+ * it is web-flow (exempt as committer only) or repeats the author. The caller resolves them in
+ * commit order, memoized per delivery (§3.1), so a failing commit stops the remaining
+ * membership lookups instead of querying every principal of every commit up front. */
+export function commitPrincipals(entry: PullRequestCommit): readonly GithubAccount[] {
+	const { author, committer } = entry;
+	const principals: GithubAccount[] = [];
+	if (author !== null) {
+		principals.push(author);
 	}
-	return [...byLogin.values()];
+	if (
+		committer !== null &&
+		committer.login !== WEB_FLOW_LOGIN &&
+		(author === null || committer.login !== author.login)
+	) {
+		principals.push(committer);
+	}
+	return principals;
 }
 
 export type CommitCountProblem = "no-commits" | "too-many-commits";
@@ -116,10 +118,25 @@ export type CommitProblem =
 	| "commit-count-mismatch"
 	| "untrusted-commit"
 	| "unverified-commit";
+/** SPEC.md §3.2: the count prechecks, then the fetched list must match the declared count. */
+export function checkCommitCount(
+	fetchedCount: number,
+	declaredCount: number,
+): CommitProblem | null {
+	const countProblem = precheckCommitCount(declaredCount);
+	if (countProblem !== null) {
+		return countProblem;
+	}
+	if (fetchedCount !== declaredCount) {
+		return "commit-count-mismatch";
+	}
+	return null;
+}
+
 /* SPEC.md §3.2 per commit: the signature verification is checked before author and committer
  * trust; web-flow is accepted as committer only, because genuine web-flow commits are
  * GitHub-signed, which the verification check enforces. */
-function checkCommit(
+export function checkCommit(
 	entry: PullRequestCommit,
 	isTrustedLogin: (login: string) => boolean,
 ): CommitProblem | null {
@@ -136,29 +153,6 @@ function checkCommit(
 		(committer.login !== WEB_FLOW_LOGIN && !isTrustedLogin(committer.login))
 	) {
 		return "untrusted-commit";
-	}
-	return null;
-}
-
-/* SPEC.md §3.2 with the first failure winning: the count prechecks, then the declared-count
- * comparison, then the per-commit checks in list order. */
-export function checkCommits(
-	commits: readonly PullRequestCommit[],
-	declaredCount: number,
-	isTrustedLogin: (login: string) => boolean,
-): CommitProblem | null {
-	const countProblem = precheckCommitCount(declaredCount);
-	if (countProblem !== null) {
-		return countProblem;
-	}
-	if (commits.length !== declaredCount) {
-		return "commit-count-mismatch";
-	}
-	for (const entry of commits) {
-		const problem = checkCommit(entry, isTrustedLogin);
-		if (problem !== null) {
-			return problem;
-		}
 	}
 	return null;
 }

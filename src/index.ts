@@ -5,8 +5,9 @@
  */
 /* The decision contract and Headers.get model absence as null (SPEC.md fails closed), so null literals are deliberate here. */
 /* oxlint-disable unicorn/no-null */
+/* oxlint-disable max-lines -- the §4 pipeline and its outcome mapping live in one module by design */
 
-import type { GithubAccount, PullRequestEventPayload } from "./types";
+import type { GithubAccount, PullRequestCommit, PullRequestEventPayload } from "./types";
 import {
 	GithubApiError,
 	createApprovalReview,
@@ -18,10 +19,11 @@ import {
 	listPullRequestReviews,
 } from "./github";
 import {
-	checkCommits,
+	checkCommit,
+	checkCommitCount,
 	checkPullRequestState,
 	classifyPrincipal,
-	collectCommitPrincipals,
+	commitPrincipals,
 	hasOwnApproval,
 	isLiveStateCurrent,
 	isOwnerMembership,
@@ -135,6 +137,34 @@ function createTrustResolver(client: GithubClient, repoOwner: GithubAccount): Tr
 	return { isTrustedLogin: (login: string): boolean => resolved.get(login) === true, resolve };
 }
 
+/** Trust stub that projects checkCommit onto its trust-independent problems. */
+const everyLoginTrusted = (): boolean => true;
+/* SPEC.md §3.2 in commit order, resolving each commit's principals lazily and one at a time
+ * (memoized, §3.1). Trust-independent problems (verification, unmapped principals) are checked
+ * before that commit's lookups, and the first failing commit stops the loop — so a delivery
+ * that ends in a skip never bursts a lookup per principal against the Worker subrequest
+ * allowance or GitHub's secondary rate limits. */
+async function findCommitProblem(
+	commits: readonly PullRequestCommit[],
+	trust: TrustResolver,
+): Promise<ReturnType<typeof checkCommit>> {
+	for (const entry of commits) {
+		const structural = checkCommit(entry, everyLoginTrusted);
+		if (structural !== null) {
+			return structural;
+		}
+		for (const account of commitPrincipals(entry)) {
+			// oxlint-disable-next-line no-await-in-loop -- sequential by design: parallel lookups are the burst §3.1 memoization cannot bound
+			await trust.resolve(account);
+		}
+		const problem = checkCommit(entry, trust.isTrustedLogin);
+		if (problem !== null) {
+			return problem;
+		}
+	}
+	return null;
+}
+
 /** SPEC.md §4 step 5 (§3.2): fetch all commits and verify every one of them. */
 async function checkCommitCondition(
 	payload: PullRequestEventPayload,
@@ -143,13 +173,15 @@ async function checkCommitCondition(
 ): Promise<Outcome | null> {
 	const { pull_request: pullRequest } = payload;
 	const commits = await listPullRequestCommits(client, repoRef(payload), pullRequest.number);
-	const principals = collectCommitPrincipals(commits);
-	await Promise.all(principals.map(async (account) => trust.resolve(account)));
-	const problem = checkCommits(commits, pullRequest.commits, trust.isTrustedLogin);
-	if (problem === null) {
-		return null;
+	const countProblem = checkCommitCount(commits.length, pullRequest.commits);
+	if (countProblem !== null) {
+		return skippedOutcome(countProblem);
 	}
-	return skippedOutcome(problem);
+	const problem = await findCommitProblem(commits, trust);
+	if (problem !== null) {
+		return skippedOutcome(problem);
+	}
+	return null;
 }
 
 /** SPEC.md §4 steps 4-5: the author condition, then the commit condition. */

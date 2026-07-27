@@ -17,10 +17,11 @@ import type {
 import { MAX_VERIFIABLE_COMMITS, WEB_FLOW_LOGIN } from "../src/allowlist";
 import {
 	TARGET_ACTIONS,
-	checkCommits,
+	checkCommit,
+	checkCommitCount,
 	checkPullRequestState,
 	classifyPrincipal,
-	collectCommitPrincipals,
+	commitPrincipals,
 	hasOwnApproval,
 	isLiveStateCurrent,
 	isOwnerMembership,
@@ -196,80 +197,70 @@ const CLASSIFY_CASES = [
 	},
 ];
 
-interface CommitsCase {
-	readonly commits: readonly PullRequestCommit[];
-	readonly declared?: number;
+interface CommitCase {
+	readonly entry: PullRequestCommit;
 	readonly expected: string | null;
 	readonly name: string;
 }
 
-const COMMIT_CASES: readonly CommitsCase[] = [
+const COMMIT_CASES: readonly CommitCase[] = [
+	{ entry: commit(), expected: null, name: "a verified trusted commit" },
 	{
-		commits: [commit(), commit({ author: BOB, committer: BOB })],
+		entry: commit({ author: BOB, committer: BOB }),
 		expected: null,
-		name: "verified trusted commits",
+		name: "the author doubling as committer",
 	},
-	{ commits: [commit({ committer: WEB_FLOW })], expected: null, name: "a web-flow committer" },
-	{ commits: [], declared: 0, expected: "no-commits", name: "a declared count of zero" },
+	{ entry: commit({ committer: WEB_FLOW }), expected: null, name: "a web-flow committer" },
 	{
-		commits: [commit()],
-		declared: 0,
-		expected: "no-commits",
-		name: "zero declared despite a fetched commit",
-	},
-	{
-		commits: [commit()],
-		declared: MAX_VERIFIABLE_COMMITS + 1,
-		expected: "too-many-commits",
-		name: "a declared count above the API cap",
-	},
-	{
-		commits: [commit()],
-		declared: 2,
-		expected: "commit-count-mismatch",
-		name: "fewer fetched commits than declared",
-	},
-	{
-		commits: [commit({ verification: { verified: false } })],
+		entry: commit({ verification: { verified: false } }),
 		expected: "unverified-commit",
 		name: "a failed verification",
 	},
 	{
-		commits: [commit({ verification: null })],
+		entry: commit({ verification: null }),
 		expected: "unverified-commit",
 		name: "missing verification data",
 	},
-	{ commits: [commit({ author: null })], expected: "untrusted-commit", name: "an unmapped author" },
+	{ entry: commit({ author: null }), expected: "untrusted-commit", name: "an unmapped author" },
 	{
-		commits: [commit({ author: MALLORY })],
+		entry: commit({ author: MALLORY }),
 		expected: "untrusted-commit",
 		name: "an untrusted author",
 	},
 	{
-		commits: [commit({ author: WEB_FLOW })],
+		entry: commit({ author: WEB_FLOW }),
 		expected: "untrusted-commit",
 		name: "a web-flow author",
 	},
 	{
-		commits: [commit({ committer: null })],
+		entry: commit({ committer: null }),
 		expected: "untrusted-commit",
 		name: "an unmapped committer",
 	},
 	{
-		commits: [commit({ committer: MALLORY })],
+		entry: commit({ committer: MALLORY }),
 		expected: "untrusted-commit",
 		name: "an untrusted committer",
 	},
 	{
-		commits: [commit({ author: MALLORY, verification: null })],
+		entry: commit({ author: MALLORY, verification: null }),
 		expected: "unverified-commit",
 		name: "unverified before untrusted on one commit",
 	},
-	{
-		commits: [commit({ committer: MALLORY }), commit({ verification: null })],
-		expected: "untrusted-commit",
-		name: "the earliest failing commit",
-	},
+];
+
+interface CommitCountCase {
+	readonly declared: number;
+	readonly expected: string | null;
+	readonly fetched: number;
+}
+
+const COMMIT_COUNT_CASES: readonly CommitCountCase[] = [
+	{ declared: 0, expected: "no-commits", fetched: 0 },
+	{ declared: 0, expected: "no-commits", fetched: 1 },
+	{ declared: MAX_VERIFIABLE_COMMITS + 1, expected: "too-many-commits", fetched: 1 },
+	{ declared: 2, expected: "commit-count-mismatch", fetched: 1 },
+	{ declared: 2, expected: null, fetched: 2 },
 ];
 
 const WITHOUT_INSTALLATION = {
@@ -413,38 +404,39 @@ describe("org owner membership", () => {
 
 describe("commit principal collection", () => {
 	it.each([
-		{ commits: [], expected: [], name: "nothing from an empty commit list" },
 		{
-			commits: [commit({ author: ALICE, committer: BOB })],
+			entry: commit({ author: ALICE, committer: BOB }),
 			expected: [ALICE, BOB],
 			name: "a distinct author and committer",
 		},
 		{
-			commits: [
-				commit({ author: ALICE, committer: BOB }),
-				commit({ author: BOB, committer: ALICE }),
-			],
-			expected: [ALICE, BOB],
-			name: "each login once across commits and roles",
+			entry: commit({ author: BOB, committer: BOB }),
+			expected: [BOB],
+			name: "the author once when the committer repeats it",
 		},
 		{
-			commits: [commit({ author: null, committer: null })],
+			entry: commit({ author: null, committer: null }),
 			expected: [],
 			name: "nothing from unmapped author and committer",
 		},
 		{
-			commits: [commit({ author: ALICE, committer: WEB_FLOW })],
+			entry: commit({ author: null, committer: BOB }),
+			expected: [BOB],
+			name: "the committer alone when the author is unmapped",
+		},
+		{
+			entry: commit({ author: ALICE, committer: WEB_FLOW }),
 			expected: [ALICE],
 			name: "no web-flow committer",
 		},
 		{
-			commits: [commit({ author: WEB_FLOW, committer: BOB })],
+			entry: commit({ author: WEB_FLOW, committer: BOB }),
 			expected: [WEB_FLOW, BOB],
 			name: "web-flow when it is the author",
 		},
-	])("collects $name", ({ commits, expected }) => {
+	])("collects $name", ({ entry, expected }) => {
 		expect.hasAssertions();
-		expect(collectCommitPrincipals(commits)).toStrictEqual(expected);
+		expect(commitPrincipals(entry)).toStrictEqual(expected);
 	});
 });
 
@@ -460,14 +452,21 @@ describe("commit count precheck", () => {
 	});
 });
 
-describe("commit verification gate", () => {
-	it.each(COMMIT_CASES)(
-		"returns $expected for $name",
-		({ commits, declared = commits.length, expected }) => {
+describe("commit count gate", () => {
+	it.each(COMMIT_COUNT_CASES)(
+		"returns $expected for $fetched fetched of $declared declared",
+		({ declared, expected, fetched }) => {
 			expect.hasAssertions();
-			expect(checkCommits(commits, declared, isTrustedFixture)).toBe(expected);
+			expect(checkCommitCount(fetched, declared)).toBe(expected);
 		},
 	);
+});
+
+describe("commit verification gate", () => {
+	it.each(COMMIT_CASES)("returns $expected for $name", ({ entry, expected }) => {
+		expect.hasAssertions();
+		expect(checkCommit(entry, isTrustedFixture)).toBe(expected);
+	});
 });
 
 describe("own approval detection", () => {
