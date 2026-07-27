@@ -14,8 +14,12 @@
 		"format": "oxfmt",
 		"test": "vitest run"
 	},
+	"dependencies": {
+		"@octokit/webhooks-methods": "6.0.0"
+	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "0.18.8",
+		"@octokit/webhooks-types": "7.6.1",
 		"oxfmt": "0.60.0",
 		"oxlint": "1.75.0",
 		"oxlint-tsgolint": "7.0.2001",
