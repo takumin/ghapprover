@@ -140,15 +140,12 @@ export type CommitProblem =
 	| "commit-count-mismatch"
 	| "untrusted-commit"
 	| "unverified-commit";
-/** SPEC.md §3.2: the count prechecks, then the fetched list must match the declared count. */
+/* SPEC.md §3.2: the fetched list must match the count the payload declared. The declared count
+ * itself is settled by precheckCommitCount, which the caller runs before it spends the fetch. */
 export function checkCommitCount(
 	fetchedCount: number,
 	declaredCount: number,
-): CommitProblem | null {
-	const countProblem = precheckCommitCount(declaredCount);
-	if (countProblem !== null) {
-		return countProblem;
-	}
+): "commit-count-mismatch" | null {
 	if (fetchedCount !== declaredCount) {
 		return "commit-count-mismatch";
 	}

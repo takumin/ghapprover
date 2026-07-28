@@ -307,10 +307,8 @@ interface CommitCountCase {
 }
 
 const COMMIT_COUNT_CASES: readonly CommitCountCase[] = [
-	{ declared: 0, expected: "no-commits", fetched: 0 },
-	{ declared: 0, expected: "no-commits", fetched: 1 },
-	{ declared: MAX_VERIFIABLE_COMMITS + 1, expected: "too-many-commits", fetched: 1 },
 	{ declared: 2, expected: "commit-count-mismatch", fetched: 1 },
+	{ declared: 1, expected: "commit-count-mismatch", fetched: 2 },
 	{ declared: 2, expected: null, fetched: 2 },
 ];
 
@@ -531,7 +529,7 @@ describe("commit count precheck", () => {
 	});
 });
 
-describe("commit count gate", () => {
+describe("fetched commit count", () => {
 	it.each(COMMIT_COUNT_CASES)(
 		"returns $expected for $fetched fetched of $declared declared",
 		({ declared, expected, fetched }) => {
