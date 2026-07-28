@@ -26,10 +26,9 @@ export const TARGET_ACTIONS: readonly string[] = [
 	"synchronize",
 	"ready_for_review",
 ];
-const TARGET_ACTION_SET: ReadonlySet<string> = new Set(TARGET_ACTIONS);
 
 export function isTargetAction(action: string): boolean {
-	return TARGET_ACTION_SET.has(action);
+	return TARGET_ACTIONS.includes(action);
 }
 
 export type PrStateProblem = "head-repo-forked" | "head-repo-missing" | "pr-draft" | "pr-not-open";
