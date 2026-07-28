@@ -343,8 +343,13 @@ function toLivePullRequest(value: unknown): LivePullRequest | undefined {
 	return { draft, head: { sha }, state };
 }
 
-/** GET /app — resolves the App's own non-empty slug (SPEC.md §3 cond. 5). */
-export async function fetchAppSlug(client: GithubClient): Promise<string> {
+/**
+ * GET /app — the App's own bot-user login, which is "<slug>[bot]" for the
+ * non-empty slug the endpoint returns (SPEC.md §3 cond. 5). The suffix is a
+ * GitHub naming convention, so deriving the login belongs to this module
+ * rather than to the caller that matches reviews against it.
+ */
+export async function fetchAppBotLogin(client: GithubClient): Promise<string> {
 	const endpoint = "GET /app";
 	try {
 		const response = await client.request(endpoint);
@@ -352,7 +357,7 @@ export async function fetchAppSlug(client: GithubClient): Promise<string> {
 		if (slug === undefined || slug === "") {
 			throw shapeError(endpoint, response.status);
 		}
-		return slug;
+		return `${slug}[bot]`;
 	} catch (error) {
 		throw toApiError(endpoint, error);
 	}

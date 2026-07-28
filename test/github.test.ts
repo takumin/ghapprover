@@ -4,7 +4,7 @@ import {
 	createApprovalReview,
 	createBoundedFetch,
 	createGithubClient,
-	fetchAppSlug,
+	fetchAppBotLogin,
 	fetchOrgMembership,
 	fetchPullRequest,
 	listPullRequestCommits,
@@ -100,8 +100,8 @@ function linkedRoute(route: {
 	});
 }
 
-describe("fetchAppSlug()", () => {
-	it("returns the slug without issuing an installation token", async () => {
+describe("fetchAppBotLogin()", () => {
+	it("returns the bot login for the slug without issuing an installation token", async () => {
 		expect.hasAssertions();
 		const mock = installFetchMock([
 			jsonRoute({
@@ -111,7 +111,7 @@ describe("fetchAppSlug()", () => {
 				url: `${BASE}/app`,
 			}),
 		]);
-		await expect(fetchAppSlug(await makeClient())).resolves.toBe("my-app");
+		await expect(fetchAppBotLogin(await makeClient())).resolves.toBe("my-app[bot]");
 		mock.assertDone();
 	});
 
@@ -125,7 +125,7 @@ describe("fetchAppSlug()", () => {
 				url: `${BASE}/app`,
 			}),
 		]);
-		await fetchAppSlug(await makeClient());
+		await fetchAppBotLogin(await makeClient());
 		const seen = requestByUrl(mock, `${BASE}/app`);
 		expect(seen.headers["authorization"]).toMatch(JWT_PATTERN);
 		expect(seen.headers["x-github-api-version"]).toBe("2022-11-28");
@@ -137,7 +137,7 @@ describe("fetchAppSlug()", () => {
 		installFetchMock([
 			jsonRoute({ method: "GET", payload: { id: 1 }, status: HTTP_OK, url: `${BASE}/app` }),
 		]);
-		const promise = fetchAppSlug(await makeClient());
+		const promise = fetchAppBotLogin(await makeClient());
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({ endpoint: "GET /app", status: HTTP_OK });
 	});
@@ -147,7 +147,7 @@ describe("transport failure mapping", () => {
 	it("wraps network failures with status 0", async () => {
 		expect.hasAssertions();
 		installFetchMock([jsonRoute({ method: "GET", payload: {}, status: 0, url: `${BASE}/app` })]);
-		const promise = fetchAppSlug(await makeClient());
+		const promise = fetchAppBotLogin(await makeClient());
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({ endpoint: "GET /app", status: 0 });
 	});
@@ -157,7 +157,7 @@ describe("transport failure mapping", () => {
 		installFetchMock([
 			{ body: "", method: "GET", rejectAs: "timeout", status: 0, url: `${BASE}/app` },
 		]);
-		const promise = fetchAppSlug(await makeClient());
+		const promise = fetchAppBotLogin(await makeClient());
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({ endpoint: "GET /app", status: 0 });
 	});

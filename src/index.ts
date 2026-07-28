@@ -12,7 +12,7 @@ import {
 	GithubApiError,
 	createApprovalReview,
 	createGithubClient,
-	fetchAppSlug,
+	fetchAppBotLogin,
 	fetchOrgMembership,
 	fetchPullRequest,
 	listPullRequestCommits,
@@ -248,9 +248,9 @@ async function approvePullRequest(
 		pullNumber: payload.pull_request.number,
 		repo: repoRef(payload),
 	};
-	const slug = await fetchAppSlug(client);
+	const botLogin = await fetchAppBotLogin(client);
 	const reviews = await listPullRequestReviews(client, target.repo, target.pullNumber);
-	if (hasOwnApproval(reviews, `${slug}[bot]`, target.headSha)) {
+	if (hasOwnApproval(reviews, botLogin, target.headSha)) {
 		return skippedOutcome("already-approved");
 	}
 	return submitApproval(client, target);
