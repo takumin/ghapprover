@@ -324,30 +324,6 @@ function thrownErrorName(error: unknown): string {
 	}
 	return "unknown";
 }
-async function processPayload(payload: PullRequestEventPayload, env: Env): Promise<Outcome> {
-	try {
-		return await runPipeline(payload, env);
-	} catch (error) {
-		if (error instanceof GithubApiError) {
-			/* SPEC.md §9: keep status and endpoint so 401/403 configuration problems are distinguishable in logs. */
-			return {
-				decision: "error",
-				endpoint: error.endpoint,
-				httpStatus: HTTP_INTERNAL_ERROR,
-				reason: "github-api-error",
-				status: error.status,
-			};
-		}
-		/* SPEC.md §9: the bounded class name keeps configuration mistakes (e.g. a PKCS#1 key the
-		 * auth library rejects) distinguishable from code bugs without touching §8's leak surface. */
-		return {
-			decision: "error",
-			errorName: thrownErrorName(error),
-			httpStatus: HTTP_INTERNAL_ERROR,
-			reason: "internal-error",
-		};
-	}
-}
 function parseBody(body: string): PullRequestEventPayload | null {
 	try {
 		const parsed: unknown = JSON.parse(body);
@@ -363,7 +339,7 @@ async function evaluateBody(body: string, env: Env, log: LogFields): Promise<Out
 		return errorOutcome("invalid-payload");
 	}
 	recordPayload(log, payload);
-	return processPayload(payload, env);
+	return runPipeline(payload, env);
 }
 /** True only for a Content-Length that parses and exceeds the cap; anything else is read. */
 function exceedsBodyLimit(header: string | null): boolean {
@@ -396,15 +372,28 @@ async function evaluateDelivery(request: Request, env: Env, log: LogFields): Pro
 	}
 	return evaluateBody(body, env, log);
 }
-/* SPEC.md §8 and §9: processPayload only guards the pipeline, but reading the body and
- * verifying the signature run before it and can reject on their own — a client disconnect
- * or a truncated chunked upload rejects request.text(). Without this the Worker would
- * answer with the runtime's own 500 and leave no log entry at all, which is the one
- * outcome §8 does not allow; "any other thrown failure" is §9's internal-error. */
+/* SPEC.md §8 and §9: the one frame that maps a thrown failure onto an outcome, for the whole
+ * delivery rather than the pipeline alone — reading the body and verifying the signature run
+ * outside the pipeline and can reject on their own (a client disconnect or a truncated chunked
+ * upload rejects request.text()). Without this the Worker would answer with the runtime's own
+ * 500 and leave no log entry at all, which is the one outcome §8 does not allow. */
 async function evaluateOrFail(request: Request, env: Env, log: LogFields): Promise<Outcome> {
 	try {
 		return await evaluateDelivery(request, env, log);
 	} catch (error) {
+		if (error instanceof GithubApiError) {
+			/* SPEC.md §9: keep status and endpoint so 401/403 configuration problems are distinguishable in logs. */
+			return {
+				decision: "error",
+				endpoint: error.endpoint,
+				httpStatus: HTTP_INTERNAL_ERROR,
+				reason: "github-api-error",
+				status: error.status,
+			};
+		}
+		/* SPEC.md §9's "any other thrown failure": the bounded class name keeps configuration
+		 * mistakes (e.g. a PKCS#1 key the auth library rejects) distinguishable from code bugs
+		 * without touching §8's leak surface. */
 		return {
 			decision: "error",
 			errorName: thrownErrorName(error),
