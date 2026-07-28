@@ -377,17 +377,18 @@ flowchart TD
 ```
 
 - Processing is **synchronous** (not deferred to `ctx.waitUntil`). GitHub API calls per
-  delivery: token issuance, commit list (up to 3 pages), membership checks (one per
-  distinct non-bot author/committer, memoized within the delivery, §3.1), the App slug
-  fetch (`GET /app`, §3 condition 5 — the one call authenticated with the App JWT rather
-  than an installation token (§7), and the one needing no permission at all), existing
-  reviews (paginated), the live PR fetch, and the review POST — typically under 10 calls
-  for PRs authored by the owner or an allowed bot. The calls run in that order, with one
-  exception: the App slug fetch and the reviews list are issued concurrently, since
-  neither takes an argument the other produces and both feed only the duplication check.
-  Being synchronous means the outcome is recorded as-is in GitHub's Recent Deliveries, and
-  failures can be safely re-executed via manual redelivery (the approval process is
-  idempotent as described in §6).
+  delivery: token issuance, the PR author's membership check (§3 condition 3 — only on an
+  org repository with a non-bot author), commit list (up to 3 pages), membership checks
+  (one per further distinct non-bot commit author/committer, memoized within the delivery,
+  §3.1), the App slug fetch (`GET /app`, §3 condition 5 — the one call authenticated with
+  the App JWT rather than an installation token (§7), and the one needing no permission at
+  all), existing reviews (paginated), the live PR fetch, and the review POST — typically
+  under 10 calls for PRs authored by the owner or an allowed bot. The calls run in that
+  order, with one exception: the App slug fetch and the reviews list are issued
+  concurrently, since neither takes an argument the other produces and both feed only the
+  duplication check. Being synchronous means the outcome is recorded as-is in GitHub's
+  Recent Deliveries, and failures can be safely re-executed via manual redelivery (the
+  approval process is idempotent as described in §6).
 - **One deadline bounds the whole delivery**: a single wall-clock budget for the delivery
   as a whole, set below GitHub's 10-second webhook timeout. It is created with the client
   and installed on every dispatch, so everything that client spends time on draws on it —
