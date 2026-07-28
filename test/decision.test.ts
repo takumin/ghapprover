@@ -546,7 +546,7 @@ function checkCommit(
 	entry: PullRequestCommit,
 	isTrusted: (account: GithubAccount) => boolean,
 ): ReturnType<typeof checkCommitStructure> {
-	return checkCommitStructure(entry) ?? checkCommitTrust(entry, isTrusted);
+	return checkCommitStructure(entry) ?? checkCommitTrust(commitPrincipals(entry), isTrusted);
 }
 
 describe("commit verification gate", () => {

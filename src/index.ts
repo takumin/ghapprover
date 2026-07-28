@@ -181,11 +181,11 @@ function createTrustResolver(client: GithubClient, repoOwner: GithubAccount): Tr
 /* One commit's principals (§3.2) resolved one at a time and memoized per delivery (§3.1),
  * stopping at the first untrusted one — a further lookup could not change that commit's outcome.
  * The verdicts land in the resolver's memo, which checkCommitTrust then reads synchronously. */
-async function resolveCommitPrincipals(
-	entry: PullRequestCommit,
+async function resolvePrincipals(
+	principals: readonly GithubAccount[],
 	trust: TrustResolver,
 ): Promise<void> {
-	for (const account of commitPrincipals(entry)) {
+	for (const account of principals) {
 		// oxlint-disable-next-line no-await-in-loop -- sequential by design: parallel lookups are the burst §3.1 memoization cannot bound
 		if (!(await trust.resolve(account))) {
 			return;
@@ -205,9 +205,12 @@ async function findCommitProblem(
 		if (structural !== null) {
 			return structural;
 		}
+		/* Derived once and handed to both halves, so the accounts resolved below are exactly the
+		 * accounts checked after them rather than two applications of the same rule. */
+		const principals = commitPrincipals(entry);
 		// oxlint-disable-next-line no-await-in-loop -- sequential by design: the first failing commit ends the loop, so later commits must not be resolved up front
-		await resolveCommitPrincipals(entry, trust);
-		const problem = checkCommitTrust(entry, trust.isTrusted);
+		await resolvePrincipals(principals, trust);
+		const problem = checkCommitTrust(principals, trust.isTrusted);
 		if (problem !== null) {
 			return problem;
 		}

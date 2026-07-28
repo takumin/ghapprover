@@ -168,16 +168,16 @@ export function checkCommitStructure(entry: PullRequestCommit): CommitProblem | 
 	}
 	return null;
 }
-/* The trust half of §3.2: every principal the commit needs must be trusted. commitPrincipals is
- * the single source of which those are — the web-flow committer exemption included — so the rule
- * is stated once and the caller resolves exactly the accounts this checks. Meaningful only for a
- * commit that has passed checkCommitStructure: commitPrincipals drops unmapped principals rather
- * than failing on them. */
+/* The trust half of §3.2: every principal the commit needs must be trusted. The caller derives
+ * them once with commitPrincipals — the single source of which those are, the web-flow committer
+ * exemption included — and hands the same list here, so the accounts it resolved and the accounts
+ * this checks cannot diverge. Meaningful only for a commit that has passed checkCommitStructure:
+ * commitPrincipals drops unmapped principals rather than failing on them. */
 export function checkCommitTrust(
-	entry: PullRequestCommit,
+	principals: readonly GithubAccount[],
 	isTrusted: (account: GithubAccount) => boolean,
 ): CommitProblem | null {
-	if (commitPrincipals(entry).every((account) => isTrusted(account))) {
+	if (principals.every((account) => isTrusted(account))) {
 		return null;
 	}
 	return "untrusted-commit";
