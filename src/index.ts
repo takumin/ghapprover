@@ -94,11 +94,8 @@ type LogFields = Record<string, number | string>;
 type GithubClient = ReturnType<typeof createGithubClient>;
 type RepoRef = Parameters<typeof fetchPullRequest>[1];
 
-interface TrustResolver {
-	/** Sync view over resolved accounts for checkCommits; unresolved means untrusted. */
-	readonly isTrusted: (user: GithubAccount) => boolean;
-	readonly resolve: (user: GithubAccount) => Promise<boolean>;
-}
+/** Resolves one account's §3.1 trust, memoized per delivery; see createTrustResolver. */
+type TrustResolver = (user: GithubAccount) => Promise<boolean>;
 
 interface ReviewTarget {
 	readonly headSha: string;
@@ -166,7 +163,7 @@ async function evaluateTrust(
  * verdict to any other account reusing that login and undo the id pinning. */
 function createTrustResolver(client: GithubClient, repoOwner: GithubAccount): TrustResolver {
 	const resolved = new Map<string, boolean>();
-	const resolve = async (user: GithubAccount): Promise<boolean> => {
+	return async (user: GithubAccount): Promise<boolean> => {
 		const key = accountKey(user);
 		const known = resolved.get(key);
 		if (known !== undefined) {
@@ -176,24 +173,8 @@ function createTrustResolver(client: GithubClient, repoOwner: GithubAccount): Tr
 		resolved.set(key, trusted);
 		return trusted;
 	};
-	const isTrusted = (user: GithubAccount): boolean => resolved.get(accountKey(user)) === true;
-	return { isTrusted, resolve };
 }
 
-/* One commit's principals (§3.2) resolved one at a time and memoized per delivery (§3.1),
- * stopping at the first untrusted one — a further lookup could not change that commit's outcome.
- * The verdicts land in the resolver's memo, which checkCommitTrust then reads synchronously. */
-async function resolvePrincipals(
-	principals: readonly GithubAccount[],
-	trust: TrustResolver,
-): Promise<void> {
-	for (const account of principals) {
-		// oxlint-disable-next-line no-await-in-loop -- sequential by design: parallel lookups are the burst §3.1 memoization cannot bound
-		if (!(await trust.resolve(account))) {
-			return;
-		}
-	}
-}
 /* SPEC.md §3.2 in commit order. A trust-independent problem settles the commit before any lookup
  * runs, and the first failing commit ends the loop, so a delivery that ends in a skip never
  * bursts a lookup per principal against the Worker subrequest allowance or GitHub's secondary
@@ -207,12 +188,8 @@ async function findCommitProblem(
 		if (structural !== null) {
 			return structural;
 		}
-		/* Derived once and handed to both halves, so the accounts resolved below are exactly the
-		 * accounts checked after them rather than two applications of the same rule. */
-		const principals = commitPrincipals(entry);
 		// oxlint-disable-next-line no-await-in-loop -- sequential by design: the first failing commit ends the loop, so later commits must not be resolved up front
-		await resolvePrincipals(principals, trust);
-		const problem = checkCommitTrust(principals, trust.isTrusted);
+		const problem = await checkCommitTrust(commitPrincipals(entry), trust);
 		if (problem !== null) {
 			return problem;
 		}
@@ -245,7 +222,7 @@ async function evaluateConditions(
 	client: GithubClient,
 	trust: TrustResolver,
 ): Promise<Outcome | null> {
-	if (!(await trust.resolve(payload.pull_request.user))) {
+	if (!(await trust(payload.pull_request.user))) {
 		return skippedOutcome("author-not-trusted");
 	}
 	const countProblem = precheckCommitCount(payload.pull_request.commits);

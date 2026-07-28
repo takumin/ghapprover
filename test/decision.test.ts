@@ -68,7 +68,8 @@ const ACTIVE_MEMBER: OrgMembership = { role: "member", state: "active" };
 const PENDING_ADMIN: OrgMembership = { role: "admin", state: "pending" };
 const TRUSTED_ACCOUNTS: ReadonlySet<string> = new Set([accountKey(ALICE), accountKey(BOB)]);
 
-function isTrustedFixture(account: GithubAccount): boolean {
+/** Stands in for the pipeline's membership lookup, which is why the predicate is async. */
+async function isTrustedFixture(account: GithubAccount): Promise<boolean> {
 	return TRUSTED_ACCOUNTS.has(accountKey(account));
 }
 
@@ -546,17 +547,19 @@ describe("fetched commit count", () => {
 /* The §3.2 per-commit check as the pipeline composes it (src/index.ts findCommitProblem): the
  * structure half first, so the signature verification settles the commit before the trust half
  * applies the web-flow committer exemption that rests on it. */
-function checkCommit(
+async function checkCommit(
 	entry: PullRequestCommit,
-	isTrusted: (account: GithubAccount) => boolean,
-): ReturnType<typeof checkCommitStructure> {
-	return checkCommitStructure(entry) ?? checkCommitTrust(commitPrincipals(entry), isTrusted);
+	isTrusted: (account: GithubAccount) => Promise<boolean>,
+): Promise<ReturnType<typeof checkCommitStructure>> {
+	return (
+		checkCommitStructure(entry) ?? (await checkCommitTrust(commitPrincipals(entry), isTrusted))
+	);
 }
 
 describe("commit verification gate", () => {
-	it.each(COMMIT_CASES)("returns $expected for $name", ({ entry, expected }) => {
+	it.each(COMMIT_CASES)("returns $expected for $name", async ({ entry, expected }) => {
 		expect.hasAssertions();
-		expect(checkCommit(entry, isTrustedFixture)).toBe(expected);
+		await expect(checkCommit(entry, isTrustedFixture)).resolves.toBe(expected);
 	});
 });
 

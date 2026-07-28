@@ -1,6 +1,8 @@
 /**
- * Pure decision logic for the approval pipeline (SPEC.md §3, §4): deterministic and I/O-free so
- * the approval conditions are unit-testable without mocking the GitHub API (SPEC.md §12).
+ * Decision logic for the approval pipeline (SPEC.md §3, §4): deterministic and free of I/O of its
+ * own, so the approval conditions are unit-testable without mocking the GitHub API (SPEC.md §12).
+ * The one condition that needs a lookup takes it as an injected predicate rather than reaching for
+ * a client, so a test supplies a plain function instead of a stubbed API.
  */
 /* GitHub payloads and types.ts model absence as null (SPEC.md fails closed), so null literals are deliberate here. */
 /* oxlint-disable unicorn/no-null */
@@ -175,17 +177,23 @@ export function checkCommitStructure(entry: PullRequestCommit): CommitProblem | 
 }
 /* The trust half of §3.2: every principal the commit needs must be trusted. The caller derives
  * them once with commitPrincipals — the single source of which those are, the web-flow committer
- * exemption included — and hands the same list here, so the accounts it resolved and the accounts
- * this checks cannot diverge. Meaningful only for a commit that has passed checkCommitStructure:
- * commitPrincipals drops unmapped principals rather than failing on them. */
-export function checkCommitTrust(
+ * exemption included — and supplies the lookup as isTrusted, which the loop below both runs and
+ * decides on, so the accounts looked up and the accounts checked cannot diverge. It stops at the
+ * first untrusted principal: a further lookup could not change this commit's outcome, and a
+ * delivery that ends in a skip must not burst one lookup per principal against the Worker
+ * subrequest allowance or GitHub's secondary rate limits. Meaningful only for a commit that has
+ * passed checkCommitStructure: commitPrincipals drops unmapped principals rather than failing. */
+export async function checkCommitTrust(
 	principals: readonly GithubAccount[],
-	isTrusted: (account: GithubAccount) => boolean,
-): CommitProblem | null {
-	if (principals.every((account) => isTrusted(account))) {
-		return null;
+	isTrusted: (account: GithubAccount) => Promise<boolean>,
+): Promise<"untrusted-commit" | null> {
+	for (const account of principals) {
+		// oxlint-disable-next-line no-await-in-loop -- sequential by design: parallel lookups are the burst §3.1 memoization cannot bound
+		if (!(await isTrusted(account))) {
+			return "untrusted-commit";
+		}
 	}
-	return "untrusted-commit";
+	return null;
 }
 
 /* SPEC.md §3 condition 5: only an APPROVED review by the App's own bot user for the current head
