@@ -19,6 +19,7 @@ import {
 	listPullRequestReviews,
 } from "./github";
 import {
+	accountKey,
 	checkCommit,
 	checkCommitCount,
 	checkPullRequestState,
@@ -72,8 +73,8 @@ type GithubClient = ReturnType<typeof createGithubClient>;
 type RepoRef = Parameters<typeof fetchPullRequest>[1];
 
 interface TrustResolver {
-	/** Sync view over resolved logins for checkCommits; unresolved means untrusted. */
-	readonly isTrustedLogin: (login: string) => boolean;
+	/** Sync view over resolved accounts for checkCommits; unresolved means untrusted. */
+	readonly isTrusted: (user: GithubAccount) => boolean;
 	readonly resolve: (user: GithubAccount) => Promise<boolean>;
 }
 
@@ -139,23 +140,28 @@ async function evaluateTrust(
 	}
 	return isOwnerMembership(await fetchOrgMembership(client, evaluation.org, evaluation.login));
 }
-/** Memoizes per delivery so each distinct login is looked up at most once (SPEC.md §3.1). */
+/* Memoizes per delivery so each distinct account is looked up at most once (SPEC.md §3.1).
+ * The key is the accountKey pair, not the login: evaluateTrust decides on the id as well
+ * (§3.1 allowlist, §3.2 web-flow), so a login-keyed cache would hand a trusted account's
+ * verdict to any other account reusing that login and undo the id pinning. */
 function createTrustResolver(client: GithubClient, repoOwner: GithubAccount): TrustResolver {
 	const resolved = new Map<string, boolean>();
 	const resolve = async (user: GithubAccount): Promise<boolean> => {
-		const known = resolved.get(user.login);
+		const key = accountKey(user);
+		const known = resolved.get(key);
 		if (known !== undefined) {
 			return known;
 		}
 		const trusted = await evaluateTrust(client, user, repoOwner);
-		resolved.set(user.login, trusted);
+		resolved.set(key, trusted);
 		return trusted;
 	};
-	return { isTrustedLogin: (login: string): boolean => resolved.get(login) === true, resolve };
+	const isTrusted = (user: GithubAccount): boolean => resolved.get(accountKey(user)) === true;
+	return { isTrusted, resolve };
 }
 
 /** Trust stub that projects checkCommit onto its trust-independent problems. */
-const everyLoginTrusted = (): boolean => true;
+const everyAccountTrusted = (): boolean => true;
 /* SPEC.md §3.2 in commit order, resolving each commit's principals lazily and one at a time
  * (memoized, §3.1). Trust-independent problems (verification, unmapped principals) are checked
  * before that commit's lookups, and the first failing commit stops the loop — so a delivery
@@ -166,7 +172,7 @@ async function findCommitProblem(
 	trust: TrustResolver,
 ): Promise<ReturnType<typeof checkCommit>> {
 	for (const entry of commits) {
-		const structural = checkCommit(entry, everyLoginTrusted);
+		const structural = checkCommit(entry, everyAccountTrusted);
 		if (structural !== null) {
 			return structural;
 		}
@@ -174,7 +180,7 @@ async function findCommitProblem(
 			// oxlint-disable-next-line no-await-in-loop -- sequential by design: parallel lookups are the burst §3.1 memoization cannot bound
 			await trust.resolve(account);
 		}
-		const problem = checkCommit(entry, trust.isTrustedLogin);
+		const problem = checkCommit(entry, trust.isTrusted);
 		if (problem !== null) {
 			return problem;
 		}

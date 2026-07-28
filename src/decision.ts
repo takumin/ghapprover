@@ -66,6 +66,13 @@ function isWebFlow(account: GithubAccount): boolean {
 	return account.id === WEB_FLOW.id && account.login === WEB_FLOW.login;
 }
 
+/* The identity every §3 trust decision is made against: the (id, login) pair, never the login
+ * alone. Callers that cache or compare principals must key on this, or an account reusing a
+ * trusted login would inherit that trust and defeat the id pinning above. */
+export function accountKey(account: GithubAccount): string {
+	return `${account.id}:${account.login}`;
+}
+
 /* SPEC.md §3.1: bots are trusted solely via the allowlist (login and numeric id both matching)
  * and never fall through to the owner/org checks; users on org repositories resolve through the
  * membership API (the caller runs the returned query); personal-repo users must be the owner. */
@@ -106,7 +113,7 @@ export function commitPrincipals(entry: PullRequestCommit): readonly GithubAccou
 	if (
 		committer !== null &&
 		!isWebFlow(committer) &&
-		(author === null || committer.login !== author.login)
+		(author === null || accountKey(committer) !== accountKey(author))
 	) {
 		principals.push(committer);
 	}
@@ -150,17 +157,17 @@ export function checkCommitCount(
  * GitHub-signed, which the verification check enforces. */
 export function checkCommit(
 	entry: PullRequestCommit,
-	isTrustedLogin: (login: string) => boolean,
+	isTrusted: (account: GithubAccount) => boolean,
 ): CommitProblem | null {
 	const { author, commit, committer } = entry;
 	const { verification } = commit;
 	if (verification === null || !verification.verified) {
 		return "unverified-commit";
 	}
-	if (author === null || !isTrustedLogin(author.login)) {
+	if (author === null || !isTrusted(author)) {
 		return "untrusted-commit";
 	}
-	if (committer === null || (!isWebFlow(committer) && !isTrustedLogin(committer.login))) {
+	if (committer === null || (!isWebFlow(committer) && !isTrusted(committer))) {
 		return "untrusted-commit";
 	}
 	return null;

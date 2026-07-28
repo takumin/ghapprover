@@ -18,6 +18,7 @@ import type {
 import { MAX_VERIFIABLE_COMMITS, WEB_FLOW } from "../src/allowlist";
 import {
 	TARGET_ACTIONS,
+	accountKey,
 	checkCommit,
 	checkCommitCount,
 	checkPullRequestState,
@@ -49,6 +50,8 @@ const BOT_NAMED_OCTOCAT: GithubAccount = { id: 5, login: "octocat", type: "Bot" 
 const ALICE: GithubAccount = { id: 101, login: "alice", type: "User" };
 const BOB: GithubAccount = { id: 102, login: "bob", type: "User" };
 const MALLORY: GithubAccount = { id: 103, login: "mallory", type: "User" };
+/** Same login as a trusted user, different account: trust must not follow the login. */
+const ALICE_LOOKALIKE: GithubAccount = { id: 909, login: "alice", type: "User" };
 const WEB_FLOW_USER: GithubAccount = { id: WEB_FLOW.id, login: WEB_FLOW.login, type: "User" };
 /** Same login, different account: the committer exemption must not fire on the login alone. */
 const WEB_FLOW_LOOKALIKE: GithubAccount = { id: 999, login: WEB_FLOW.login, type: "User" };
@@ -57,10 +60,10 @@ const APP_BOT: GithubAccount = { id: 201, login: BOT_LOGIN, type: "Bot" };
 const ACTIVE_ADMIN: OrgMembership = { role: "admin", state: "active" };
 const ACTIVE_MEMBER: OrgMembership = { role: "member", state: "active" };
 const PENDING_ADMIN: OrgMembership = { role: "admin", state: "pending" };
-const TRUSTED_LOGINS: ReadonlySet<string> = new Set(["alice", "bob"]);
+const TRUSTED_ACCOUNTS: ReadonlySet<string> = new Set([accountKey(ALICE), accountKey(BOB)]);
 
-function isTrustedFixture(login: string): boolean {
-	return TRUSTED_LOGINS.has(login);
+function isTrustedFixture(account: GithubAccount): boolean {
+	return TRUSTED_ACCOUNTS.has(accountKey(account));
 }
 
 interface PrStateOverrides {
@@ -277,6 +280,16 @@ const COMMIT_CASES: readonly CommitCase[] = [
 		expected: "unverified-commit",
 		name: "unverified before untrusted on one commit",
 	},
+	{
+		entry: commit({ author: ALICE_LOOKALIKE, committer: ALICE_LOOKALIKE }),
+		expected: "untrusted-commit",
+		name: "an author reusing a trusted login under another id",
+	},
+	{
+		entry: commit({ author: ALICE, committer: ALICE_LOOKALIKE }),
+		expected: "untrusted-commit",
+		name: "a committer reusing the author's login under another id",
+	},
 ];
 
 interface CommitCountCase {
@@ -486,6 +499,11 @@ describe("commit principal collection", () => {
 			entry: commit({ author: WEB_FLOW_USER, committer: BOB }),
 			expected: [WEB_FLOW_USER, BOB],
 			name: "web-flow when it is the author",
+		},
+		{
+			entry: commit({ author: ALICE, committer: ALICE_LOOKALIKE }),
+			expected: [ALICE, ALICE_LOOKALIKE],
+			name: "both accounts when the committer only shares the author's login",
 		},
 	])("collects $name", ({ entry, expected }) => {
 		expect.hasAssertions();

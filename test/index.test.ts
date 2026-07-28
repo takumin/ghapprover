@@ -50,6 +50,8 @@ const RENOVATE: GithubAccount = { id: 29_139_614, login: "renovate[bot]", type: 
 const AUTOFIX_CI: GithubAccount = { id: 114_827_586, login: "autofix-ci[bot]", type: "Bot" };
 const WEB_FLOW: GithubAccount = { id: 19_864_447, login: "web-flow", type: "User" };
 const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User" };
+/** The allowlisted renovate login under a different account (SPEC.md §3.1 id pinning). */
+const RENOVATE_WRONG_ID: GithubAccount = { id: 2, login: "renovate[bot]", type: "Bot" };
 const APP_BOT_USER: GithubAccount = { id: 201, login: "ghapprover[bot]", type: "Bot" };
 const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT_USER };
 
@@ -617,6 +619,26 @@ describe("commit verification", () => {
 		const response = await postSigned(buildPayload({ commits: 2, repoOwner: ORG }));
 		await expectReply(response, {
 			body: { decision: "skipped", reason: "unverified-commit" },
+			status: HTTP_OK,
+		});
+		session.assertDone();
+	});
+});
+
+describe("principal trust resolution", () => {
+	/* SPEC.md §3.1: the per-delivery memo is keyed on the account, not the login. The PR author
+	 * resolves renovate[bot] to trusted without a lookup; a commit author reusing that login
+	 * under another id must still be classified on its own, or the §3.1 id pinning is dead
+	 * weight — every check upstream of the cache already pins it. */
+	it("does not extend a trusted verdict to another id on the same login", async () => {
+		expect.hasAssertions();
+		const session = installFetchMock([
+			tokenRoute(),
+			commitsRouteFor("octo", [commitItem({ author: RENOVATE_WRONG_ID, committer: WEB_FLOW })]),
+		]);
+		const response = await postSigned(buildPayload({ user: RENOVATE }));
+		await expectReply(response, {
+			body: { decision: "skipped", reason: "untrusted-commit" },
 			status: HTTP_OK,
 		});
 		session.assertDone();
