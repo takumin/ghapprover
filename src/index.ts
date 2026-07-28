@@ -44,11 +44,9 @@ const HTTP_INTERNAL_ERROR = 500;
 /**
  * GitHub caps webhook payloads at 25 MB, so anything larger is not a delivery
  * this Worker could act on. The HMAC covers the raw body, so the body must be
- * buffered before the caller can be authenticated (SPEC.md §4 step 1) — the
- * declared length is the one thing that can be checked first, and it bounds
- * what an unauthenticated caller on the public endpoint can make the Worker
- * hold in memory and hash. A body sent without a usable Content-Length (e.g.
- * chunked) is still read: rejecting those would reject genuine deliveries.
+ * buffered before the caller can be authenticated (SPEC.md §4 step 1), and this
+ * is the cap on what an unauthenticated caller on the public endpoint can make
+ * the Worker hold in memory and hash.
  */
 const MAX_BODY_BYTES = 26_214_400;
 
@@ -341,7 +339,7 @@ async function evaluateBody(body: string, env: Env, log: LogFields): Promise<Out
 	recordPayload(log, payload);
 	return runPipeline(payload, env);
 }
-/** True only for a Content-Length that parses and exceeds the cap; anything else is read. */
+/** True only for a Content-Length that parses and exceeds the cap; anything else goes to the read. */
 function exceedsBodyLimit(header: string | null): boolean {
 	if (header === null) {
 		return false;
@@ -349,16 +347,54 @@ function exceedsBodyLimit(header: string | null): boolean {
 	const declared = Number(header);
 	return Number.isFinite(declared) && declared > MAX_BODY_BYTES;
 }
+/**
+ * The stream decoded as text, or null as soon as it passes the cap — the count is
+ * what actually bounds the read, so it stops there instead of after the fact, and
+ * returning from the loop cancels the stream rather than draining the rest.
+ * Decoding matches Request.text(): invalid UTF-8 becomes U+FFFD, which then fails
+ * the HMAC, so the bound is all that changes about how the body is read.
+ */
+async function readCappedStream(stream: ReadableStream<Uint8Array>): Promise<string | null> {
+	const decoder = new TextDecoder();
+	let read = 0;
+	let body = "";
+	for await (const chunk of stream) {
+		read += chunk.byteLength;
+		if (read > MAX_BODY_BYTES) {
+			return null;
+		}
+		body += decoder.decode(chunk, { stream: true });
+	}
+	return body + decoder.decode();
+}
+/**
+ * The delivery body, or null when it exceeds the cap (SPEC.md §9). A declared length
+ * over the cap is rejected before a byte is buffered, but it cannot be the bound: it
+ * is absent on a chunked upload, and the same unauthenticated caller decides whether
+ * to send it at all. The byte count is the bound; this header only saves the read.
+ */
+async function readBoundedBody(request: Request): Promise<string | null> {
+	if (exceedsBodyLimit(request.headers.get("content-length"))) {
+		return null;
+	}
+	/* Request.body is ReadableStream<any> in the Workers types; the runtime yields chunks
+	 * of bytes, which is what the cap counts and the decoder consumes. */
+	const stream: ReadableStream<Uint8Array> | null = request.body;
+	if (stream === null) {
+		return "";
+	}
+	return readCappedStream(stream);
+}
 /** SPEC.md §4 step 1 and §9: verify the signature and scope the event before parsing the body. */
 async function evaluateDelivery(request: Request, env: Env, log: LogFields): Promise<Outcome> {
-	if (exceedsBodyLimit(request.headers.get("content-length"))) {
+	const body = await readBoundedBody(request);
+	if (body === null) {
 		return {
 			decision: "error",
 			httpStatus: HTTP_PAYLOAD_TOO_LARGE,
 			reason: "payload-too-large",
 		};
 	}
-	const body = await request.text();
 	const verified = await verifyWebhookSignature(
 		env.GITHUB_WEBHOOK_SECRET,
 		body,

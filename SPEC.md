@@ -344,6 +344,13 @@ flowchart TD
   250-commit PR with distinct principals would otherwise burst up to two lookups per commit
   before any of them could matter. Parallelising them would reintroduce that burst — and a
   race between two concurrent lookups of the same login that the memoization cannot bound
+- **The body read is bounded at GitHub's 25 MB cap** (§9). The HMAC covers the raw body,
+  so step 1 has to buffer it before the caller is authenticated at all — which makes the
+  buffer the one thing an unauthenticated caller on the public endpoint controls. A
+  declared `Content-Length` above the cap is rejected before a byte is read, but it
+  cannot be the bound: it is absent on a chunked upload, and the same caller chooses
+  whether to send it. So the read counts bytes as they arrive and stops at the cap,
+  cancelling the rest of the stream.
 - "Not approving" is a normal outcome (200), and its reason must always be logged.
   5xx is reserved for cases where the evaluation could not be completed (e.g. transient GitHub
   API failures).
@@ -435,7 +442,7 @@ exhaustive rather than illustrative:
 | skipped    | `head-moved`            | §3.3: the live PR no longer matches the payload                            |
 | skipped    | `review-rejected`       | §9: the review POST returned 422                                           |
 | error      | `invalid-signature`     | §4 step 1: signature missing, malformed, or not matching                   |
-| error      | `payload-too-large`     | §4 step 1: `Content-Length` above GitHub's 25 MB cap                       |
+| error      | `payload-too-large`     | §4 step 1: a body above GitHub's 25 MB cap                                 |
 | error      | `not-found`             | A request outside `POST /webhook`                                          |
 | error      | `invalid-payload`       | The body is not JSON, or not the modeled `pull_request` shape              |
 | error      | `missing-installation`  | The delivery carries no `installation.id` (§7)                             |
@@ -452,7 +459,7 @@ exhaustive rather than illustrative:
 | Situation                                                             | Response | Notes                                                                                                                               |
 | --------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Invalid signature / missing signature header                          | 401      | Do not process the body                                                                                                             |
-| `Content-Length` above GitHub's 25 MB payload cap                     | 413      | `payload-too-large`. Rejected before the body is buffered (§4)                                                                      |
+| Request body above GitHub's 25 MB payload cap                         | 413      | `payload-too-large`. Rejected on the declared `Content-Length` before the body is buffered, and on the byte count while it is (§4)  |
 | Out-of-scope event / action                                           | 200      | Log the reason                                                                                                                      |
 | Approval conditions unsatisfied                                       | 200      | Normal outcome. Log the reason                                                                                                      |
 | Membership API returns 404 (author is not an org member)              | 200      | Normal outcome (`author-not-trusted`), not an error                                                                                 |

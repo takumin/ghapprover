@@ -825,6 +825,57 @@ async function postSignedWithLength(body: string, contentLength: number): Promis
 	return dispatch(request);
 }
 
+/* A chunked upload carries no Content-Length, so the declared-length check cannot see it and
+ * the running byte count is what has to stop the read. Chunks are produced on demand, so the
+ * stream is cancelled at the cap instead of the test handing over the whole oversized body. */
+const CHUNK_BYTES = 4_194_304;
+function oversizedChunkedRequest(): Request {
+	let sent = 0;
+	const init = {
+		body: new ReadableStream({
+			pull(controller: ReadableStreamDefaultController<Uint8Array>): void {
+				sent += CHUNK_BYTES;
+				controller.enqueue(new Uint8Array(CHUNK_BYTES));
+				if (sent > OVERSIZED_BODY_BYTES) {
+					controller.close();
+				}
+			},
+		}),
+		duplex: "half",
+		headers: {
+			"x-github-delivery": DELIVERY_ID,
+			"x-github-event": "pull_request",
+			"x-hub-signature-256": "sha256=00",
+		},
+		method: "POST",
+	};
+	return new Request(WEBHOOK_URL, init);
+}
+
+/** The signed payload as a stream body: no Content-Length, and split across chunk boundaries. */
+const SMALL_CHUNK_BYTES = 7;
+async function postSignedChunked(body: string): Promise<Response> {
+	const bytes = new TextEncoder().encode(body);
+	const init = {
+		body: new ReadableStream({
+			start(controller: ReadableStreamDefaultController<Uint8Array>): void {
+				for (let at = 0; at < bytes.length; at += SMALL_CHUNK_BYTES) {
+					controller.enqueue(bytes.slice(at, at + SMALL_CHUNK_BYTES));
+				}
+				controller.close();
+			},
+		}),
+		duplex: "half",
+		headers: {
+			"x-github-delivery": DELIVERY_ID,
+			"x-github-event": "pull_request",
+			"x-hub-signature-256": await sign(SECRET, body),
+		},
+		method: "POST",
+	};
+	return dispatch(new Request(WEBHOOK_URL, init));
+}
+
 describe("request body limits", () => {
 	it("rejects a Content-Length above the 25 MB webhook cap before reading the body", async () => {
 		expect.hasAssertions();
@@ -843,6 +894,29 @@ describe("request body limits", () => {
 		const body = buildPayload();
 		const response = await postSignedWithLength(body, new TextEncoder().encode(body).length);
 		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
+	});
+
+	/* The case the declared length cannot cover: an unauthenticated caller streams a body past
+	 * the cap, and without the byte count the Worker would buffer and hash all of it. */
+	it("rejects a chunked body past the cap, which declares no Content-Length", async () => {
+		expect.hasAssertions();
+		const session = installFetchMock([]);
+		await expectReply(await dispatch(oversizedChunkedRequest()), {
+			body: { decision: "error", reason: "payload-too-large" },
+			status: HTTP_PAYLOAD_TOO_LARGE,
+		});
+		expect(session.requests).toHaveLength(0);
+	});
+
+	/* The signature is computed over the whole body, so an approval here is what proves the
+	 * chunked read reassembles it exactly rather than merely bounding it. */
+	it("processes a chunked delivery within the cap", async () => {
+		expect.hasAssertions();
+		installFetchMock(happyRoutes());
+		await expectReply(await postSignedChunked(buildPayload()), {
+			body: { decision: "approved" },
+			status: HTTP_OK,
+		});
 	});
 });
 
