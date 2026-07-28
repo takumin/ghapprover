@@ -29,6 +29,12 @@ export function allowedBot(login: string, overrides: AccountOverrides = {}): Git
 	};
 }
 
+/** The allowlisted bots both suites drive the §3.1 cases with. */
+export const RENOVATE: GithubAccount = allowedBot("renovate[bot]");
+export const AUTOFIX_CI: GithubAccount = allowedBot("autofix-ci[bot]");
+/** The allowlisted renovate login under a different account (SPEC.md §3.1 id pinning). */
+export const RENOVATE_WRONG_ID: GithubAccount = allowedBot("renovate[bot]", { id: 2 });
+
 /** The web-flow committer (SPEC.md §3.2); GitHub attributes it as a User, not a Bot. */
 export const WEB_FLOW_USER: GithubAccount = {
 	id: WEB_FLOW.id,

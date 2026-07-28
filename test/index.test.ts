@@ -5,8 +5,8 @@
 /* oxlint-disable unicorn/no-null */
 /* oxlint-disable max-lines */
 
+import { AUTOFIX_CI, RENOVATE, RENOVATE_WRONG_ID, WEB_FLOW_USER } from "./accounts";
 import { JWT_PATTERN, installFetchMock, jsonRoute, requestByUrl, tokenRoute } from "./fetch-stub";
-import { WEB_FLOW_USER, allowedBot } from "./accounts";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
 import type { GithubAccount } from "../src/types";
@@ -44,12 +44,8 @@ const REVIEWS_SUFFIX = "/reviews?per_page=100";
 
 const OWNER: GithubAccount = { id: 7, login: "octo", type: "User" };
 const ORG: GithubAccount = { id: 88, login: "acme", type: "Organization" };
-const RENOVATE = allowedBot("renovate[bot]");
-const AUTOFIX_CI = allowedBot("autofix-ci[bot]");
 const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User" };
 const OTHER_STRANGER: GithubAccount = { id: 998, login: "eve", type: "User" };
-/** The allowlisted renovate login under a different account (SPEC.md §3.1 id pinning). */
-const RENOVATE_WRONG_ID = allowedBot("renovate[bot]", { id: 2 });
 const APP_BOT_USER: GithubAccount = { id: 201, login: "ghapprover[bot]", type: "Bot" };
 const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT_USER };
 

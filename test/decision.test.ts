@@ -5,6 +5,14 @@
 /* oxlint-disable unicorn/no-null */
 /* oxlint-disable max-lines */
 
+import {
+	AUTOFIX_CI,
+	RENOVATE,
+	RENOVATE_WRONG_ID,
+	WEB_FLOW_LOOKALIKE,
+	WEB_FLOW_USER,
+	allowedBot,
+} from "./accounts";
 import type {
 	EventPullRequest,
 	EventRepository,
@@ -31,7 +39,6 @@ import {
 	parsePullRequestEvent,
 	precheckCommitCount,
 } from "../src/decision";
-import { WEB_FLOW_LOOKALIKE, WEB_FLOW_USER, allowedBot } from "./accounts";
 import { describe, expect, it } from "vitest";
 import { MAX_VERIFIABLE_COMMITS } from "../src/allowlist";
 
@@ -42,13 +49,10 @@ const OCTOCAT: GithubAccount = { id: 77, login: "octocat", type: "User" };
 const OCTOCAT_WRONG_ID: GithubAccount = { id: 78, login: "octocat", type: "User" };
 const OTHER_USER: GithubAccount = { id: 55, login: "someone-else", type: "User" };
 const ORG_OWNER: GithubAccount = { id: 88, login: "acme", type: "Organization" };
-const RENOVATE = allowedBot("renovate[bot]");
 const DEPENDABOT = allowedBot("dependabot[bot]");
 /** Deliberately not on the allowlist: a bot GitHub ships, which §3.1 still rejects. */
 const GITHUB_ACTIONS: GithubAccount = { id: 41_898_282, login: "github-actions[bot]", type: "Bot" };
-const AUTOFIX_CI = allowedBot("autofix-ci[bot]");
 const AUTOFIX_CI_WRONG_ID = allowedBot("autofix-ci[bot]", { id: 3 });
-const RENOVATE_WRONG_ID = allowedBot("renovate[bot]", { id: 2 });
 const RENOVATE_WRONG_LOGIN = allowedBot("renovate[bot]", { login: "renovate-bot" });
 const RENOVATE_TYPE_USER = allowedBot("renovate[bot]", { type: "User" });
 const BOT_NAMED_OCTOCAT: GithubAccount = { id: 5, login: "octocat", type: "Bot" };
