@@ -168,10 +168,18 @@ Notes:
 On every action (`opened`, `synchronize`, etc.), verify all commits of the PR before
 approving (`GET /repos/{owner}/{repo}/pulls/{n}/commits`).
 
-Fetch every page of the endpoint (`per_page=100`; at most 3 pages given the 250-commit
-cap below). Then:
+First settle what the declared count alone decides, before the fetch is spent:
 
 - If `pull_request.commits` is 0, do not approve (`no-commits`)
+- If `pull_request.commits` exceeds the 250-commit cap below, do not approve
+  (`too-many-commits`)
+
+Both outcomes are determined by the payload, so checking them first costs no API call and
+cannot change the result — a PR settled here would fail the same check after the fetch.
+
+Otherwise fetch every page of the endpoint (`per_page=100`; at most 3 pages given the
+cap). Then:
+
 - If the number of commits fetched differs from `pull_request.commits`, do not approve
   (`commit-count-mismatch`, fail closed)
 
@@ -208,8 +216,9 @@ pushes to a bot branch), it is not approved.
 > signature information". Re-check it before relaxing either commit check.
 
 > [!IMPORTANT]
-> The PR commits API returns at most 250 commits. A PR whose `pull_request.commits`
-> exceeds 250 cannot be fully verified and is therefore not approved (fail closed).
+> The PR commits API returns at most 250 commits, which is where the cap comes from: a PR
+> declaring more than that cannot be fully verified, so it fails closed — settled from the
+> declared count above, before any page is fetched.
 
 ### 3.3 Race Condition Mitigation (TOCTOU)
 
