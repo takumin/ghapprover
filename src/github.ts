@@ -141,9 +141,15 @@ function required<Value>(value: Value | undefined, endpoint: string, status: num
 	return value;
 }
 
+/** The auth strategy's internal request, issued lazily inside whichever call runs first. */
+const TOKEN_ENDPOINT = "POST /app/installations/{installation_id}/access_tokens";
+const TOKEN_PATH_MARKER = "/access_tokens";
+
 interface HttpFailure {
 	readonly hasResponse: boolean;
 	readonly status: number;
+	/** URL of the failed request ("" when unavailable), to tell whose failure this is. */
+	readonly url: string;
 }
 
 /**
@@ -156,7 +162,7 @@ function toHttpFailure(error: unknown): HttpFailure | null {
 		return NULL_RESULT;
 	}
 	if (error.name === "AbortError" || error.name === "TimeoutError") {
-		return { hasResponse: false, status: NETWORK_FAILURE_STATUS };
+		return { hasResponse: false, status: NETWORK_FAILURE_STATUS, url: "" };
 	}
 	if (error.name !== "HttpError") {
 		return NULL_RESULT;
@@ -165,22 +171,45 @@ function toHttpFailure(error: unknown): HttpFailure | null {
 	if (typeof status !== "number") {
 		return NULL_RESULT;
 	}
-	return { hasResponse: field(error, "response") !== undefined, status };
+	return {
+		hasResponse: field(error, "response") !== undefined,
+		status,
+		url: stringField(field(error, "request"), "url") ?? "",
+	};
 }
 
-function isHttpStatus(error: unknown, status: number): boolean {
+/*
+ * True only when the guarded endpoint itself failed with the given status. The auth strategy
+ * issues its token request lazily inside whichever call runs first, so that internal failure
+ * surfaces as the outer call's exception — without the URL check, a token-issuance 404 would
+ * pass the membership guard and read as a normal "not a member" skip instead of the loud
+ * configuration failure §9 requires.
+ */
+function isHttpStatusOn(error: unknown, status: number, pathMarker: string): boolean {
 	const failure = toHttpFailure(error);
 	if (failure === null) {
 		return false;
 	}
-	return failure.hasResponse && failure.status === status;
+	return failure.hasResponse && failure.status === status && failure.url.includes(pathMarker);
+}
+
+/** HTTP failures keep their status, attributed to the auth strategy's token endpoint when its internal request is the one that failed. */
+function httpFailureError(endpoint: string, failure: HttpFailure): GithubApiError {
+	if (!failure.hasResponse) {
+		return new GithubApiError(endpoint, NETWORK_FAILURE_STATUS, "network failure or timeout");
+	}
+	if (failure.url.includes(TOKEN_PATH_MARKER)) {
+		return new GithubApiError(TOKEN_ENDPOINT, failure.status, "unexpected response status");
+	}
+	return new GithubApiError(endpoint, failure.status, "unexpected response status");
 }
 
 /**
  * Maps a thrown octokit failure onto the frozen GithubApiError contract:
  * transport failures and timeouts become status 0, HTTP failures keep their
- * status, and anything unrecognized (e.g. an auth configuration failure) is
- * passed through for the handler's internal-error path (SPEC.md §9).
+ * status via httpFailureError above, and anything unrecognized (e.g. an auth
+ * configuration failure) is passed through for the handler's internal-error
+ * path (SPEC.md §9).
  */
 function toApiError(endpoint: string, error: unknown): Error {
 	if (error instanceof GithubApiError) {
@@ -193,10 +222,7 @@ function toApiError(endpoint: string, error: unknown): Error {
 		}
 		return new GithubApiError(endpoint, NETWORK_FAILURE_STATUS, "network failure or timeout");
 	}
-	if (!failure.hasResponse) {
-		return new GithubApiError(endpoint, NETWORK_FAILURE_STATUS, "network failure or timeout");
-	}
-	return new GithubApiError(endpoint, failure.status, "unexpected response status");
+	return httpFailureError(endpoint, failure);
 }
 
 /*
@@ -322,7 +348,7 @@ export async function fetchOrgMembership(
 		const response = await client.request(endpoint, { org, username });
 		return required(toMembership(response.data), endpoint, response.status);
 	} catch (error) {
-		if (isHttpStatus(error, HTTP_NOT_FOUND)) {
+		if (isHttpStatusOn(error, HTTP_NOT_FOUND, "/memberships/")) {
 			return NULL_RESULT;
 		}
 		throw toApiError(endpoint, error);
@@ -390,7 +416,7 @@ export async function createApprovalReview(
 		});
 		return "created";
 	} catch (error) {
-		if (isHttpStatus(error, HTTP_UNPROCESSABLE_ENTITY)) {
+		if (isHttpStatusOn(error, HTTP_UNPROCESSABLE_ENTITY, "/reviews")) {
 			return "rejected";
 		}
 		throw toApiError(endpoint, error);

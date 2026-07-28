@@ -642,6 +642,32 @@ describe("auth configuration failures", () => {
 		logSpy.mockRestore();
 		session.assertDone();
 	});
+
+	it("errors loudly when the installation token cannot be issued", async () => {
+		expect.hasAssertions();
+		const logSpy = vi.spyOn(console, "log");
+		const session = installFetchMock([
+			jsonRoute({
+				method: "POST",
+				payload: { message: "Not Found" },
+				status: HTTP_NOT_FOUND,
+				url: TOKEN_URL,
+			}),
+		]);
+		const response = await postSigned(buildPayload({ repoOwner: ORG }));
+		await expectReply(response, {
+			body: { decision: "error", reason: "github-api-error" },
+			status: HTTP_INTERNAL_ERROR,
+		});
+		expect(logSpy).toHaveBeenCalledWith(
+			expect.objectContaining({
+				endpoint: "POST /app/installations/{installation_id}/access_tokens",
+				status: HTTP_NOT_FOUND,
+			}),
+		);
+		logSpy.mockRestore();
+		session.assertDone();
+	});
 });
 
 describe("github api failures", () => {

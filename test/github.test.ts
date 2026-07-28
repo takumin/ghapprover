@@ -272,6 +272,24 @@ describe("fetchOrgMembership()", () => {
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({ status: HTTP_FORBIDDEN });
 	});
+
+	it("does not mistake a token-issuance 404 for a missing membership", async () => {
+		expect.hasAssertions();
+		installFetchMock([
+			jsonRoute({
+				method: "POST",
+				payload: { message: "Not Found" },
+				status: HTTP_NOT_FOUND,
+				url: TOKENS_URL,
+			}),
+		]);
+		const promise = fetchOrgMembership(await makeClient(), "octo", "someone");
+		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
+		await expect(promise).rejects.toMatchObject({
+			endpoint: "POST /app/installations/{installation_id}/access_tokens",
+			status: HTTP_NOT_FOUND,
+		});
+	});
 });
 
 describe("listPullRequestReviews()", () => {
