@@ -38,7 +38,7 @@ const APP_SLUG = "ghapprover";
 const BASE = "https://api.github.com";
 const TOKEN_URL = `${BASE}/app/installations/${INSTALLATION_ID}/access_tokens`;
 const APP_URL = `${BASE}/app`;
-const MEMBERSHIP_URL = `${BASE}/orgs/acme/memberships/octo`;
+const membershipUrl = (login: string): string => `${BASE}/orgs/acme/memberships/${login}`;
 const COMMITS_SUFFIX = "/commits?per_page=100";
 const REVIEWS_SUFFIX = "/reviews?per_page=100";
 /** App JWT authorization: "bearer" plus three dot-separated base64url segments. */
@@ -50,6 +50,7 @@ const RENOVATE: GithubAccount = { id: 29_139_614, login: "renovate[bot]", type: 
 const AUTOFIX_CI: GithubAccount = { id: 114_827_586, login: "autofix-ci[bot]", type: "Bot" };
 const WEB_FLOW: GithubAccount = { id: 19_864_447, login: "web-flow", type: "User" };
 const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User" };
+const OTHER_STRANGER: GithubAccount = { id: 998, login: "eve", type: "User" };
 /** The allowlisted renovate login under a different account (SPEC.md §3.1 id pinning). */
 const RENOVATE_WRONG_ID: GithubAccount = { id: 2, login: "renovate[bot]", type: "Bot" };
 const APP_BOT_USER: GithubAccount = { id: 201, login: "ghapprover[bot]", type: "Bot" };
@@ -153,16 +154,22 @@ function tokenRoute(): PlannedRoute {
 function appRoute(): PlannedRoute {
 	return jsonRoute({ method: "GET", payload: { slug: APP_SLUG }, status: 200, url: APP_URL });
 }
-function membershipRoute(route: {
-	readonly payload: unknown;
-	readonly status: number;
-}): PlannedRoute {
+function membershipRouteFor(
+	login: string,
+	route: { readonly payload: unknown; readonly status: number },
+): PlannedRoute {
 	return jsonRoute({
 		method: "GET",
 		payload: route.payload,
 		status: route.status,
-		url: MEMBERSHIP_URL,
+		url: membershipUrl(login),
 	});
+}
+function membershipRoute(route: {
+	readonly payload: unknown;
+	readonly status: number;
+}): PlannedRoute {
+	return membershipRouteFor("octo", route);
 }
 function commitsRouteFor(owner: string, commits: unknown): PlannedRoute {
 	return jsonRoute({
@@ -641,6 +648,25 @@ describe("principal trust resolution", () => {
 			body: { decision: "skipped", reason: "untrusted-commit" },
 			status: HTTP_OK,
 		});
+		session.assertDone();
+	});
+
+	/* SPEC.md §4: the subrequest budget is why lookups are lazy and sequential, so once one
+	 * principal settles the commit there is nothing a second lookup could change. */
+	it("stops resolving a commit's principals at the first untrusted one", async () => {
+		expect.hasAssertions();
+		const session = installFetchMock([
+			tokenRoute(),
+			membershipRoute({ payload: { role: "admin", state: "active" }, status: HTTP_OK }),
+			commitsRouteFor("acme", [commitItem({ author: STRANGER, committer: OTHER_STRANGER })]),
+			membershipRouteFor("mallory", { payload: { message: "Not Found" }, status: HTTP_NOT_FOUND }),
+		]);
+		const response = await postSigned(buildPayload({ repoOwner: ORG }));
+		await expectReply(response, {
+			body: { decision: "skipped", reason: "untrusted-commit" },
+			status: HTTP_OK,
+		});
+		expect(session.requests.map((entry) => entry.url)).not.toContain(membershipUrl("eve"));
 		session.assertDone();
 	});
 });

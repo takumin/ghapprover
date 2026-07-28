@@ -163,24 +163,26 @@ function createTrustResolver(client: GithubClient, repoOwner: GithubAccount): Tr
 /** Trust stub that projects checkCommit onto its trust-independent problems. */
 const everyAccountTrusted = (): boolean => true;
 /* SPEC.md §3.2 in commit order, resolving each commit's principals lazily and one at a time
- * (memoized, §3.1). Trust-independent problems (verification, unmapped principals) are checked
- * before that commit's lookups, and the first failing commit stops the loop — so a delivery
- * that ends in a skip never bursts a lookup per principal against the Worker subrequest
- * allowance or GitHub's secondary rate limits. */
+ * (memoized, §3.1). A trust-independent problem (verification, unmapped principals) settles the
+ * commit before any lookup runs, and within a commit the principals stop at the first untrusted
+ * one — a further lookup could not change that commit's outcome. Together with the first failing
+ * commit ending the outer loop, a delivery that ends in a skip never bursts a lookup per
+ * principal against the Worker subrequest allowance or GitHub's secondary rate limits. */
 async function findCommitProblem(
 	commits: readonly PullRequestCommit[],
 	trust: TrustResolver,
 ): Promise<ReturnType<typeof checkCommit>> {
 	for (const entry of commits) {
 		const structural = checkCommit(entry, everyAccountTrusted);
-		if (structural !== null) {
-			return structural;
+		if (structural === null) {
+			for (const account of commitPrincipals(entry)) {
+				// oxlint-disable-next-line no-await-in-loop -- sequential by design: parallel lookups are the burst §3.1 memoization cannot bound
+				if (!(await trust.resolve(account))) {
+					break;
+				}
+			}
 		}
-		for (const account of commitPrincipals(entry)) {
-			// oxlint-disable-next-line no-await-in-loop -- sequential by design: parallel lookups are the burst §3.1 memoization cannot bound
-			await trust.resolve(account);
-		}
-		const problem = checkCommit(entry, trust.isTrusted);
+		const problem = structural ?? checkCommit(entry, trust.isTrusted);
 		if (problem !== null) {
 			return problem;
 		}
