@@ -371,7 +371,16 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 export default {
 	async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
 		if (request.method !== "POST" || new URL(request.url).pathname !== "/webhook") {
-			return respond({ decision: "error", httpStatus: HTTP_NOT_FOUND, reason: "not-found" });
+			/* SPEC.md §8: the reason vocabulary is what an operator greps, and a webhook URL
+			 * pointing at the wrong path is exactly what not-found exists to surface — so it
+			 * has to leave a log entry, not only a 404 body. No delivery fields are known. */
+			const outcome: Outcome = {
+				decision: "error",
+				httpStatus: HTTP_NOT_FOUND,
+				reason: "not-found",
+			};
+			logOutcome({}, outcome);
+			return respond(outcome);
 		}
 		return handleWebhook(request, env);
 	},

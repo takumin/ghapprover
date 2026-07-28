@@ -281,6 +281,17 @@ describe("request routing", () => {
 			status: HTTP_NOT_FOUND,
 		});
 	});
+
+	/* SPEC.md §8: a webhook URL pointing at the wrong path is what not-found exists to
+	 * surface, so the 404 has to be greppable in the logs, not only in the response body. */
+	it("logs the not-found decision", async () => {
+		expect.hasAssertions();
+		const logSpy = vi.spyOn(console, "log");
+		installFetchMock([]);
+		await dispatch(new Request(WEBHOOK_URL, { method: "GET" }));
+		expect(logSpy).toHaveBeenCalledWith({ decision: "error", reason: "not-found" });
+		logSpy.mockRestore();
+	});
 });
 
 describe("signature verification", () => {
