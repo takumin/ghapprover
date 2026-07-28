@@ -26,6 +26,7 @@ const TOKEN = "installation-token";
 const PULL_NUMBER = 5;
 const INSTALLATION_ID = 12_345;
 const TOKENS_URL = `${BASE}/app/installations/${INSTALLATION_ID}/access_tokens`;
+const APP_URL = `${BASE}/app`;
 const FULL_PAGE = 100;
 const SECOND_PAGE_COUNT = 37;
 const ACCOUNT = { id: 7, login: "octo", type: "User" };
@@ -45,6 +46,11 @@ async function makeClient(): Promise<GithubClient> {
 /** The lazily issued installation token consumed by installation-authed calls. */
 function installTokenRoute(): PlannedRoute {
 	return tokenRoute({ token: TOKEN, url: TOKENS_URL });
+}
+const APP_BODY = { slug: "my-app" };
+/** A 200 GET /app; the payload is overridden only where the test is about a malformed response. */
+function appRoute(payload: unknown = APP_BODY): PlannedRoute {
+	return jsonRoute({ method: "GET", payload, status: HTTP_OK, url: APP_URL });
 }
 
 function commitBody(sha: string): Record<string, unknown> {
@@ -87,30 +93,16 @@ function linkedRoute(route: {
 describe("fetchAppBotLogin()", () => {
 	it("returns the bot login for the slug without issuing an installation token", async () => {
 		expect.hasAssertions();
-		const mock = installFetchMock([
-			jsonRoute({
-				method: "GET",
-				payload: { slug: "my-app" },
-				status: HTTP_OK,
-				url: `${BASE}/app`,
-			}),
-		]);
+		const mock = installFetchMock([appRoute()]);
 		await expect(fetchAppBotLogin(await makeClient())).resolves.toBe("my-app[bot]");
 		mock.assertDone();
 	});
 
 	it("authenticates with the app jwt and sends the pinned api version", async () => {
 		expect.hasAssertions();
-		const mock = installFetchMock([
-			jsonRoute({
-				method: "GET",
-				payload: { slug: "my-app" },
-				status: HTTP_OK,
-				url: `${BASE}/app`,
-			}),
-		]);
+		const mock = installFetchMock([appRoute()]);
 		await fetchAppBotLogin(await makeClient());
-		const seen = requestByUrl(mock, `${BASE}/app`);
+		const seen = requestByUrl(mock, APP_URL);
 		expect(seen.headers["authorization"]).toMatch(JWT_PATTERN);
 		expect(seen.headers["x-github-api-version"]).toBe("2022-11-28");
 		expect(seen.headers["user-agent"]).toMatch(/^ghapprover /u);
@@ -118,9 +110,7 @@ describe("fetchAppBotLogin()", () => {
 
 	it("throws GithubApiError when the slug is missing", async () => {
 		expect.hasAssertions();
-		installFetchMock([
-			jsonRoute({ method: "GET", payload: { id: 1 }, status: HTTP_OK, url: `${BASE}/app` }),
-		]);
+		installFetchMock([appRoute({ id: 1 })]);
 		const promise = fetchAppBotLogin(await makeClient());
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({ endpoint: "GET /app", status: HTTP_OK });
@@ -130,7 +120,7 @@ describe("fetchAppBotLogin()", () => {
 describe("transport failure mapping", () => {
 	it("wraps network failures with status 0", async () => {
 		expect.hasAssertions();
-		installFetchMock([jsonRoute({ method: "GET", payload: {}, status: 0, url: `${BASE}/app` })]);
+		installFetchMock([jsonRoute({ method: "GET", payload: {}, status: 0, url: APP_URL })]);
 		const promise = fetchAppBotLogin(await makeClient());
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({ endpoint: "GET /app", status: 0 });
@@ -138,9 +128,7 @@ describe("transport failure mapping", () => {
 
 	it("wraps an expired timeout signal with status 0", async () => {
 		expect.hasAssertions();
-		installFetchMock([
-			{ body: "", method: "GET", rejectAs: "timeout", status: 0, url: `${BASE}/app` },
-		]);
+		installFetchMock([{ body: "", method: "GET", rejectAs: "timeout", status: 0, url: APP_URL }]);
 		const promise = fetchAppBotLogin(await makeClient());
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({ endpoint: "GET /app", status: 0 });
@@ -331,14 +319,20 @@ describe("fetchPullRequest()", () => {
 	});
 });
 
-const REVIEWS_POST_URL = `${BASE}/repos/octo/hello/pulls/5/reviews`;
+function reviewsPostUrl(repo: string = REPO.repo): string {
+	return `${BASE}/repos/${REPO.owner}/${repo}/pulls/${PULL_NUMBER}/reviews`;
+}
 function reviewPostRoute(payload: unknown, status: number): PlannedRoute {
-	return jsonRoute({ method: "POST", payload, status, url: REVIEWS_POST_URL });
+	return jsonRoute({ method: "POST", payload, status, url: reviewsPostUrl() });
 }
 /** The same POST against another repository, to exercise endpoint attribution. */
 function reviewPostRouteOn(repo: string, status: number): PlannedRoute {
-	const url = `${BASE}/repos/octo/${repo}/pulls/${PULL_NUMBER}/reviews`;
-	return jsonRoute({ method: "POST", payload: { message: "boom" }, status, url });
+	return jsonRoute({
+		method: "POST",
+		payload: { message: "boom" },
+		status,
+		url: reviewsPostUrl(repo),
+	});
 }
 
 describe("createApprovalReview()", () => {
@@ -348,7 +342,7 @@ describe("createApprovalReview()", () => {
 		await expect(
 			createApprovalReview(await makeClient(), REPO, PULL_NUMBER, "head-sha"),
 		).resolves.toBe("created");
-		const posted = requestByUrl(mock, REVIEWS_POST_URL);
+		const posted = requestByUrl(mock, reviewsPostUrl());
 		expect(posted).toMatchObject({ body: '{"commit_id":"head-sha","event":"APPROVE"}' });
 		expect(posted.headers["content-type"]).toMatch(/application\/json/u);
 	});
@@ -421,15 +415,8 @@ describe("delivery deadline", () => {
 
 	it("hands the dispatch a budget that has not expired yet", async () => {
 		expect.hasAssertions();
-		const mock = installFetchMock([
-			jsonRoute({
-				method: "GET",
-				payload: { slug: "my-app" },
-				status: HTTP_OK,
-				url: `${BASE}/app`,
-			}),
-		]);
+		const mock = installFetchMock([appRoute()]);
 		await fetchAppBotLogin(await makeClient());
-		expect(dispatchedSignal(requestByUrl(mock, `${BASE}/app`))).toMatchObject({ aborted: false });
+		expect(dispatchedSignal(requestByUrl(mock, APP_URL))).toMatchObject({ aborted: false });
 	});
 });
