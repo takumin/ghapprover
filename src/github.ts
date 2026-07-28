@@ -35,8 +35,16 @@ const USER_AGENT = "ghapprover";
  * per-dispatch budget on top would never bind: it starts at or after this one,
  * so it could only fire first by being shorter than the whole delivery — which
  * is this budget again.
+ *
+ * The value also absorbs the one thing the signal cannot abort: @octokit/auth-app
+ * waits between its 401 retries on a plain timer, so a wait in flight when this
+ * expires runs to its end before the next dispatch aborts. Only one can be in
+ * flight (that dispatch fails as a timeout rather than a 401, which ends the
+ * retry loop), so the overrun is bounded by the longest single wait, 3 s. Hence
+ * 6 s: 6 + 3 clears the 10-second timeout with room for the body read, the HMAC,
+ * and the response (SPEC.md §4, §9).
  */
-const DELIVERY_TIMEOUT_MS = 8000;
+const DELIVERY_TIMEOUT_MS = 6000;
 const PAGE_SIZE = 100;
 /** GithubApiError status representing network-level failures and timeouts. */
 const NETWORK_FAILURE_STATUS = 0;

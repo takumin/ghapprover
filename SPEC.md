@@ -391,13 +391,19 @@ flowchart TD
 - **One deadline bounds the whole delivery**: a single wall-clock budget for the delivery
   as a whole, set below GitHub's 10-second webhook timeout. It is created with the client
   and installed on every dispatch, so everything that client spends time on draws on it —
-  the auth library's internal waits (§9) as much as the API calls themselves. Without it a
-  slow delivery could outlive that timeout and still post its approval — recording a failed
-  delivery for a PR that was in fact approved, the opposite of the diagnostic property this
-  synchronous design exists for. A per-dispatch budget is deliberately not layered on top:
-  it starts at or after the delivery budget, so it could only fire first by being shorter
-  than the whole delivery, which is the delivery budget again. Exhausting the budget fails
-  the delivery closed (§9)
+  the auth library's internal waits (§9) as much as the API calls themselves. What it does
+  not do is cut a wait short: the signal aborts dispatches, and those waits are plain
+  timers that do not carry it. A wait already running when the budget expires therefore
+  runs to its end and the abort lands on the dispatch that follows, so a delivery can
+  finish up to the longest single wait (3 s, §9) past its budget. **The budget is set so
+  that it plus that overrun still clears the 10-second timeout** — the deadline on its own
+  does not bound the delivery, only the deadline together with that headroom does. Without
+  it a slow delivery could outlive that timeout and still post its approval — recording a
+  failed delivery for a PR that was in fact approved, the opposite of the diagnostic
+  property this synchronous design exists for. A per-dispatch budget is deliberately not
+  layered on top: it starts at or after the delivery budget, so it could only fire first
+  by being shorter than the whole delivery, which is the delivery budget again. Exhausting
+  the budget fails the delivery closed (§9)
 - **Membership lookups are resolved lazily, one at a time, in commit order** (memoized per
   delivery, §3.1), and the first failing commit stops the loop. This is not only a latency
   choice: Workers allows 50 subrequests per request on the Free plan (10,000 on paid), and
@@ -554,15 +560,25 @@ it. Re-execution is consolidated into manual redelivery on the GitHub side.
 > still fails loud per this table.
 >
 > The 401 retries wait between attempts (1 s, then 2 s, then 3 s), and those
-> waits fall inside the §4 delivery budget: it is one wall-clock deadline
-> installed on every dispatch, so a wait consumes it exactly like an API call
-> and the retry that follows aborts the moment it is exhausted. Such a delivery
-> therefore fails as `github-api-error` with `status: 0` like any other
-> exhaustion, and cannot overrun GitHub's webhook timeout. Losing the remaining
-> retries to the deadline costs nothing: the requests being retried are
-> themselves failing, so no review is posted, and the state the budget exists to
-> prevent — a delivery recorded as failed for a PR that was in fact approved —
-> cannot arise on this path.
+> waits consume the §4 delivery budget exactly like an API call does — it is one
+> wall-clock deadline, so time spent waiting is time spent. What the deadline
+> cannot do is cut a wait short: it aborts dispatches, and the waits are plain
+> timers. A wait running when the budget expires therefore finishes, and the
+> abort lands on the retry that follows, so such a delivery ends up to 3 s past
+> its budget and fails as `github-api-error` with `status: 0` like any other
+> exhaustion. Keeping it inside GitHub's webhook timeout is the budget's job, not
+> the deadline's: the budget is chosen with that 3 s of overrun already
+> subtracted (§4). The five-second retry window is anchored to the moment the
+> token response arrives, not to the start of the delivery, so a slow token
+> request shifts the whole window later — which is why the overrun has to be
+> budgeted for rather than argued away.
+>
+> Losing the remaining retries to the deadline costs nothing: the requests being
+> retried are themselves failing, so no review is posted, and the state the
+> budget exists to prevent — a delivery recorded as failed for a PR that was in
+> fact approved — cannot arise on that path. A retry that _succeeds_ after its
+> wait does post a review, which is exactly why the overrun is budgeted for
+> rather than left to chance.
 >
 > The library also dedupes in-flight token issuance process-wide, keyed by the
 > installation id. Two deliveries for the same installation that overlap in one
