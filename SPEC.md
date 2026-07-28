@@ -420,11 +420,11 @@ the information needed for evaluation comes from the following.
 
 ## 7. Authentication and Secret Management
 
-| Secret                 | Storage        | Purpose                                           |
-| ---------------------- | -------------- | ------------------------------------------------- |
-| GitHub App ID          | Workers Secret | App JWT `iss` claim (§5 rules out vars)           |
+| Secret                 | Storage        | Purpose                                                                                                    |
+| ---------------------- | -------------- | ---------------------------------------------------------------------------------------------------------- |
+| GitHub App ID          | Workers Secret | App JWT `iss` claim (§5 rules out vars)                                                                    |
 | GitHub App private key | Workers Secret | Signing the App JWT, which issues installation tokens and authenticates the App endpoints (`GET /app`, §4) |
-| Webhook secret         | Workers Secret | Signature verification                            |
+| Webhook secret         | Workers Secret | Signature verification                                                                                     |
 
 - An installation token is issued per event for the installation identified by the
   payload's `installation.id`, using an App JWT (RS256, valid for at most 10
@@ -505,7 +505,7 @@ exhaustive rather than illustrative:
 | Delivery carries no `installation.id`                                 | 500      | `missing-installation`. An App delivery always carries one, so its absence is a configuration problem, not an unsatisfied condition |
 | Transient GitHub API failure                                          | 500      | Fail closed. Retryable via redelivery                                                                                               |
 | Whole-delivery deadline exhausted (§4)                                | 500      | `github-api-error` with `status: 0`. Fail closed                                                                                    |
-| Workers subrequest allowance exhausted (§4)                           | 500      | Fail closed. The reason follows how the runtime surfaces it — `github-api-error` if it reaches the client as a failure            |
+| Workers subrequest allowance exhausted (§4)                           | 500      | Fail closed. The reason follows how the runtime surfaces it — `github-api-error` if it reaches the client as a failure              |
 | Other GitHub API 4xx (401/403: insufficient permissions, rate limits) | 500      | Distinguish in logs as a configuration problem                                                                                      |
 
 No automatic retries of transient GitHub API failures (5xx / network errors /
