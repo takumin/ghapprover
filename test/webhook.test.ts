@@ -13,9 +13,10 @@ const SHA256_PREFIX = "sha256=";
 const VALID = true;
 const INVALID = false;
 
-/* The header is produced by the same package's sign() — the counterpart of the verify() under
+/* Headers are produced by the same package's sign() — the counterpart of the verify() under
  * test, and an independent function from it, so this asserts against the real GitHub format
- * rather than against a second HMAC implementation maintained here. */
+ * rather than against a second HMAC implementation maintained here. The malformed cases below
+ * rebuild the header from this digest; the well-formed ones use sign()'s own output as-is. */
 async function signHex(secret: string, body: string): Promise<string> {
 	const header = await sign(secret, body);
 	return header.slice(SHA256_PREFIX.length);
@@ -24,14 +25,14 @@ async function signHex(secret: string, body: string): Promise<string> {
 describe("verifyWebhookSignature acceptance", () => {
 	it("accepts a valid sha256 signature", async () => {
 		expect.hasAssertions();
-		const header = `sha256=${await signHex(SECRET, BODY)}`;
+		const header = await sign(SECRET, BODY);
 		await expect(verifyWebhookSignature(SECRET, BODY, header)).resolves.toBe(VALID);
 	});
 
 	it("accepts uppercase hex digests", async () => {
 		expect.hasAssertions();
 		const hex = await signHex(SECRET, BODY);
-		const header = `sha256=${hex.toUpperCase()}`;
+		const header = `${SHA256_PREFIX}${hex.toUpperCase()}`;
 		await expect(verifyWebhookSignature(SECRET, BODY, header)).resolves.toBe(VALID);
 	});
 });
@@ -39,7 +40,7 @@ describe("verifyWebhookSignature acceptance", () => {
 describe("verifyWebhookSignature rejection", () => {
 	it("rejects a signature over a tampered body", async () => {
 		expect.hasAssertions();
-		const header = `sha256=${await signHex(SECRET, BODY)}`;
+		const header = await sign(SECRET, BODY);
 		await expect(verifyWebhookSignature(SECRET, '{"action":"closed"}', header)).resolves.toBe(
 			INVALID,
 		);
@@ -47,7 +48,7 @@ describe("verifyWebhookSignature rejection", () => {
 
 	it("rejects a signature made with the wrong secret", async () => {
 		expect.hasAssertions();
-		const header = `sha256=${await signHex("other-secret", BODY)}`;
+		const header = await sign("other-secret", BODY);
 		await expect(verifyWebhookSignature(SECRET, BODY, header)).resolves.toBe(INVALID);
 	});
 
@@ -65,14 +66,14 @@ describe("verifyWebhookSignature rejection", () => {
 	it("rejects truncated hex", async () => {
 		expect.hasAssertions();
 		const hex = await signHex(SECRET, BODY);
-		const header = `sha256=${hex.slice(1)}`;
+		const header = `${SHA256_PREFIX}${hex.slice(1)}`;
 		await expect(verifyWebhookSignature(SECRET, BODY, header)).resolves.toBe(INVALID);
 	});
 
 	it("rejects non-hex characters", async () => {
 		expect.hasAssertions();
 		const hex = await signHex(SECRET, BODY);
-		const header = `sha256=${hex.slice(0, -1)}z`;
+		const header = `${SHA256_PREFIX}${hex.slice(0, -1)}z`;
 		await expect(verifyWebhookSignature(SECRET, BODY, header)).resolves.toBe(INVALID);
 	});
 });
