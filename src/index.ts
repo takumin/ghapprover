@@ -109,9 +109,11 @@ interface ReviewTarget {
 function skippedOutcome(reason: Reason): Outcome {
 	return { decision: "skipped", httpStatus: HTTP_OK, reason };
 }
-/** 5xx marks an evaluation that could not be completed: loud in Recent Deliveries, redeliverable (SPEC.md §9). */
-function errorOutcome(reason: Reason): Outcome {
-	return { decision: "error", httpStatus: HTTP_INTERNAL_ERROR, reason };
+/* A non-2xx marks an evaluation that could not be completed: loud in Recent Deliveries and
+ * redeliverable (SPEC.md §9). 5xx is the default because that is what §9 maps every failure to
+ * except the three the request itself settles (404, 401, 413). */
+function errorOutcome(reason: Reason, httpStatus: number = HTTP_INTERNAL_ERROR): Outcome {
+	return { decision: "error", httpStatus, reason };
 }
 function respond(outcome: Outcome): Response {
 	const { decision, httpStatus: status, reason } = outcome;
@@ -394,11 +396,7 @@ async function readBoundedBody(request: Request): Promise<string | null> {
 async function evaluateDelivery(request: Request, env: Env, log: LogFields): Promise<Outcome> {
 	const body = await readBoundedBody(request);
 	if (body === null) {
-		return {
-			decision: "error",
-			httpStatus: HTTP_PAYLOAD_TOO_LARGE,
-			reason: "payload-too-large",
-		};
+		return errorOutcome("payload-too-large", HTTP_PAYLOAD_TOO_LARGE);
 	}
 	const verified = await verifyWebhookSignature(
 		env.GITHUB_WEBHOOK_SECRET,
@@ -406,7 +404,7 @@ async function evaluateDelivery(request: Request, env: Env, log: LogFields): Pro
 		request.headers.get("x-hub-signature-256"),
 	);
 	if (!verified) {
-		return { decision: "error", httpStatus: HTTP_UNAUTHORIZED, reason: "invalid-signature" };
+		return errorOutcome("invalid-signature", HTTP_UNAUTHORIZED);
 	}
 	if (request.headers.get("x-github-event") !== "pull_request") {
 		return skippedOutcome("event-out-of-scope");
@@ -424,7 +422,7 @@ function isMisrouted(request: Request): boolean {
  * unknown. */
 async function evaluateRequest(request: Request, env: Env, log: LogFields): Promise<Outcome> {
 	if (isMisrouted(request)) {
-		return { decision: "error", httpStatus: HTTP_NOT_FOUND, reason: "not-found" };
+		return errorOutcome("not-found", HTTP_NOT_FOUND);
 	}
 	return evaluateDelivery(request, env, log);
 }
