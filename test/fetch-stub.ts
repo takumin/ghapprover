@@ -36,7 +36,8 @@ export interface FetchMockSession {
 	readonly requests: readonly RecordedRequest[];
 }
 
-/** The signal the caller put on the dispatch, so a test can assert the delivery budget reached it. */
+/* The signal the caller put on the dispatch, so a test can assert the delivery budget reached it.
+ * Spelled out rather than optional-chained: oxc/no-optional-chaining is on. */
 function dispatchedSignal(init: RequestInit | undefined): AbortSignal | undefined {
 	if (init === undefined) {
 		return undefined;
