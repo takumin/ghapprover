@@ -1,6 +1,6 @@
 /**
  * Pure decision logic for the approval pipeline (SPEC.md §3, §4): deterministic and I/O-free so
- * the approval conditions are unit-testable without mocking the GitHub API (SPEC.md §11).
+ * the approval conditions are unit-testable without mocking the GitHub API (SPEC.md §12).
  */
 /* GitHub payloads and types.ts model absence as null (SPEC.md fails closed), so null literals are deliberate here. */
 /* oxlint-disable unicorn/no-null */

@@ -74,7 +74,7 @@ export interface PullRequestHead {
 }
 
 export interface EventRepository {
-	/** Compared against `head.repo.id` to reject fork PRs (SPEC.md §3 condition 2). */
+	/** Compared against `head.repo.id` to reject fork PRs (SPEC.md §3 note). */
 	readonly id: number;
 	readonly name: string;
 	readonly full_name: string;
