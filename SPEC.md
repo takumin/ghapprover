@@ -290,10 +290,10 @@ flowchart TD
 
 - Processing is **synchronous** (not deferred to `ctx.waitUntil`). GitHub API calls per
   delivery: token issuance, commit list (up to 3 pages), membership checks (one per
-  distinct non-bot author/committer, memoized within the delivery, §3.1), existing
-  reviews (paginated), the live PR fetch, and the review POST — typically under 10
-  calls for PRs authored by the owner or an allowed bot, which fits within the webhook
-  timeout (10 seconds). Being synchronous means the outcome is
+  distinct non-bot author/committer, memoized within the delivery, §3.1), the App slug
+  fetch (`GET /app`, §3 condition 5), existing reviews (paginated), the live PR fetch,
+  and the review POST — typically under 10 calls for PRs authored by the owner or an
+  allowed bot, which fits within the webhook timeout (10 seconds). Being synchronous means the outcome is
   recorded as-is in GitHub's Recent Deliveries, and failures can be safely re-executed via
   manual redelivery (the approval process is idempotent as described in §6).
 - "Not approving" is a normal outcome (200), and its reason must always be logged.
@@ -375,8 +375,18 @@ Emit at least the following to structured logs (Workers Logs):
 | Transient GitHub API failure                                          | 500      | Fail closed. Retryable via redelivery                             |
 | Other GitHub API 4xx (401/403: insufficient permissions, rate limits) | 500      | Distinguish in logs as a configuration problem                    |
 
-No automatic retries inside the Worker (set timeouts on GitHub API calls).
-Re-execution is consolidated into manual redelivery on the GitHub side.
+No automatic retries of transient GitHub API failures (5xx / network errors /
+timeouts) inside the Worker (set timeouts on GitHub API calls). Re-execution is
+consolidated into manual redelivery on the GitHub side.
+
+> [!NOTE]
+> The auth library (§11) internally performs two bounded auth-consistency
+> retries, accepted as part of the delegated concern: a request that receives a
+> 401 within five seconds of installation-token issuance is retried while that
+> window lasts (GitHub's token replication delay), and an App JWT rejected for
+> clock skew is re-signed once with the reported time difference. Neither
+> retries transient API failures; on exhaustion the delivery still fails loud
+> per this table.
 
 > [!NOTE]
 > GitHub does not automatically redeliver failed webhook deliveries. A transient
@@ -424,8 +434,10 @@ Rules:
 > The composite packages are deliberately not used: `@octokit/rest` adds generated
 > endpoint methods and request logging this Worker does not need, and `octokit`
 > further bundles webhooks, OAuth, and retry / throttling plugins — automatic retries
-> would even conflict with §9. `@octokit/webhooks` targets long-running Node servers;
-> its verification primitive is published standalone as `@octokit/webhooks-methods`.
+> of transient failures would even conflict with §9 (the auth library's bounded
+> auth-consistency retries are the accepted exception noted there). `@octokit/webhooks`
+> targets long-running Node servers; its verification primitive is published
+> standalone as `@octokit/webhooks-methods`.
 
 ## 12. Implementation Notes (Informative)
 
