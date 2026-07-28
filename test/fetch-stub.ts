@@ -13,7 +13,9 @@ export interface PlannedRoute {
 	/** Extra response headers (e.g. link); the JSON content-type is implied. */
 	readonly headers?: Record<string, string>;
 	readonly method: string;
-	/** Status 0 makes the stub reject like a network failure. */
+	/** How a status-0 route rejects: a network TypeError (default) or an expired timeout signal. */
+	readonly rejectAs?: "timeout";
+	/** Status 0 makes the stub reject instead of responding. */
 	readonly status: number;
 	readonly url: string;
 }
@@ -47,6 +49,9 @@ function takeRoute(pending: PlannedRoute[], request: Request): PlannedRoute {
 	}
 	pending.splice(index, 1);
 	if (route.status === 0) {
+		if (route.rejectAs === "timeout") {
+			throw new DOMException("The operation timed out.", "TimeoutError");
+		}
 		throw new TypeError("simulated network failure");
 	}
 	return route;

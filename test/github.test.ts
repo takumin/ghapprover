@@ -140,10 +140,22 @@ describe("fetchAppSlug()", () => {
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({ endpoint: "GET /app", status: HTTP_OK });
 	});
+});
 
+describe("transport failure mapping", () => {
 	it("wraps network failures with status 0", async () => {
 		expect.hasAssertions();
 		installFetchMock([jsonRoute({ method: "GET", payload: {}, status: 0, url: `${BASE}/app` })]);
+		const promise = fetchAppSlug(await makeClient());
+		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
+		await expect(promise).rejects.toMatchObject({ endpoint: "GET /app", status: 0 });
+	});
+
+	it("wraps an expired timeout signal with status 0", async () => {
+		expect.hasAssertions();
+		installFetchMock([
+			{ body: "", method: "GET", rejectAs: "timeout", status: 0, url: `${BASE}/app` },
+		]);
 		const promise = fetchAppSlug(await makeClient());
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({ endpoint: "GET /app", status: 0 });
