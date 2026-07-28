@@ -27,6 +27,14 @@ export function stringField(value: unknown, key: string): string | undefined {
 	}
 	return undefined;
 }
+/** A bare `{ id }` reference (the installation, the head repository); anything else fails closed. */
+export function toIdRef(value: unknown): { readonly id: number } | undefined {
+	const id = field(value, "id");
+	if (typeof id !== "number") {
+		return undefined;
+	}
+	return { id };
+}
 /** The (id, login, type) triple every §3 trust decision is made against; anything else fails closed. */
 export function toAccount(value: unknown): GithubAccount | undefined {
 	const id = field(value, "id");

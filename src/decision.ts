@@ -18,7 +18,7 @@ import type {
 	PullRequestHead,
 	PullRequestReview,
 } from "./types";
-import { isRecord, toAccount } from "./parse";
+import { isRecord, toAccount, toIdRef } from "./parse";
 
 /** Actions evaluated for approval (SPEC.md §3 condition 1). */
 export const TARGET_ACTIONS: readonly string[] = [
@@ -218,14 +218,7 @@ function parseHeadRepo(value: unknown): PullRequestHead["repo"] | undefined {
 	if (value === null || value === undefined) {
 		return null;
 	}
-	if (!isRecord(value)) {
-		return undefined;
-	}
-	const { id } = value;
-	if (typeof id !== "number") {
-		return undefined;
-	}
-	return { id };
+	return toIdRef(value);
 }
 
 function parseHead(value: unknown): PullRequestHead | null {
@@ -279,15 +272,9 @@ function parseRepository(value: unknown): EventRepository | null {
 	return { full_name: fullName, id, name, owner: parsedOwner };
 }
 
+/** Absent or malformed alike leave the payload valid with no installation (SPEC.md §9). */
 function parseInstallation(value: unknown): { readonly id: number } | null {
-	if (!isRecord(value)) {
-		return null;
-	}
-	const { id } = value;
-	if (typeof id !== "number") {
-		return null;
-	}
-	return { id };
+	return toIdRef(value) ?? null;
 }
 
 /* Fail-closed structural validation (SPEC.md §3): the typed payload is rebuilt field-by-field
