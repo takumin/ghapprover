@@ -189,14 +189,27 @@ async function dispatch(request: Request, env?: Env): Promise<Response> {
 	return response;
 }
 
+/** The three headers GitHub sends on every delivery; cases vary the signature and the event. */
+function deliveryHeaders(signature: string, eventName = "pull_request"): Record<string, string> {
+	return {
+		"x-github-delivery": DELIVERY_ID,
+		"x-github-event": eventName,
+		"x-hub-signature-256": signature,
+	};
+}
+/** For deliveries rejected before verification runs, so the digest is never reached. */
+const UNCHECKED_SIGNATURE = "sha256=00";
+/* A streamed delivery body, which carries no Content-Length. duplex is required by the Fetch
+ * spec for a stream body and is passed as an object literal because RequestInit omits it. */
+function streamedDelivery(body: ReadableStream<Uint8Array>, signature: string): Request {
+	const init = { body, duplex: "half", headers: deliveryHeaders(signature), method: "POST" };
+	return new Request(WEBHOOK_URL, init);
+}
+
 async function postSigned(body: string, eventName = "pull_request", env?: Env): Promise<Response> {
 	const request = new Request(WEBHOOK_URL, {
 		body,
-		headers: {
-			"x-github-delivery": DELIVERY_ID,
-			"x-github-event": eventName,
-			"x-hub-signature-256": await sign(SECRET, body),
-		},
+		headers: deliveryHeaders(await sign(SECRET, body), eventName),
 		method: "POST",
 	});
 	return dispatch(request, env);
@@ -781,17 +794,9 @@ describe("github api failures", () => {
 
 /** A signed delivery declaring an explicit Content-Length, which postSigned leaves unset. */
 async function postSignedWithLength(body: string, contentLength: number): Promise<Response> {
-	const request = new Request(WEBHOOK_URL, {
-		body,
-		headers: {
-			"content-length": String(contentLength),
-			"x-github-delivery": DELIVERY_ID,
-			"x-github-event": "pull_request",
-			"x-hub-signature-256": await sign(SECRET, body),
-		},
-		method: "POST",
-	});
-	return dispatch(request);
+	const headers = deliveryHeaders(await sign(SECRET, body));
+	headers["content-length"] = String(contentLength);
+	return dispatch(new Request(WEBHOOK_URL, { body, headers, method: "POST" }));
 }
 
 /* A chunked upload carries no Content-Length, so the declared-length check cannot see it and
@@ -800,49 +805,31 @@ async function postSignedWithLength(body: string, contentLength: number): Promis
 const CHUNK_BYTES = 4_194_304;
 function oversizedChunkedRequest(): Request {
 	let sent = 0;
-	const init = {
-		body: new ReadableStream({
-			pull(controller: ReadableStreamDefaultController<Uint8Array>): void {
-				sent += CHUNK_BYTES;
-				controller.enqueue(new Uint8Array(CHUNK_BYTES));
-				if (sent > OVERSIZED_BODY_BYTES) {
-					controller.close();
-				}
-			},
-		}),
-		duplex: "half",
-		headers: {
-			"x-github-delivery": DELIVERY_ID,
-			"x-github-event": "pull_request",
-			"x-hub-signature-256": "sha256=00",
+	const body = new ReadableStream({
+		pull(controller: ReadableStreamDefaultController<Uint8Array>): void {
+			sent += CHUNK_BYTES;
+			controller.enqueue(new Uint8Array(CHUNK_BYTES));
+			if (sent > OVERSIZED_BODY_BYTES) {
+				controller.close();
+			}
 		},
-		method: "POST",
-	};
-	return new Request(WEBHOOK_URL, init);
+	});
+	return streamedDelivery(body, UNCHECKED_SIGNATURE);
 }
 
 /** The signed payload as a stream body: no Content-Length, and split across chunk boundaries. */
 const SMALL_CHUNK_BYTES = 7;
 async function postSignedChunked(body: string): Promise<Response> {
 	const bytes = new TextEncoder().encode(body);
-	const init = {
-		body: new ReadableStream({
-			start(controller: ReadableStreamDefaultController<Uint8Array>): void {
-				for (let at = 0; at < bytes.length; at += SMALL_CHUNK_BYTES) {
-					controller.enqueue(bytes.slice(at, at + SMALL_CHUNK_BYTES));
-				}
-				controller.close();
-			},
-		}),
-		duplex: "half",
-		headers: {
-			"x-github-delivery": DELIVERY_ID,
-			"x-github-event": "pull_request",
-			"x-hub-signature-256": await sign(SECRET, body),
+	const stream = new ReadableStream({
+		start(controller: ReadableStreamDefaultController<Uint8Array>): void {
+			for (let at = 0; at < bytes.length; at += SMALL_CHUNK_BYTES) {
+				controller.enqueue(bytes.slice(at, at + SMALL_CHUNK_BYTES));
+			}
+			controller.close();
 		},
-		method: "POST",
-	};
-	return dispatch(new Request(WEBHOOK_URL, init));
+	});
+	return dispatch(streamedDelivery(stream, await sign(SECRET, body)));
 }
 
 describe("request body limits", () => {
@@ -890,23 +877,14 @@ describe("request body limits", () => {
 });
 
 /* A body whose stream errors mid-read: what a client disconnect or a truncated chunked upload
- * looks like to the Worker. duplex is required by the Fetch spec for a stream body. */
+ * looks like to the Worker. */
 function requestWithFailingBody(): Request {
-	const init = {
-		body: new ReadableStream({
-			start(controller: ReadableStreamDefaultController): void {
-				controller.error(new TypeError("connection reset"));
-			},
-		}),
-		duplex: "half",
-		headers: {
-			"x-github-delivery": DELIVERY_ID,
-			"x-github-event": "pull_request",
-			"x-hub-signature-256": "sha256=00",
+	const body = new ReadableStream({
+		start(controller: ReadableStreamDefaultController<Uint8Array>): void {
+			controller.error(new TypeError("connection reset"));
 		},
-		method: "POST",
-	};
-	return new Request(WEBHOOK_URL, init);
+	});
+	return streamedDelivery(body, UNCHECKED_SIGNATURE);
 }
 
 describe("unreadable deliveries", () => {
