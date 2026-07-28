@@ -124,8 +124,12 @@ function pullsUrl(owner: string, suffix: string): string {
 function installTokenRoute(): PlannedRoute {
 	return tokenRoute({ token: INSTALL_TOKEN, url: TOKEN_URL });
 }
+/** A 200 GET route; every route the pipeline reads apart from the membership lookups is one. */
+function getRoute(url: string, payload: unknown): PlannedRoute {
+	return jsonRoute({ method: "GET", payload, status: 200, url });
+}
 function appRoute(): PlannedRoute {
-	return jsonRoute({ method: "GET", payload: { slug: APP_SLUG }, status: 200, url: APP_URL });
+	return getRoute(APP_URL, { slug: APP_SLUG });
 }
 function membershipRouteFor(
 	login: string,
@@ -138,35 +142,14 @@ function membershipRouteFor(
 		url: membershipUrl(login),
 	});
 }
-function membershipRoute(route: {
-	readonly payload: unknown;
-	readonly status: number;
-}): PlannedRoute {
-	return membershipRouteFor("octo", route);
-}
 function commitsRouteFor(owner: string, commits: unknown): PlannedRoute {
-	return jsonRoute({
-		method: "GET",
-		payload: commits,
-		status: 200,
-		url: pullsUrl(owner, COMMITS_SUFFIX),
-	});
+	return getRoute(pullsUrl(owner, COMMITS_SUFFIX), commits);
 }
 function reviewsRouteFor(owner: string, reviews: unknown): PlannedRoute {
-	return jsonRoute({
-		method: "GET",
-		payload: reviews,
-		status: 200,
-		url: pullsUrl(owner, REVIEWS_SUFFIX),
-	});
+	return getRoute(pullsUrl(owner, REVIEWS_SUFFIX), reviews);
 }
 function liveRouteFor(owner: string, sha: string): PlannedRoute {
-	return jsonRoute({
-		method: "GET",
-		payload: { draft: false, head: { sha }, state: "open" },
-		status: 200,
-		url: pullsUrl(owner, ""),
-	});
+	return getRoute(pullsUrl(owner, ""), { draft: false, head: { sha }, state: "open" });
 }
 function reviewPostRoute(owner: string, status: number): PlannedRoute {
 	return jsonRoute({
@@ -464,7 +447,7 @@ describe("author trust", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
-			membershipRoute({ payload: { role: "admin", state: "active" }, status: HTTP_OK }),
+			membershipRouteFor("octo", { payload: { role: "admin", state: "active" }, status: HTTP_OK }),
 			...pipelineRoutes({ commits: [commitItem()], owner: "acme", reviews: [] }),
 			reviewPostRoute("acme", HTTP_OK),
 		]);
@@ -477,7 +460,7 @@ describe("author trust", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
-			membershipRoute({ payload: { message: "Not Found" }, status: HTTP_NOT_FOUND }),
+			membershipRouteFor("octo", { payload: { message: "Not Found" }, status: HTTP_NOT_FOUND }),
 		]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
 		await expectReply(response, {
@@ -599,7 +582,7 @@ describe("commit verification", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
-			membershipRoute({ payload: { role: "admin", state: "active" }, status: HTTP_OK }),
+			membershipRouteFor("octo", { payload: { role: "admin", state: "active" }, status: HTTP_OK }),
 			commitsRouteFor("acme", [
 				commitItem({ author: STRANGER, verified: false }),
 				commitItem({ author: STRANGER }),
@@ -641,7 +624,7 @@ describe("principal trust resolution", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
-			membershipRoute({ payload: { role: "admin", state: "active" }, status: HTTP_OK }),
+			membershipRouteFor("octo", { payload: { role: "admin", state: "active" }, status: HTTP_OK }),
 			commitsRouteFor("acme", [commitItem({ author: STRANGER, committer: OTHER_STRANGER })]),
 			membershipRouteFor("mallory", { payload: { message: "Not Found" }, status: HTTP_NOT_FOUND }),
 		]);
