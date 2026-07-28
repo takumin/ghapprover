@@ -77,13 +77,24 @@ function shapeError(endpoint: string, status: number): GithubApiError {
 }
 
 /**
+ * Fetch used for every dispatch the client makes. The signal is created here,
+ * per dispatch, so plain calls, pagination follow-up pages, and the auth
+ * strategy's internal token request each get their own fresh deadline — a
+ * client-level signal would anchor one shared countdown at client creation,
+ * and pagination page requests cannot carry per-call request options.
+ */
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+	init.signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+	return fetch(url, init);
+}
+
+/**
  * Creates the per-delivery client. @octokit/auth-app authenticates the app
  * endpoints (e.g. GET /app) with the App JWT and everything else with an
  * installation token it issues lazily on first use. A before-request hook
- * pins the REST API version on every request, including the internal token
- * request and pagination follow-up pages. The client-level signal bounds
- * those internal requests; every plain request below additionally carries a
- * fresh per-call signal (SPEC.md §9, §11).
+ * pins the REST API version on every request, and fetchWithTimeout bounds
+ * every dispatch individually — including the internal token request and
+ * pagination follow-up pages (SPEC.md §9, §11).
  */
 export function createGithubClient(
 	credentials: AppCredentials,
@@ -96,18 +107,13 @@ export function createGithubClient(
 			privateKey: credentials.privateKeyPem,
 		},
 		authStrategy: createAppAuth,
-		request: { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
+		request: { fetch: fetchWithTimeout },
 		userAgent: USER_AGENT,
 	});
 	client.hook.before("request", (options) => {
 		options.headers["x-github-api-version"] = API_VERSION;
 	});
 	return client;
-}
-
-/** Per-call `request` parameter carrying a fresh timeout signal. */
-function timeoutRequest(): { readonly signal: AbortSignal } {
-	return { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -274,7 +280,7 @@ function toLivePullRequest(value: unknown): LivePullRequest | undefined {
 export async function fetchAppSlug(client: GithubClient): Promise<string> {
 	const endpoint = "GET /app";
 	try {
-		const response = await client.request(endpoint, { request: timeoutRequest() });
+		const response = await client.request(endpoint);
 		const slug = stringField(response.data, "slug");
 		if (slug === undefined || slug === "") {
 			throw shapeError(endpoint, response.status);
@@ -313,11 +319,7 @@ export async function fetchOrgMembership(
 ): Promise<OrgMembership | null> {
 	const endpoint = "GET /orgs/{org}/memberships/{username}";
 	try {
-		const response = await client.request(endpoint, {
-			org,
-			request: timeoutRequest(),
-			username,
-		});
+		const response = await client.request(endpoint, { org, username });
 		return required(toMembership(response.data), endpoint, response.status);
 	} catch (error) {
 		if (isHttpStatus(error, HTTP_NOT_FOUND)) {
@@ -359,7 +361,6 @@ export async function fetchPullRequest(
 			owner: repo.owner,
 			pull_number: pullNumber,
 			repo: repo.repo,
-			request: timeoutRequest(),
 		});
 		return required(toLivePullRequest(response.data), endpoint, response.status);
 	} catch (error) {
@@ -386,7 +387,6 @@ export async function createApprovalReview(
 			owner: repo.owner,
 			pull_number: pullNumber,
 			repo: repo.repo,
-			request: timeoutRequest(),
 		});
 		return "created";
 	} catch (error) {
