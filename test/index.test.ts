@@ -803,3 +803,47 @@ describe("request body limits", () => {
 		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
 	});
 });
+
+/* A body whose stream errors mid-read: what a client disconnect or a truncated chunked upload
+ * looks like to the Worker. duplex is required by the Fetch spec for a stream body. */
+function requestWithFailingBody(): Request {
+	const init = {
+		body: new ReadableStream({
+			start(controller: ReadableStreamDefaultController): void {
+				controller.error(new TypeError("connection reset"));
+			},
+		}),
+		duplex: "half",
+		headers: {
+			"x-github-delivery": DELIVERY_ID,
+			"x-github-event": "pull_request",
+			"x-hub-signature-256": "sha256=00",
+		},
+		method: "POST",
+	};
+	return new Request(WEBHOOK_URL, init);
+}
+
+describe("unreadable deliveries", () => {
+	/* SPEC.md §8 requires one log entry per delivery and §9 maps any other thrown failure to
+	 * internal-error. Reading the body runs before the pipeline's own guard, so without a
+	 * catch-all this delivery would answer with the runtime's 500 and log nothing at all. */
+	it("errors with a bounded diagnostic when the body cannot be read", async () => {
+		expect.hasAssertions();
+		const logSpy = vi.spyOn(console, "log");
+		const session = installFetchMock([]);
+		await expectReply(await dispatch(requestWithFailingBody()), {
+			body: { decision: "error", reason: "internal-error" },
+			status: HTTP_INTERNAL_ERROR,
+		});
+		expect(logSpy).toHaveBeenCalledWith(
+			expect.objectContaining({
+				decision: "error",
+				deliveryId: DELIVERY_ID,
+				reason: "internal-error",
+			}),
+		);
+		logSpy.mockRestore();
+		session.assertDone();
+	});
+});

@@ -357,13 +357,30 @@ async function evaluateDelivery(request: Request, env: Env, log: LogFields): Pro
 	}
 	return evaluateBody(body, env, log);
 }
+/* SPEC.md §8 and §9: processPayload only guards the pipeline, but reading the body and
+ * verifying the signature run before it and can reject on their own — a client disconnect
+ * or a truncated chunked upload rejects request.text(). Without this the Worker would
+ * answer with the runtime's own 500 and leave no log entry at all, which is the one
+ * outcome §8 does not allow; "any other thrown failure" is §9's internal-error. */
+async function evaluateOrFail(request: Request, env: Env, log: LogFields): Promise<Outcome> {
+	try {
+		return await evaluateDelivery(request, env, log);
+	} catch (error) {
+		return {
+			decision: "error",
+			errorName: thrownErrorName(error),
+			httpStatus: HTTP_INTERNAL_ERROR,
+			reason: "internal-error",
+		};
+	}
+}
 async function handleWebhook(request: Request, env: Env): Promise<Response> {
 	const log: LogFields = {};
 	const deliveryId = request.headers.get("x-github-delivery");
 	if (deliveryId !== null) {
 		log["deliveryId"] = deliveryId;
 	}
-	const outcome = await evaluateDelivery(request, env, log);
+	const outcome = await evaluateOrFail(request, env, log);
 	logOutcome(log, outcome);
 	return respond(outcome);
 }
