@@ -151,25 +151,44 @@ export function checkCommitCount(
 	return null;
 }
 
-/* SPEC.md §3.2 per commit: the signature verification is checked before author and committer
- * trust; web-flow is accepted as committer only, because genuine web-flow commits are
- * GitHub-signed, which the verification check enforces. */
-export function checkCommit(
-	entry: PullRequestCommit,
-	isTrusted: (account: GithubAccount) => boolean,
-): CommitProblem | null {
+/* The half of the §3.2 per-commit check that does not depend on trust: the signature
+ * verification, which comes first, then the principals the payload has to map at all. Split out
+ * so the caller can settle a commit on these before spending a membership lookup on it. */
+export function checkCommitStructure(entry: PullRequestCommit): CommitProblem | null {
 	const { author, commit, committer } = entry;
 	const { verification } = commit;
 	if (verification === null || !verification.verified) {
 		return "unverified-commit";
 	}
-	if (author === null || !isTrusted(author)) {
-		return "untrusted-commit";
-	}
-	if (committer === null || (!isWebFlow(committer) && !isTrusted(committer))) {
+	if (author === null || committer === null) {
 		return "untrusted-commit";
 	}
 	return null;
+}
+/* The trust half of §3.2: every principal the commit needs must be trusted. commitPrincipals is
+ * the single source of which those are — the web-flow committer exemption included — so the rule
+ * is stated once and the caller resolves exactly the accounts this checks. Meaningful only for a
+ * commit that has passed checkCommitStructure: commitPrincipals drops unmapped principals rather
+ * than failing on them. */
+export function checkCommitTrust(
+	entry: PullRequestCommit,
+	isTrusted: (account: GithubAccount) => boolean,
+): CommitProblem | null {
+	if (commitPrincipals(entry).every((account) => isTrusted(account))) {
+		return null;
+	}
+	return "untrusted-commit";
+}
+/* SPEC.md §3.2 per commit, whole: the signature verification is checked before author and
+ * committer trust; web-flow is accepted as committer only, because genuine web-flow commits are
+ * GitHub-signed, which the verification check enforces. This is the rule the spec states and the
+ * §12 case matrix verifies; the pipeline applies the two halves separately so it can stop between
+ * them, and this composition is what fixes their order. */
+export function checkCommit(
+	entry: PullRequestCommit,
+	isTrusted: (account: GithubAccount) => boolean,
+): CommitProblem | null {
+	return checkCommitStructure(entry) ?? checkCommitTrust(entry, isTrusted);
 }
 
 /* SPEC.md §3 condition 5: only an APPROVED review by the App's own bot user for the current head

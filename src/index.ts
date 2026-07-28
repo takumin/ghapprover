@@ -20,8 +20,9 @@ import {
 } from "./github";
 import {
 	accountKey,
-	checkCommit,
 	checkCommitCount,
+	checkCommitStructure,
+	checkCommitTrust,
 	checkPullRequestState,
 	classifyPrincipal,
 	commitPrincipals,
@@ -160,29 +161,36 @@ function createTrustResolver(client: GithubClient, repoOwner: GithubAccount): Tr
 	return { isTrusted, resolve };
 }
 
-/** Trust stub that projects checkCommit onto its trust-independent problems. */
-const everyAccountTrusted = (): boolean => true;
-/* SPEC.md §3.2 in commit order, resolving each commit's principals lazily and one at a time
- * (memoized, §3.1). A trust-independent problem (verification, unmapped principals) settles the
- * commit before any lookup runs, and within a commit the principals stop at the first untrusted
- * one — a further lookup could not change that commit's outcome. Together with the first failing
- * commit ending the outer loop, a delivery that ends in a skip never bursts a lookup per
- * principal against the Worker subrequest allowance or GitHub's secondary rate limits. */
+/* One commit's principals (§3.2) resolved one at a time and memoized per delivery (§3.1),
+ * stopping at the first untrusted one — a further lookup could not change that commit's outcome.
+ * The verdicts land in the resolver's memo, which checkCommitTrust then reads synchronously. */
+async function resolveCommitPrincipals(
+	entry: PullRequestCommit,
+	trust: TrustResolver,
+): Promise<void> {
+	for (const account of commitPrincipals(entry)) {
+		// oxlint-disable-next-line no-await-in-loop -- sequential by design: parallel lookups are the burst §3.1 memoization cannot bound
+		if (!(await trust.resolve(account))) {
+			return;
+		}
+	}
+}
+/* SPEC.md §3.2 in commit order. A trust-independent problem settles the commit before any lookup
+ * runs, and the first failing commit ends the loop, so a delivery that ends in a skip never
+ * bursts a lookup per principal against the Worker subrequest allowance or GitHub's secondary
+ * rate limits. */
 async function findCommitProblem(
 	commits: readonly PullRequestCommit[],
 	trust: TrustResolver,
-): Promise<ReturnType<typeof checkCommit>> {
+): Promise<ReturnType<typeof checkCommitStructure>> {
 	for (const entry of commits) {
-		const structural = checkCommit(entry, everyAccountTrusted);
-		if (structural === null) {
-			for (const account of commitPrincipals(entry)) {
-				// oxlint-disable-next-line no-await-in-loop -- sequential by design: parallel lookups are the burst §3.1 memoization cannot bound
-				if (!(await trust.resolve(account))) {
-					break;
-				}
-			}
+		const structural = checkCommitStructure(entry);
+		if (structural !== null) {
+			return structural;
 		}
-		const problem = structural ?? checkCommit(entry, trust.isTrusted);
+		// oxlint-disable-next-line no-await-in-loop -- sequential by design: the first failing commit ends the loop, so later commits must not be resolved up front
+		await resolveCommitPrincipals(entry, trust);
+		const problem = checkCommitTrust(entry, trust.isTrusted);
 		if (problem !== null) {
 			return problem;
 		}
