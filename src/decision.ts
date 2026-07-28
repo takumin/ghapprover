@@ -142,11 +142,6 @@ export function precheckCommitCount(declaredCount: number): CommitCountProblem |
 	return null;
 }
 
-export type CommitProblem =
-	| CommitCountProblem
-	| "commit-count-mismatch"
-	| "untrusted-commit"
-	| "unverified-commit";
 /* SPEC.md §3.2: the fetched list must match the count the payload declared. The declared count
  * itself is settled by precheckCommitCount, which the caller runs before it spends the fetch. */
 export function checkCommitCount(
@@ -159,6 +154,9 @@ export function checkCommitCount(
 	return null;
 }
 
+/* What §3.2 can settle about one commit, as opposed to about the list (the count problems above).
+ * Each check below is typed by what it can actually return, so narrowing one is a local change. */
+export type CommitProblem = "untrusted-commit" | "unverified-commit";
 /* The half of the §3.2 per-commit check that does not depend on trust: the signature
  * verification, then the principals the payload has to map at all. Split out so the caller can
  * settle a commit on these before spending a membership lookup on it — and it must run before

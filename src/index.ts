@@ -52,14 +52,19 @@ const MAX_BODY_BYTES = 26_214_400;
 
 /**
  * SPEC.md §8's reason vocabulary, closed rather than illustrative because it is
- * what an operator greps. The §3 rows are the decision module's own unions, so
- * a renamed problem there is a compile error here rather than a silent change
- * to the logged vocabulary; the rest are this module's outcomes. Derived from
- * the decision signatures so "./decision" stays a single value import.
+ * what an operator greps. The §3 rows are one per decision check, each derived
+ * from what that check can actually return, so a renamed problem there is a
+ * compile error here rather than a silent change to the logged vocabulary — and
+ * a check narrowed to fewer members is caught here too, rather than being
+ * absorbed by a union wide enough to cover its siblings. The rest are this
+ * module's outcomes. Derived from the signatures rather than imported as types
+ * so "./decision" stays a single value import.
  */
 type Reason =
+	| NonNullable<ReturnType<typeof checkCommitCount>>
 	| NonNullable<ReturnType<typeof checkCommitStructure>>
 	| NonNullable<ReturnType<typeof checkPullRequestState>>
+	| NonNullable<ReturnType<typeof precheckCommitCount>>
 	| "already-approved"
 	| "author-not-trusted"
 	| "event-out-of-scope"
