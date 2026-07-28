@@ -267,13 +267,27 @@ describe("request routing", () => {
 	});
 
 	/* SPEC.md §8: a webhook URL pointing at the wrong path is what not-found exists to
-	 * surface, so the 404 has to be greppable in the logs, not only in the response body. */
-	it("logs the not-found decision", async () => {
+	 * surface, so the 404 has to be greppable in the logs, not only in the response body —
+	 * and greppable by the delivery id, which is all GitHub's Recent Deliveries shows the
+	 * operator for a failed delivery. The header carries it even on a request nothing reads
+	 * the body of. */
+	it.each([
+		{
+			expected: { decision: "error", deliveryId: DELIVERY_ID, reason: "not-found" },
+			headers: { "x-github-delivery": DELIVERY_ID },
+			name: "carrying the delivery id",
+		},
+		{
+			expected: { decision: "error", reason: "not-found" },
+			headers: {},
+			name: "without a delivery id header",
+		},
+	])("logs the not-found decision $name", async ({ expected, headers }) => {
 		expect.hasAssertions();
 		const logSpy = vi.spyOn(console, "log");
 		installFetchMock([]);
-		await dispatch(new Request(WEBHOOK_URL, { method: "GET" }));
-		expect(logSpy).toHaveBeenCalledWith({ decision: "error", reason: "not-found" });
+		await dispatch(new Request(WEBHOOK_URL, { headers, method: "GET" }));
+		expect(logSpy).toHaveBeenCalledWith(expected);
 		logSpy.mockRestore();
 	});
 });

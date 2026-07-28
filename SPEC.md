@@ -407,6 +407,13 @@ Emit at least the following to structured logs (Workers Logs):
 - `deliveryId` (X-GitHub-Delivery), `repo`, `prNumber`, `action`, `headSha`
 - `decision` (approved / skipped / error) and `reason`
 
+Every field is logged as soon as it is known, so an outcome decided early carries only
+what had been read by then. `deliveryId` comes from the headers alone, so it is present
+even on entries rejected before the body is looked at (`not-found`, `payload-too-large`,
+`invalid-signature`) — it is the only identifier GitHub's Recent Deliveries shows for a
+failed delivery, and therefore the one an operator greps by. The payload fields
+(`repo`, `prNumber`, `action`, `headSha`) appear only once the body has been parsed.
+
 `reason` is drawn from a closed vocabulary. This is the list an operator greps, so it is
 exhaustive rather than illustrative:
 

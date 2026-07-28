@@ -402,12 +402,19 @@ async function evaluateOrFail(request: Request, env: Env, log: LogFields): Promi
 		};
 	}
 }
-async function handleWebhook(request: Request, env: Env): Promise<Response> {
+/* SPEC.md §8: X-GitHub-Delivery is the only identifier GitHub's Recent Deliveries shows for a
+ * failed delivery, so it is what an operator carries into the logs. It is known from the headers
+ * alone, which is why every entry starts from this rather than from an empty field set. */
+function deliveryFields(request: Request): LogFields {
 	const log: LogFields = {};
 	const deliveryId = request.headers.get("x-github-delivery");
 	if (deliveryId !== null) {
 		log["deliveryId"] = deliveryId;
 	}
+	return log;
+}
+async function handleWebhook(request: Request, env: Env): Promise<Response> {
+	const log = deliveryFields(request);
 	const outcome = await evaluateOrFail(request, env, log);
 	logOutcome(log, outcome);
 	return respond(outcome);
@@ -418,13 +425,15 @@ export default {
 		if (request.method !== "POST" || new URL(request.url).pathname !== "/webhook") {
 			/* SPEC.md §8: the reason vocabulary is what an operator greps, and a webhook URL
 			 * pointing at the wrong path is exactly what not-found exists to surface — so it
-			 * has to leave a log entry, not only a 404 body. No delivery fields are known. */
+			 * has to leave a log entry, not only a 404 body, and that entry has to carry the
+			 * delivery id, which is all GitHub shows the operator for a failed delivery. The
+			 * payload fields stay unknown: nothing here reads the body. */
 			const outcome: Outcome = {
 				decision: "error",
 				httpStatus: HTTP_NOT_FOUND,
 				reason: "not-found",
 			};
-			logOutcome({}, outcome);
+			logOutcome(deliveryFields(request), outcome);
 			return respond(outcome);
 		}
 		return handleWebhook(request, env);
