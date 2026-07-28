@@ -1,4 +1,4 @@
-/* oxlint-disable max-lines -- exhaustive coverage of the seven-endpoint client in one deliverable file */
+/* oxlint-disable max-lines -- exhaustive coverage of the six-endpoint client in one deliverable file */
 import {
 	GithubApiError,
 	createApprovalReview,

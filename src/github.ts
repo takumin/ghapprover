@@ -8,7 +8,7 @@
  * contract and throws (fail closed, SPEC.md §9).
  */
 
-/* oxlint-disable max-lines -- the client factory, error mapping, and seven-endpoint frozen API live in one module by design */
+/* oxlint-disable max-lines -- the client factory, error mapping, and six-endpoint frozen API live in one module by design */
 
 import type {
 	GithubAccount,
