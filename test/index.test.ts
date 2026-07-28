@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { GithubAccount } from "../src/types";
 import { MAX_VERIFIABLE_COMMITS } from "../src/allowlist";
 import { privateKeyPemOnce } from "./app-key";
+import { sign } from "@octokit/webhooks-methods";
 import worker from "../src/index";
 
 /** Derived from the harness so "./fetch-stub" stays a single import (no-duplicate-imports). */
@@ -52,31 +53,12 @@ const RENOVATE_WRONG_ID: GithubAccount = { id: 2, login: "renovate[bot]", type: 
 const APP_BOT_USER: GithubAccount = { id: 201, login: "ghapprover[bot]", type: "Bot" };
 const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT_USER };
 
-const HEX_RADIX = 16;
-const HEX_PAD = 2;
-
 async function makeEnv(): Promise<Env> {
 	return {
 		GITHUB_APP_ID: "12345",
 		GITHUB_APP_PRIVATE_KEY: await privateKeyPemOnce(),
 		GITHUB_WEBHOOK_SECRET: SECRET,
 	};
-}
-
-async function signBody(secret: string, body: string): Promise<string> {
-	const encoder = new TextEncoder();
-	const key = await crypto.subtle.importKey(
-		"raw",
-		encoder.encode(secret),
-		{ hash: "SHA-256", name: "HMAC" },
-		false,
-		["sign"],
-	);
-	const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
-	const hex = Array.from(new Uint8Array(signature), (byte) =>
-		byte.toString(HEX_RADIX).padStart(HEX_PAD, "0"),
-	).join("");
-	return `sha256=${hex}`;
 }
 
 /** The base repository id; the head repo defaults to the same one, so PRs are not forks. */
@@ -234,7 +216,7 @@ async function postSigned(body: string, eventName = "pull_request", env?: Env): 
 		headers: {
 			"x-github-delivery": DELIVERY_ID,
 			"x-github-event": eventName,
-			"x-hub-signature-256": await signBody(SECRET, body),
+			"x-hub-signature-256": await sign(SECRET, body),
 		},
 		method: "POST",
 	});
@@ -304,7 +286,7 @@ describe("signature verification", () => {
 	it("rejects a signature over a tampered body", async () => {
 		expect.hasAssertions();
 		installFetchMock([]);
-		const signature = await signBody(SECRET, buildPayload());
+		const signature = await sign(SECRET, buildPayload());
 		const request = new Request(WEBHOOK_URL, {
 			body: buildPayload({ action: "synchronize" }),
 			headers: {
@@ -810,7 +792,7 @@ async function postSignedWithLength(body: string, contentLength: number): Promis
 			"content-length": String(contentLength),
 			"x-github-delivery": DELIVERY_ID,
 			"x-github-event": "pull_request",
-			"x-hub-signature-256": await signBody(SECRET, body),
+			"x-hub-signature-256": await sign(SECRET, body),
 		},
 		method: "POST",
 	});
