@@ -103,12 +103,15 @@ or cannot be determined, do not approve (fail closed).
 
 1. **Event condition**: a `pull_request` event whose action is one of `opened` /
    `reopened` / `synchronize` / `ready_for_review`
-2. **PR state**: the PR is open and not a draft
+2. **PR condition**: the PR is open, is not a draft, and its head repository is the
+   repository the event came from — `pull_request.head.repo` is neither `null` (the head
+   repository was deleted) nor a different repository (a fork). See the second note below
 3. **Author condition**: the PR author (`pull_request.user`) is a "trusted principal" (§3.1)
 4. **Commit condition**: every commit in the PR passes verification (§3.2)
 5. **Duplication condition**: no review whose `user` is the App's own bot user
-   (`<app-slug>[bot]`), whose `state` is `APPROVED`, and whose `commit_id` equals the
-   payload's `head.sha` exists yet (if one exists, do nothing and finish successfully).
+   (`<app-slug>[bot]`, matched on the login alone — see the third note below), whose
+   `state` is `APPROVED`, and whose `commit_id` equals the payload's `head.sha` exists yet
+   (if one exists, do nothing and finish successfully).
    Reviews in the `DISMISSED` state do not suppress re-approval: after a manual
    dismissal, the PR can be approved again on the next in-scope event. The reviews
    list API is paginated; fetch all pages
@@ -120,17 +123,30 @@ or cannot be determined, do not approve (fail closed).
 > webhooks for repositories outside the installation scope, so the only repository
 > control on the Worker side is the App's installation scope (§2). When installed with
 > "All repositories", per-repository control is handled on the ruleset side (§3.4).
->
-> PRs whose head repository is not the base repository (fork PRs) are not approved
-> (`head-repo-forked`), and neither are PRs whose `pull_request.head.repo` is `null`
-> because the head repository was deleted (`head-repo-missing`). §3.2's guarantee —
-> that third-party commits mixed into a trusted principal's PR block approval — rests
-> on `verification.verified` proving attribution, which holds only where write access
-> to the repository is itself the trust boundary. On a fork it is not: the base
-> repository's owner cannot see who is able to push to the head branch, so a
-> `synchronize` event can carry commits from someone else while the PR author stays
+
+> [!NOTE]
+> Condition 2's head-repository half: PRs whose head repository is not the one the event
+> came from (fork PRs) are not approved (`head-repo-forked`), and neither are PRs whose
+> `pull_request.head.repo` is `null` because the head repository was deleted
+> (`head-repo-missing`). The comparison is `pull_request.head.repo.id` against
+> `repository.id` — the payload's own repository, so no part of `pull_request.base` is
+> read (§5). §3.2's guarantee — that third-party commits mixed into a trusted principal's
+> PR block approval — rests on `verification.verified` proving attribution, which holds
+> only where write access to the repository is itself the trust boundary. On a fork it is
+> not: the base repository's owner cannot see who is able to push to the head branch, so
+> a `synchronize` event can carry commits from someone else while the PR author stays
 > trusted. The intended use case (§1) pushes branches to the repository itself, so the
 > check costs nothing it needs, and it runs before any API call.
+
+> [!NOTE]
+> Condition 5 matches the App's own bot user on its login alone — the one identity check
+> here that does not also pin a numeric id (§3.1, §3.2). `GET /app` returns the App's id,
+> not its bot user's, so there is no id to pin without a further lookup, and the match is
+> safe without one: a registrable GitHub username is alphanumeric with single hyphens, so
+> no account a person can create carries a `[`, and the `<slug>[bot]` logins that do are
+> minted by GitHub from App slugs that are themselves unique. A false match could in any
+> case only suppress an approval, never grant one — which is the asymmetry that makes an
+> id superfluous here and mandatory in the §3.1 and §3.2 exemptions, which do grant.
 
 ### 3.1 Trusted Principals
 
@@ -190,10 +206,13 @@ For each commit:
   impersonate a trusted principal — or the `web-flow` user, via `noreply@github.com` —
   by forging the email. A verified signature guarantees the attribution is backed by a
   key registered to the attributed account, or by GitHub itself (web UI / API commits)
-- `author` (the author mapped to a GitHub user) is not null and its login is a trusted principal
-- `committer` is a trusted principal, or `web-flow` (a commit made via the GitHub web
-  UI or API; genuine web-flow commits are always GitHub-signed, which the `verified`
-  check above enforces). `web-flow` is matched on login **and** numeric user id
+- `author` (the author mapped to a GitHub user) is not null and is a trusted principal
+  (§3.1), decided on the `(id, login)` pair rather than the login alone wherever the
+  decision is local — the org-membership branch is the one that resolves a bare login,
+  because a login is what the membership API takes
+- `committer` is not null and is either a trusted principal or `web-flow` (a commit made
+  via the GitHub web UI or API; genuine web-flow commits are always GitHub-signed, which
+  the `verified` check above enforces). `web-flow` is matched on login **and** numeric user id
   (`19864447`), for the same reason as the §3.1 bot allowlist: an identity exemption
   that decides approval must not turn on a login string alone
 
@@ -315,8 +334,9 @@ In that case, do not add the owner or the App to the bypass actors.
 flowchart TD
     A["POST /webhook"] --> B{"1. Verify X-Hub-Signature-256"}
     B -->|invalid| R401["401"]
-    B -->|valid| C{"2. Check event type and action"}
-    C -->|out of scope| R200A["200 (log the reason)"]
+    B -->|valid| C{"2. Check the event and action, parse the payload,<br>check the PR condition (§3 cond. 1-2)"}
+    C -->|out of scope / unsatisfied| R200A["200 (log the reason)"]
+    C -->|unmodeled payload / no installation.id| R500["500 (log the reason)"]
     C -->|in scope| D["3. Obtain an installation token"]
     D --> E{"4. Evaluate the author condition<br>(membership API if needed)"}
     E -->|unsatisfied| R200B["200 (log the reason)"]
@@ -333,9 +353,10 @@ flowchart TD
 - Processing is **synchronous** (not deferred to `ctx.waitUntil`). GitHub API calls per
   delivery: token issuance, commit list (up to 3 pages), membership checks (one per
   distinct non-bot author/committer, memoized within the delivery, §3.1), the App slug
-  fetch (`GET /app`, §3 condition 5), existing reviews (paginated), the live PR fetch,
-  and the review POST — typically under 10 calls for PRs authored by the owner or an
-  allowed bot. Being synchronous means the outcome is
+  fetch (`GET /app`, §3 condition 5 — the one call authenticated with the App JWT rather
+  than an installation token (§7), and the one needing no permission at all), existing
+  reviews (paginated), the live PR fetch, and the review POST — typically under 10 calls
+  for PRs authored by the owner or an allowed bot. Being synchronous means the outcome is
   recorded as-is in GitHub's Recent Deliveries, and failures can be safely re-executed via
   manual redelivery (the approval process is idempotent as described in §6).
 - **One deadline bounds the whole delivery**: a single wall-clock budget for the delivery
@@ -350,10 +371,13 @@ flowchart TD
   the delivery closed (§9)
 - **Membership lookups are resolved lazily, one at a time, in commit order** (memoized per
   delivery, §3.1), and the first failing commit stops the loop. This is not only a latency
-  choice: Workers allows 50 subrequests per request on the Free plan (1000 on paid), and a
-  250-commit PR with distinct principals would otherwise burst up to two lookups per commit
-  before any of them could matter. Parallelising them would reintroduce that burst — and a
-  race between two concurrent lookups of the same login that the memoization cannot bound
+  choice: Workers allows 50 subrequests per request on the Free plan (10,000 on paid), and
+  resolving every principal up front would spend up to two lookups per commit on a delivery
+  that one early commit already settles. What laziness bounds is exactly that path — a PR
+  whose commits are all trusted looks up every distinct principal either way, and a large
+  enough one exhausts the Free-plan allowance and fails the delivery closed (§9). It also
+  removes, by resolving one at a time, a race between two concurrent lookups of the same
+  login that the memoization cannot bound
 - **The body read is bounded at GitHub's 25 MB cap** (§9). The HMAC covers the raw body,
   so step 1 has to buffer it before the caller is authenticated at all — which makes the
   buffer the one thing an unauthenticated caller on the public endpoint controls. A
@@ -384,7 +408,8 @@ the information needed for evaluation comes from the following.
   deployments run under a different login (their own app slug, or a PAT user of type
   `User`) and are not matched by design
 - No runtime configuration loading, schema validation, or "configuration missing" branches are
-  needed. Constants are verified at build time by TypeScript's type checking
+  needed. The constants are literals whose shape TypeScript checks at build time; whether a
+  given numeric id is the right one is settled by review and by the tests, not by the compiler
 
 ## 6. Idempotency and Duplicate Deliveries
 
@@ -398,7 +423,7 @@ the information needed for evaluation comes from the following.
 | Secret                 | Storage        | Purpose                                           |
 | ---------------------- | -------------- | ------------------------------------------------- |
 | GitHub App ID          | Workers Secret | App JWT `iss` claim (§5 rules out vars)           |
-| GitHub App private key | Workers Secret | Signing the JWT used to issue installation tokens |
+| GitHub App private key | Workers Secret | Signing the App JWT, which issues installation tokens and authenticates the App endpoints (`GET /app`, §4) |
 | Webhook secret         | Workers Secret | Signature verification                            |
 
 - An installation token is issued per event for the installation identified by the
@@ -425,10 +450,12 @@ Emit at least the following to structured logs (Workers Logs):
 - `decision` (approved / skipped / error) and `reason`
 
 Every field is logged as soon as it is known, so an outcome decided early carries only
-what had been read by then. `deliveryId` comes from the headers alone, so it is present
-even on entries rejected before the body is looked at (`not-found`, `payload-too-large`,
-`invalid-signature`) — it is the only identifier GitHub's Recent Deliveries shows for a
-failed delivery, and therefore the one an operator greps by. The payload fields
+what had been read by then. `deliveryId` comes from the headers alone, so it survives on
+entries rejected before the body is looked at (`payload-too-large`, `invalid-signature`) —
+it is the only identifier GitHub's Recent Deliveries shows for a failed delivery, and
+therefore the one an operator greps by. It is omitted rather than defaulted when the header
+is absent, which is the ordinary case for `not-found`: a request that never reached
+`POST /webhook` is usually not a GitHub delivery at all. The payload fields
 (`repo`, `prNumber`, `action`, `headSha`) appear only once the body has been parsed.
 
 `reason` is drawn from a closed vocabulary. This is the list an operator greps, so it is
@@ -440,8 +467,8 @@ exhaustive rather than illustrative:
 | skipped    | `event-out-of-scope`    | Not a `pull_request` event, or an action outside §3 cond. 1                |
 | skipped    | `pr-not-open`           | §3 condition 2: the PR is closed or merged                                 |
 | skipped    | `pr-draft`              | §3 condition 2: the PR is a draft                                          |
-| skipped    | `head-repo-missing`     | §3 note: `head.repo` is null (the head repository was deleted)             |
-| skipped    | `head-repo-forked`      | §3 note: the head repository is not the base repository                    |
+| skipped    | `head-repo-missing`     | §3 condition 2: `head.repo` is null (the head repository was deleted)      |
+| skipped    | `head-repo-forked`      | §3 condition 2: the head repository is not the repository itself (a fork)  |
 | skipped    | `author-not-trusted`    | §3 condition 3, including a membership 404                                 |
 | skipped    | `no-commits`            | §3.2: `pull_request.commits` is 0                                          |
 | skipped    | `too-many-commits`      | §3.2: more than the 250 the commits API can return                         |
@@ -449,7 +476,7 @@ exhaustive rather than illustrative:
 | skipped    | `unverified-commit`     | §3.2: a commit is not `verification.verified`                              |
 | skipped    | `untrusted-commit`      | §3.2: a commit author / committer is not a trusted principal               |
 | skipped    | `already-approved`      | §3 condition 5 / §6: an own APPROVE for this head exists                   |
-| skipped    | `head-moved`            | §3.3: the live PR no longer matches the payload                            |
+| skipped    | `head-moved`            | §3.3: the live PR was closed, turned draft, or left the payload's head     |
 | skipped    | `review-rejected`       | §9: the review POST returned 422                                           |
 | error      | `invalid-signature`     | §4 step 1: signature missing, malformed, or not matching                   |
 | error      | `payload-too-large`     | §4 step 1: a body above GitHub's 25 MB cap                                 |
@@ -472,17 +499,19 @@ exhaustive rather than illustrative:
 | Request body above GitHub's 25 MB payload cap                         | 413      | `payload-too-large`. Rejected on the declared `Content-Length` before the body is buffered, and on the byte count while it is (§4)  |
 | Out-of-scope event / action                                           | 200      | Log the reason                                                                                                                      |
 | Approval conditions unsatisfied                                       | 200      | Normal outcome. Log the reason                                                                                                      |
-| Membership API returns 404 (author is not an org member)              | 200      | Normal outcome (`author-not-trusted`), not an error                                                                                 |
+| Membership API returns 404 (the account is not an org member)         | 200      | Normal outcome, not an error: `author-not-trusted` for the PR author, `untrusted-commit` for a commit principal (§3.2)              |
 | Review POST returns 422 (PR closed / merged in the meantime)          | 200      | Normally prevented by the live PR check (§3.3); treated as a skip                                                                   |
 | Body is not the modeled `pull_request` payload                        | 500      | `invalid-payload`. The evaluation could not be completed                                                                            |
 | Delivery carries no `installation.id`                                 | 500      | `missing-installation`. An App delivery always carries one, so its absence is a configuration problem, not an unsatisfied condition |
 | Transient GitHub API failure                                          | 500      | Fail closed. Retryable via redelivery                                                                                               |
 | Whole-delivery deadline exhausted (§4)                                | 500      | `github-api-error` with `status: 0`. Fail closed                                                                                    |
+| Workers subrequest allowance exhausted (§4)                           | 500      | Fail closed. The reason follows how the runtime surfaces it — `github-api-error` if it reaches the client as a failure            |
 | Other GitHub API 4xx (401/403: insufficient permissions, rate limits) | 500      | Distinguish in logs as a configuration problem                                                                                      |
 
 No automatic retries of transient GitHub API failures (5xx / network errors /
-timeouts) inside the Worker (set timeouts on GitHub API calls). Re-execution is
-consolidated into manual redelivery on the GitHub side.
+timeouts) inside the Worker. What bounds a call that hangs is the whole-delivery
+deadline (§4), the only timeout in play: no per-call timeout is layered on top of
+it. Re-execution is consolidated into manual redelivery on the GitHub side.
 
 > [!NOTE]
 > The auth library (§11) internally performs two bounded auth-consistency

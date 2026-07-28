@@ -33,7 +33,8 @@ export function isTargetAction(action: string): boolean {
 }
 
 export type PrStateProblem = "head-repo-forked" | "head-repo-missing" | "pr-draft" | "pr-not-open";
-/* SPEC.md §3 condition 2, plus the §3 note's head-repository guards: deleted head repos and forks. */
+/* SPEC.md §3 condition 2: state and draft, plus the head-repository guards it covers —
+ * a deleted head repo, and a head repo that is not the one the event came from (a fork). */
 export function checkPullRequestState(
 	pr: EventPullRequest,
 	repository: EventRepository,
@@ -207,7 +208,7 @@ export function isLiveStateCurrent(live: LivePullRequest, expectedHeadSha: strin
 }
 
 /* A deleted head repository is absent rather than malformed, so it parses to null (SPEC.md §3
- * note); undefined is the parse failure, which is what keeps the two apart without boxing the
+ * condition 2); undefined is the parse failure, which is what keeps the two apart without boxing the
  * result — the sentinel every narrowing primitive uses (src/parse.ts). */
 function parseHeadRepo(value: unknown): PullRequestHead["repo"] | undefined {
 	if (value === null || value === undefined) {
