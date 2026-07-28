@@ -351,6 +351,11 @@ const REVIEWS_POST_URL = `${BASE}/repos/octo/hello/pulls/5/reviews`;
 function reviewPostRoute(payload: unknown, status: number): PlannedRoute {
 	return jsonRoute({ method: "POST", payload, status, url: REVIEWS_POST_URL });
 }
+/** The same POST against another repository, to exercise endpoint attribution. */
+function reviewPostRouteOn(repo: string, status: number): PlannedRoute {
+	const url = `${BASE}/repos/octo/${repo}/pulls/${PULL_NUMBER}/reviews`;
+	return jsonRoute({ method: "POST", payload: { message: "boom" }, status, url });
+}
 
 describe("createApprovalReview()", () => {
 	it("returns created on 200 and posts commit_id with APPROVE", async () => {
@@ -380,6 +385,17 @@ describe("createApprovalReview()", () => {
 		installFetchMock([tokenRoute(), reviewPostRoute({ message: "boom" }, HTTP_INTERNAL_ERROR)]);
 		const promise = createApprovalReview(await makeClient(), REPO, PULL_NUMBER, "head-sha");
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
+		await expect(promise).rejects.toMatchObject({
+			endpoint: "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+			status: HTTP_INTERNAL_ERROR,
+		});
+	});
+
+	it("does not attribute a repository named like the token path to token issuance", async () => {
+		expect.hasAssertions();
+		const repo = { owner: "octo", repo: "access_tokens" };
+		installFetchMock([tokenRoute(), reviewPostRouteOn(repo.repo, HTTP_INTERNAL_ERROR)]);
+		const promise = createApprovalReview(await makeClient(), repo, PULL_NUMBER, "head-sha");
 		await expect(promise).rejects.toMatchObject({
 			endpoint: "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
 			status: HTTP_INTERNAL_ERROR,

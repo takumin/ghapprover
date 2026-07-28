@@ -158,7 +158,12 @@ function required<Value>(value: Value | undefined, endpoint: string, status: num
 
 /** The auth strategy's internal request, issued lazily inside whichever call runs first. */
 const TOKEN_ENDPOINT = "POST /app/installations/{installation_id}/access_tokens";
-const TOKEN_PATH_MARKER = "/access_tokens";
+/**
+ * TOKEN_ENDPOINT's path, matched whole. A substring test would also match a
+ * repository, org, or user named after the marker — a repo named
+ * `access_tokens` would make every call to it look like the token request.
+ */
+const TOKEN_PATH_PATTERN = /^\/app\/installations\/\d+\/access_tokens$/u;
 
 interface HttpFailure {
 	readonly hasResponse: boolean;
@@ -193,19 +198,37 @@ function toHttpFailure(error: unknown): HttpFailure | null {
 	};
 }
 
+/** Path of the failed request ("" when the URL is absent or unparseable). */
+function pathnameOf(url: string): string {
+	try {
+		return new URL(url).pathname;
+	} catch {
+		return "";
+	}
+}
+
+/**
+ * Whether the auth strategy's internal token request is the one that failed,
+ * rather than the call the caller asked for. The strategy issues it lazily
+ * inside whichever call runs first, so its failure surfaces as that call's
+ * exception; those two are the only requests a single call dispatches.
+ */
+function isTokenRequestFailure(failure: HttpFailure): boolean {
+	return TOKEN_PATH_PATTERN.test(pathnameOf(failure.url));
+}
+
 /*
- * True only when the guarded endpoint itself failed with the given status. The auth strategy
- * issues its token request lazily inside whichever call runs first, so that internal failure
- * surfaces as the outer call's exception — without the URL check, a token-issuance 404 would
- * pass the membership guard and read as a normal "not a member" skip instead of the loud
+ * True only when the guarded endpoint itself failed with the given status —
+ * without excluding the token request, a token-issuance 404 would pass the
+ * membership guard and read as a normal "not a member" skip instead of the loud
  * configuration failure §9 requires.
  */
-function isHttpStatusOn(error: unknown, status: number, pathMarker: string): boolean {
+function isHttpStatusOn(error: unknown, status: number): boolean {
 	const failure = toHttpFailure(error);
 	if (failure === null) {
 		return false;
 	}
-	return failure.hasResponse && failure.status === status && failure.url.includes(pathMarker);
+	return failure.hasResponse && failure.status === status && !isTokenRequestFailure(failure);
 }
 
 /** HTTP failures keep their status, attributed to the auth strategy's token endpoint when its internal request is the one that failed. */
@@ -213,7 +236,7 @@ function httpFailureError(endpoint: string, failure: HttpFailure): GithubApiErro
 	if (!failure.hasResponse) {
 		return new GithubApiError(endpoint, NETWORK_FAILURE_STATUS, "network failure or timeout");
 	}
-	if (failure.url.includes(TOKEN_PATH_MARKER)) {
+	if (isTokenRequestFailure(failure)) {
 		return new GithubApiError(TOKEN_ENDPOINT, failure.status, "unexpected response status");
 	}
 	return new GithubApiError(endpoint, failure.status, "unexpected response status");
@@ -363,7 +386,7 @@ export async function fetchOrgMembership(
 		const response = await client.request(endpoint, { org, username });
 		return required(toMembership(response.data), endpoint, response.status);
 	} catch (error) {
-		if (isHttpStatusOn(error, HTTP_NOT_FOUND, "/memberships/")) {
+		if (isHttpStatusOn(error, HTTP_NOT_FOUND)) {
 			return NULL_RESULT;
 		}
 		throw toApiError(endpoint, error);
@@ -431,7 +454,7 @@ export async function createApprovalReview(
 		});
 		return "created";
 	} catch (error) {
-		if (isHttpStatusOn(error, HTTP_UNPROCESSABLE_ENTITY, "/reviews")) {
+		if (isHttpStatusOn(error, HTTP_UNPROCESSABLE_ENTITY)) {
 			return "rejected";
 		}
 		throw toApiError(endpoint, error);
