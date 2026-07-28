@@ -1,3 +1,5 @@
+/* GitHub payloads model absent data as null (src/types.ts), so null literals are deliberate here. */
+/* oxlint-disable unicorn/no-null */
 /* oxlint-disable max-lines -- exhaustive coverage of the six-endpoint client in one deliverable file */
 import {
 	GithubApiError,
@@ -17,10 +19,6 @@ import { privateKeyPemOnce } from "./app-key";
 /** Derived from the harness so "./fetch-stub" stays a single import (no-duplicate-imports). */
 type PlannedRoute = ReturnType<typeof jsonRoute>;
 type GithubClient = ReturnType<typeof createGithubClient>;
-
-/** GitHub payloads model absent data as null (src/types.ts). */
-// oxlint-disable-next-line unicorn/no-null -- single sanctioned null literal for the contract above
-const NULL = null;
 
 const BASE = "https://api.github.com";
 const REPO = { owner: "octo", repo: "hello" };
@@ -182,7 +180,7 @@ describe("listPullRequestCommits() mapping", () => {
 	it("maps fields and stops on a page without a link header", async () => {
 		expect.hasAssertions();
 		const webCommit = {
-			author: NULL,
+			author: null,
 			commit: { extra: true, verification: { reason: "valid", verified: true } },
 			committer: ACCOUNT,
 			sha: "sha-web",
@@ -200,7 +198,7 @@ describe("listPullRequestCommits() mapping", () => {
 				sha: "sha-a",
 			},
 			{
-				author: NULL,
+				author: null,
 				commit: { verification: { verified: true } },
 				committer: ACCOUNT,
 				sha: "sha-web",
@@ -300,14 +298,14 @@ describe("listPullRequestReviews()", () => {
 
 	it("maps null user and null commit_id", async () => {
 		expect.hasAssertions();
-		const dismissed = { commit_id: NULL, state: "DISMISSED", submitted_at: "ignored", user: NULL };
+		const dismissed = { commit_id: null, state: "DISMISSED", submitted_at: "ignored", user: null };
 		const mock = installFetchMock([
 			installTokenRoute(),
 			linkedRoute({ payload: [dismissed], url: reviewsUrl("?per_page=100") }),
 		]);
 		await expect(
 			listPullRequestReviews(await makeClient(), REPO, PULL_NUMBER),
-		).resolves.toStrictEqual([{ commit_id: NULL, state: "DISMISSED", user: NULL }]);
+		).resolves.toStrictEqual([{ commit_id: null, state: "DISMISSED", user: null }]);
 		mock.assertDone();
 	});
 });
@@ -398,7 +396,7 @@ const RATE_LIMIT_URL = `${BASE}/rate_limit`;
 /** The delivery signal the bounded fetch installs; absent means the wrapper did not run. */
 function dispatchedSignal(init: RequestInit): AbortSignal {
 	const { signal } = init;
-	if (signal === undefined || signal === NULL) {
+	if (signal === undefined || signal === null) {
 		throw new Error("no signal was installed on the dispatch");
 	}
 	return signal;

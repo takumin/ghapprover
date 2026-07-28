@@ -8,6 +8,8 @@
  * contract and throws (fail closed, SPEC.md §9).
  */
 
+/* The frozen contract (src/types.ts) models absent data as null, like the API, so null literals are deliberate here. */
+/* oxlint-disable unicorn/no-null */
 /* oxlint-disable max-lines -- the client factory, error mapping, and six-endpoint frozen API live in one module by design */
 
 import type {
@@ -41,10 +43,6 @@ const NETWORK_FAILURE_STATUS = 0;
 const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
 const HTTP_UNPROCESSABLE_ENTITY = 422;
-
-/** The frozen contract (src/types.ts) models absent data as null, like the API. */
-// oxlint-disable-next-line unicorn/no-null -- single sanctioned null literal for the contract above
-const NULL_RESULT = null;
 
 const GithubOctokit = Octokit.plugin(paginateRest);
 
@@ -182,17 +180,17 @@ interface HttpFailure {
  */
 function toHttpFailure(error: unknown): HttpFailure | null {
 	if (!(error instanceof Error)) {
-		return NULL_RESULT;
+		return null;
 	}
 	if (error.name === "AbortError" || error.name === "TimeoutError") {
 		return { hasResponse: false, status: NETWORK_FAILURE_STATUS, url: "" };
 	}
 	if (error.name !== "HttpError") {
-		return NULL_RESULT;
+		return null;
 	}
 	const status = field(error, "status");
 	if (typeof status !== "number") {
-		return NULL_RESULT;
+		return null;
 	}
 	return {
 		hasResponse: field(error, "response") !== undefined,
@@ -395,7 +393,7 @@ export async function fetchOrgMembership(
 		return required(toMembership(response.data), endpoint, response.status);
 	} catch (error) {
 		if (isHttpStatusOn(error, HTTP_NOT_FOUND)) {
-			return NULL_RESULT;
+			return null;
 		}
 		throw toApiError(endpoint, error);
 	}
