@@ -414,6 +414,21 @@ async function evaluateDelivery(request: Request, env: Env, log: LogFields): Pro
 	}
 	return evaluateBody(body, env, log);
 }
+/** True for anything but POST /webhook: a misdirected request, not a delivery to evaluate. */
+function isMisrouted(request: Request): boolean {
+	return request.method !== "POST" || new URL(request.url).pathname !== "/webhook";
+}
+/* SPEC.md §8: the reason vocabulary is what an operator greps, and a webhook URL pointing at the
+ * wrong path is exactly what not-found exists to surface — so it has to leave a log entry, not
+ * only a 404 body. Settled on the evaluation path rather than in fetch so every request leaves
+ * through the one log-and-respond frame; nothing has read the body, so the payload fields stay
+ * unknown. */
+async function evaluateRequest(request: Request, env: Env, log: LogFields): Promise<Outcome> {
+	if (isMisrouted(request)) {
+		return { decision: "error", httpStatus: HTTP_NOT_FOUND, reason: "not-found" };
+	}
+	return evaluateDelivery(request, env, log);
+}
 /* SPEC.md §8 and §9: the one frame that maps a thrown failure onto an outcome, for the whole
  * delivery rather than the pipeline alone — reading the body and verifying the signature run
  * outside the pipeline and can reject on their own (a client disconnect or a truncated chunked
@@ -421,7 +436,7 @@ async function evaluateDelivery(request: Request, env: Env, log: LogFields): Pro
  * 500 and leave no log entry at all, which is the one outcome §8 does not allow. */
 async function evaluateOrFail(request: Request, env: Env, log: LogFields): Promise<Outcome> {
 	try {
-		return await evaluateDelivery(request, env, log);
+		return await evaluateRequest(request, env, log);
 	} catch (error) {
 		if (error instanceof GithubApiError) {
 			/* SPEC.md §9: keep status and endpoint so 401/403 configuration problems are distinguishable in logs. */
@@ -455,6 +470,7 @@ function deliveryFields(request: Request): LogFields {
 	}
 	return log;
 }
+/** The one terminal frame: every request leaves through exactly one log entry and one response. */
 async function handleWebhook(request: Request, env: Env): Promise<Response> {
 	const log = deliveryFields(request);
 	const outcome = await evaluateOrFail(request, env, log);
@@ -464,20 +480,6 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 
 export default {
 	async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
-		if (request.method !== "POST" || new URL(request.url).pathname !== "/webhook") {
-			/* SPEC.md §8: the reason vocabulary is what an operator greps, and a webhook URL
-			 * pointing at the wrong path is exactly what not-found exists to surface — so it
-			 * has to leave a log entry, not only a 404 body, and that entry has to carry the
-			 * delivery id, which is all GitHub shows the operator for a failed delivery. The
-			 * payload fields stay unknown: nothing here reads the body. */
-			const outcome: Outcome = {
-				decision: "error",
-				httpStatus: HTTP_NOT_FOUND,
-				reason: "not-found",
-			};
-			logOutcome(deliveryFields(request), outcome);
-			return respond(outcome);
-		}
 		return handleWebhook(request, env);
 	},
 } satisfies ExportedHandler<Env>;
