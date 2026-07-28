@@ -6,7 +6,7 @@
 /* oxlint-disable unicorn/no-null */
 /* oxlint-disable max-lines -- every §3 condition and the fail-closed payload parser belong to one pure module (SPEC.md §12) */
 
-import { ALLOWED_BOTS, MAX_VERIFIABLE_COMMITS, WEB_FLOW_LOGIN } from "./allowlist";
+import { ALLOWED_BOTS, MAX_VERIFIABLE_COMMITS, WEB_FLOW } from "./allowlist";
 import type {
 	EventPullRequest,
 	EventRepository,
@@ -60,6 +60,11 @@ export type TrustEvaluation =
 function isAllowedBot(user: GithubAccount): boolean {
 	return ALLOWED_BOTS.some((bot) => bot.id === user.id && bot.login === user.login);
 }
+/* SPEC.md §3.2: matched on login and numeric id, like the §3.1 allowlist. Both are identity
+ * exemptions that decide approval, so neither may turn on a login string alone. */
+function isWebFlow(account: GithubAccount): boolean {
+	return account.id === WEB_FLOW.id && account.login === WEB_FLOW.login;
+}
 
 /* SPEC.md §3.1: bots are trusted solely via the allowlist (login and numeric id both matching)
  * and never fall through to the owner/org checks; users on org repositories resolve through the
@@ -100,7 +105,7 @@ export function commitPrincipals(entry: PullRequestCommit): readonly GithubAccou
 	}
 	if (
 		committer !== null &&
-		committer.login !== WEB_FLOW_LOGIN &&
+		!isWebFlow(committer) &&
 		(author === null || committer.login !== author.login)
 	) {
 		principals.push(committer);
@@ -155,10 +160,7 @@ export function checkCommit(
 	if (author === null || !isTrustedLogin(author.login)) {
 		return "untrusted-commit";
 	}
-	if (
-		committer === null ||
-		(committer.login !== WEB_FLOW_LOGIN && !isTrustedLogin(committer.login))
-	) {
+	if (committer === null || (!isWebFlow(committer) && !isTrustedLogin(committer.login))) {
 		return "untrusted-commit";
 	}
 	return null;

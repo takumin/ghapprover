@@ -4,7 +4,8 @@
  * redeploying, so the approval conditions are always version-controlled.
  */
 
-export interface AllowedBot {
+/** A GitHub account pinned by both login and numeric id (SPEC.md §3.1, §3.2). */
+export interface AccountRef {
 	readonly login: string;
 	readonly id: number;
 }
@@ -16,18 +17,20 @@ export interface AllowedBot {
  * GitHub-native Dependabot, and the autofix.ci app; self-hosted lookalikes run
  * under different logins/ids and are rejected by design.
  */
-export const ALLOWED_BOTS: readonly AllowedBot[] = [
+export const ALLOWED_BOTS: readonly AccountRef[] = [
 	{ id: 29_139_614, login: "renovate[bot]" },
 	{ id: 49_699_333, login: "dependabot[bot]" },
 	{ id: 114_827_586, login: "autofix-ci[bot]" },
 ];
 
 /**
- * Committer login GitHub attributes to commits made via the web UI or API.
- * Accepted as committer only; genuine web-flow commits are always
- * GitHub-signed, which the verification check enforces (SPEC.md §3.2).
+ * The account GitHub attributes as committer to commits it creates itself (web
+ * UI or API). Accepted as committer only; genuine web-flow commits are always
+ * GitHub-signed, which the verification check enforces (SPEC.md §3.2). The
+ * numeric id is pinned alongside the login for the same reason as ALLOWED_BOTS:
+ * this exemption decides approval, so it must not turn on a login string alone.
  */
-export const WEB_FLOW_LOGIN = "web-flow";
+export const WEB_FLOW: AccountRef = { id: 19_864_447, login: "web-flow" };
 
 /**
  * The PR commits API returns at most 250 commits, so a PR declaring more can

@@ -183,8 +183,10 @@ For each commit:
   key registered to the attributed account, or by GitHub itself (web UI / API commits)
 - `author` (the author mapped to a GitHub user) is not null and its login is a trusted principal
 - `committer` is a trusted principal, or `web-flow` (a commit made via the GitHub web
-  UI; genuine web-flow commits are always GitHub-signed, which the `verified` check
-  above enforces)
+  UI or API; genuine web-flow commits are always GitHub-signed, which the `verified`
+  check above enforces). `web-flow` is matched on login **and** numeric user id
+  (`19864447`), for the same reason as the §3.1 bot allowlist: an identity exemption
+  that decides approval must not turn on a login string alone
 
 If even one commit fails these checks, do not approve. This ensures that if third-party
 commits get mixed into a trusted principal's PR (e.g. someone other than the maintainer
@@ -340,6 +342,7 @@ the information needed for evaluation comes from the following.
 | Target branches        | Not a control axis. `pull_request.base` is not read at all, so a PR into a long-lived release branch is approved on exactly the same terms as one into the default branch. Per-branch differences belong in rulesets (§3.4), which is where branch targeting already lives |
 | Repository / org owner | Webhook payload + GitHub API (§3.1)                                                                                                                                                                                                                                        |
 | Allowed bots           | In-code constant pairing login and numeric user id (e.g. `ALLOWED_BOTS = [{ login: "renovate[bot]", id: 29139614 }, { login: "dependabot[bot]", id: 49699333 }, { login: "autofix-ci[bot]", id: 114827586 }] as const`)                                                    |
+| Web-flow committer     | In-code constant in the same shape (`WEB_FLOW = { login: "web-flow", id: 19864447 }`), used for the §3.2 committer exemption only                                                                                                                                          |
 
 - To change the allowed bots, edit the constant and redeploy. The configuration is
   version-controlled in Git, and no path exists to rewrite the approval conditions at runtime

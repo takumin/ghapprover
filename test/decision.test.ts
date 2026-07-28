@@ -15,7 +15,7 @@ import type {
 	PullRequestEventPayload,
 	PullRequestReview,
 } from "../src/types";
-import { MAX_VERIFIABLE_COMMITS, WEB_FLOW_LOGIN } from "../src/allowlist";
+import { MAX_VERIFIABLE_COMMITS, WEB_FLOW } from "../src/allowlist";
 import {
 	TARGET_ACTIONS,
 	checkCommit,
@@ -49,7 +49,9 @@ const BOT_NAMED_OCTOCAT: GithubAccount = { id: 5, login: "octocat", type: "Bot" 
 const ALICE: GithubAccount = { id: 101, login: "alice", type: "User" };
 const BOB: GithubAccount = { id: 102, login: "bob", type: "User" };
 const MALLORY: GithubAccount = { id: 103, login: "mallory", type: "User" };
-const WEB_FLOW: GithubAccount = { id: 19_864_447, login: WEB_FLOW_LOGIN, type: "User" };
+const WEB_FLOW_USER: GithubAccount = { id: WEB_FLOW.id, login: WEB_FLOW.login, type: "User" };
+/** Same login, different account: the committer exemption must not fire on the login alone. */
+const WEB_FLOW_LOOKALIKE: GithubAccount = { id: 999, login: WEB_FLOW.login, type: "User" };
 const HUMAN: GithubAccount = { id: 301, login: "human", type: "User" };
 const APP_BOT: GithubAccount = { id: 201, login: BOT_LOGIN, type: "Bot" };
 const ACTIVE_ADMIN: OrgMembership = { role: "admin", state: "active" };
@@ -233,7 +235,12 @@ const COMMIT_CASES: readonly CommitCase[] = [
 		expected: null,
 		name: "the author doubling as committer",
 	},
-	{ entry: commit({ committer: WEB_FLOW }), expected: null, name: "a web-flow committer" },
+	{ entry: commit({ committer: WEB_FLOW_USER }), expected: null, name: "a web-flow committer" },
+	{
+		entry: commit({ committer: WEB_FLOW_LOOKALIKE }),
+		expected: "untrusted-commit",
+		name: "a web-flow lookalike committer with a different id",
+	},
 	{
 		entry: commit({ verification: { verified: false } }),
 		expected: "unverified-commit",
@@ -251,7 +258,7 @@ const COMMIT_CASES: readonly CommitCase[] = [
 		name: "an untrusted author",
 	},
 	{
-		entry: commit({ author: WEB_FLOW }),
+		entry: commit({ author: WEB_FLOW_USER }),
 		expected: "untrusted-commit",
 		name: "a web-flow author",
 	},
@@ -466,13 +473,18 @@ describe("commit principal collection", () => {
 			name: "the committer alone when the author is unmapped",
 		},
 		{
-			entry: commit({ author: ALICE, committer: WEB_FLOW }),
+			entry: commit({ author: ALICE, committer: WEB_FLOW_USER }),
 			expected: [ALICE],
 			name: "no web-flow committer",
 		},
 		{
-			entry: commit({ author: WEB_FLOW, committer: BOB }),
-			expected: [WEB_FLOW, BOB],
+			entry: commit({ author: ALICE, committer: WEB_FLOW_LOOKALIKE }),
+			expected: [ALICE, WEB_FLOW_LOOKALIKE],
+			name: "a web-flow lookalike committer, which must be resolved like any other",
+		},
+		{
+			entry: commit({ author: WEB_FLOW_USER, committer: BOB }),
+			expected: [WEB_FLOW_USER, BOB],
 			name: "web-flow when it is the author",
 		},
 	])("collects $name", ({ entry, expected }) => {
