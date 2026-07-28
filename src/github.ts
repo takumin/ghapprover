@@ -84,29 +84,16 @@ function shapeError(endpoint: string, status: number): GithubApiError {
 }
 
 /**
- * Fetch used for every dispatch the client makes, bounded by the delivery
- * deadline. The signal is installed at this layer because it is the only one
- * that reaches all three kinds of dispatch — plain calls, pagination follow-up
- * pages (which cannot carry per-call request options), and the auth strategy's
- * internal token request. The signal is created once per client, so it caps
- * their sum; it aborts as TimeoutError, which maps to status 0.
- */
-type BoundedFetch = (url: string, init: RequestInit) => Promise<Response>;
-/** Exported for tests: the delivery budget is 8 s of wall clock, which a test cannot wait out. */
-export function createBoundedFetch(delivery: AbortSignal): BoundedFetch {
-	return async (url: string, init: RequestInit): Promise<Response> => {
-		init.signal = delivery;
-		return fetch(url, init);
-	};
-}
-
-/**
  * Creates the per-delivery client. @octokit/auth-app authenticates the app
  * endpoints (e.g. GET /app) with the App JWT and everything else with an
  * installation token it issues lazily on first use. A before-request hook
- * pins the REST API version on every request, and the bounded fetch caps the
- * delivery as a whole, including the internal token request and pagination
- * follow-up pages (SPEC.md §4, §9, §11). The delivery budget starts here, so
+ * pins the REST API version on every request, and the request signal caps the
+ * delivery as a whole: octokit keeps it as a client-level default, the only
+ * form that reaches all three kinds of dispatch — plain calls, pagination
+ * follow-up pages (which carry no per-call request options), and the auth
+ * strategy's internal token request, which is issued through this same client.
+ * One signal for all of them caps their sum; it aborts as TimeoutError, which
+ * maps to status 0 (SPEC.md §4, §9, §11). The delivery budget starts here, so
  * the client is created once per delivery — with the one exception that
  * @octokit/auth-app dedupes in-flight token issuance process-wide by
  * installation id, so overlapping deliveries can share the first one's token
@@ -123,7 +110,7 @@ export function createGithubClient(
 			privateKey: credentials.privateKeyPem,
 		},
 		authStrategy: createAppAuth,
-		request: { fetch: createBoundedFetch(AbortSignal.timeout(DELIVERY_TIMEOUT_MS)) },
+		request: { signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS) },
 		userAgent: USER_AGENT,
 	});
 	client.hook.before("request", (options) => {

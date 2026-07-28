@@ -27,11 +27,21 @@ export interface RecordedRequest {
 	readonly body: string;
 	readonly headers: Record<string, string>;
 	readonly method: string;
+	/** The signal the dispatch carried, to assert the delivery budget reaches every call. */
+	readonly signal: AbortSignal | undefined;
 	readonly url: string;
 }
 export interface FetchMockSession {
 	readonly assertDone: () => void;
 	readonly requests: readonly RecordedRequest[];
+}
+
+/** The signal the caller put on the dispatch, so a test can assert the delivery budget reached it. */
+function dispatchedSignal(init: RequestInit | undefined): AbortSignal | undefined {
+	if (init === undefined) {
+		return undefined;
+	}
+	return init.signal ?? undefined;
 }
 
 /** JSON content-type first (octokit only parses JSON with one), then the planned extras. */
@@ -72,6 +82,7 @@ export function installFetchMock(routes: readonly PlannedRoute[]): FetchMockSess
 			body: bodyText,
 			headers: Object.fromEntries(request.headers),
 			method: request.method,
+			signal: dispatchedSignal(init),
 			url: request.url,
 		});
 		return new Response(route.body, { headers: responseHeaders(route), status: route.status });
