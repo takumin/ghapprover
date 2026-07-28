@@ -25,6 +25,14 @@ const API_VERSION = "2022-11-28";
 const USER_AGENT = "ghapprover";
 /** SPEC.md §9: no retries inside the Worker, but a timeout on every call. */
 const REQUEST_TIMEOUT_MS = 10_000;
+/**
+ * Whole-delivery budget, shared by every call the client makes (SPEC.md §4).
+ * Bounding each dispatch alone bounds none of them together, so a delivery
+ * could outlive GitHub's 10-second webhook timeout and land an approval whose
+ * delivery is recorded as failed. Set below that timeout to leave room for the
+ * signature check and the response.
+ */
+const DELIVERY_TIMEOUT_MS = 8000;
 const PAGE_SIZE = 100;
 /** GithubApiError status representing network-level failures and timeouts. */
 const NETWORK_FAILURE_STATUS = 0;
@@ -77,24 +85,31 @@ function shapeError(endpoint: string, status: number): GithubApiError {
 }
 
 /**
- * Fetch used for every dispatch the client makes. The signal is created here,
- * per dispatch, so plain calls, pagination follow-up pages, and the auth
- * strategy's internal token request each get their own fresh deadline — a
- * client-level signal would anchor one shared countdown at client creation,
- * and pagination page requests cannot carry per-call request options.
+ * Fetch used for every dispatch the client makes, bounded by two deadlines at
+ * once. The per-dispatch signal is created here, so plain calls, pagination
+ * follow-up pages, and the auth strategy's internal token request each get
+ * their own fresh budget (pagination page requests cannot carry per-call
+ * request options, so this layer is the only place that reaches all three).
+ * The delivery signal is created once per client and therefore caps the sum of
+ * them. Both abort as TimeoutError, which maps to status 0 either way.
  */
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
-	init.signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-	return fetch(url, init);
+type BoundedFetch = (url: string, init: RequestInit) => Promise<Response>;
+/** Exported for tests: the delivery budget is 8 s of wall clock, which a test cannot wait out. */
+export function createBoundedFetch(delivery: AbortSignal): BoundedFetch {
+	return async (url: string, init: RequestInit): Promise<Response> => {
+		init.signal = AbortSignal.any([delivery, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]);
+		return fetch(url, init);
+	};
 }
 
 /**
  * Creates the per-delivery client. @octokit/auth-app authenticates the app
  * endpoints (e.g. GET /app) with the App JWT and everything else with an
  * installation token it issues lazily on first use. A before-request hook
- * pins the REST API version on every request, and fetchWithTimeout bounds
- * every dispatch individually — including the internal token request and
- * pagination follow-up pages (SPEC.md §9, §11).
+ * pins the REST API version on every request, and the bounded fetch caps both
+ * each dispatch and the delivery as a whole — including the internal token
+ * request and pagination follow-up pages (SPEC.md §4, §9, §11). The delivery
+ * budget starts here, so the client is created once per delivery.
  */
 export function createGithubClient(
 	credentials: AppCredentials,
@@ -107,7 +122,7 @@ export function createGithubClient(
 			privateKey: credentials.privateKeyPem,
 		},
 		authStrategy: createAppAuth,
-		request: { fetch: fetchWithTimeout },
+		request: { fetch: createBoundedFetch(AbortSignal.timeout(DELIVERY_TIMEOUT_MS)) },
 		userAgent: USER_AGENT,
 	});
 	client.hook.before("request", (options) => {

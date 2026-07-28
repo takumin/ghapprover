@@ -2,6 +2,7 @@
 import {
 	GithubApiError,
 	createApprovalReview,
+	createBoundedFetch,
 	createGithubClient,
 	fetchAppSlug,
 	fetchOrgMembership,
@@ -383,5 +384,57 @@ describe("createApprovalReview()", () => {
 			endpoint: "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
 			status: HTTP_INTERNAL_ERROR,
 		});
+	});
+});
+
+const APP_URL = `${BASE}/app`;
+const RATE_LIMIT_URL = `${BASE}/rate_limit`;
+
+/** The composed signal the bounded fetch installs; absent means the wrapper did not run. */
+function dispatchedSignal(init: RequestInit): AbortSignal {
+	const { signal } = init;
+	if (signal === undefined || signal === NULL) {
+		throw new Error("no signal was installed on the dispatch");
+	}
+	return signal;
+}
+
+describe("delivery deadline", () => {
+	it("hands a spent delivery budget to the dispatch as an already-aborted signal", async () => {
+		expect.hasAssertions();
+		installFetchMock([jsonRoute({ method: "GET", payload: {}, status: HTTP_OK, url: APP_URL })]);
+		const delivery = new AbortController();
+		const bounded = createBoundedFetch(delivery.signal);
+		delivery.abort();
+		const init: RequestInit = { method: "GET" };
+		await bounded(APP_URL, init);
+		expect(dispatchedSignal(init)).toMatchObject({ aborted: true });
+	});
+
+	it("gives each dispatch its own signal while the delivery budget lasts", async () => {
+		expect.hasAssertions();
+		installFetchMock([
+			jsonRoute({ method: "GET", payload: {}, status: HTTP_OK, url: APP_URL }),
+			jsonRoute({ method: "GET", payload: {}, status: HTTP_OK, url: RATE_LIMIT_URL }),
+		]);
+		const delivery = new AbortController();
+		const bounded = createBoundedFetch(delivery.signal);
+		const first: RequestInit = { method: "GET" };
+		const second: RequestInit = { method: "GET" };
+		await expect(bounded(APP_URL, first)).resolves.toBeInstanceOf(Response);
+		await expect(bounded(RATE_LIMIT_URL, second)).resolves.toBeInstanceOf(Response);
+		expect(dispatchedSignal(first)).not.toBe(dispatchedSignal(second));
+		expect(dispatchedSignal(first)).toMatchObject({ aborted: false });
+	});
+
+	it("aborts an in-flight dispatch when the delivery budget expires mid-call", async () => {
+		expect.hasAssertions();
+		installFetchMock([jsonRoute({ method: "GET", payload: {}, status: HTTP_OK, url: APP_URL })]);
+		const delivery = new AbortController();
+		const bounded = createBoundedFetch(delivery.signal);
+		const init: RequestInit = { method: "GET" };
+		await bounded(APP_URL, init);
+		delivery.abort();
+		expect(dispatchedSignal(init)).toMatchObject({ aborted: true });
 	});
 });
