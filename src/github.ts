@@ -19,6 +19,7 @@ import type {
 	PullRequestCommit,
 	PullRequestReview,
 } from "./types";
+import { field, stringField, toAccount } from "./parse";
 import { Octokit } from "@octokit/core";
 import { createAppAuth } from "@octokit/auth-app";
 import { paginateRest } from "@octokit/plugin-paginate-rest";
@@ -119,23 +120,6 @@ export function createGithubClient(
 	return client;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null;
-}
-/** Key-variable accessor so no index-signature property is accessed by name. */
-function field(value: unknown, key: string): unknown {
-	if (isRecord(value)) {
-		return value[key];
-	}
-	return undefined;
-}
-function stringField(value: unknown, key: string): string | undefined {
-	const fieldValue = field(value, key);
-	if (typeof fieldValue === "string") {
-		return fieldValue;
-	}
-	return undefined;
-}
 /** Rejects the mapped-but-undefined sentinel: a missing field breaks the contract. */
 function required<Value>(value: Value | undefined, endpoint: string, status: number): Value {
 	if (value === undefined) {
@@ -255,16 +239,9 @@ function toApiError(endpoint: string, error: unknown): Error {
 /*
  * Mappers build fresh contract objects from unknown JSON; undefined signals a
  * malformed item and is converted into a GithubApiError by required() above.
+ * The field accessors and toAccount are shared with the payload parser
+ * (src/parse.ts) so both paths narrow the contract by the same rules.
  */
-function toAccount(value: unknown): GithubAccount | undefined {
-	const id = field(value, "id");
-	const login = stringField(value, "login");
-	const type = stringField(value, "type");
-	if (typeof id !== "number" || login === undefined || type === undefined) {
-		return undefined;
-	}
-	return { id, login, type };
-}
 function toNullableAccount(value: unknown): GithubAccount | null | undefined {
 	if (value === null) {
 		return value;

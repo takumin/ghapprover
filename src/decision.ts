@@ -18,6 +18,7 @@ import type {
 	PullRequestHead,
 	PullRequestReview,
 } from "./types";
+import { isRecord, toAccount } from "./parse";
 
 /** Actions evaluated for approval (SPEC.md §3 condition 1). */
 export const TARGET_ACTIONS: readonly string[] = [
@@ -208,24 +209,9 @@ export function isLiveStateCurrent(live: LivePullRequest, expectedHeadSha: strin
 	return live.state === "open" && !live.draft && live.head.sha === expectedHeadSha;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null;
-}
-
-function parseAccount(value: unknown): GithubAccount | null {
-	if (!isRecord(value)) {
-		return null;
-	}
-	const { id, login, type } = value;
-	if (typeof id !== "number" || typeof login !== "string" || typeof type !== "string") {
-		return null;
-	}
-	return { id, login, type };
-}
-
 /* A deleted head repository is absent rather than malformed, so it parses to null (SPEC.md §3
  * note); undefined is the parse failure, which is what keeps the two apart without boxing the
- * result — the same sentinel the response mappers use (src/github.ts). */
+ * result — the sentinel every narrowing primitive uses (src/parse.ts). */
 function parseHeadRepo(value: unknown): PullRequestHead["repo"] | undefined {
 	if (value === null || value === undefined) {
 		return null;
@@ -268,9 +254,9 @@ function parsePullRequest(value: unknown): EventPullRequest | null {
 	) {
 		return null;
 	}
-	const parsedUser = parseAccount(user);
+	const parsedUser = toAccount(user);
 	const parsedHead = parseHead(head);
-	if (parsedUser === null || parsedHead === null) {
+	if (parsedUser === undefined || parsedHead === null) {
 		return null;
 	}
 	return { commits, draft, head: parsedHead, number, state, user: parsedUser };
@@ -284,8 +270,8 @@ function parseRepository(value: unknown): EventRepository | null {
 	if (typeof id !== "number" || typeof name !== "string" || typeof fullName !== "string") {
 		return null;
 	}
-	const parsedOwner = parseAccount(owner);
-	if (parsedOwner === null) {
+	const parsedOwner = toAccount(owner);
+	if (parsedOwner === undefined) {
 		return null;
 	}
 	return { full_name: fullName, id, name, owner: parsedOwner };
