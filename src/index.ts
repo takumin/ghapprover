@@ -127,20 +127,16 @@ function recordPayload(log: LogFields, payload: PullRequestEventPayload): void {
 	log["prNumber"] = payload.pull_request.number;
 	log["repo"] = payload.repository.full_name;
 }
+/** The §8 fields an outcome carries only for the outcomes they apply to; httpStatus is not logged. */
+const OPTIONAL_LOG_FIELDS = ["reason", "endpoint", "status", "errorName"] as const;
 /** Exactly one structured log entry per handled webhook delivery (SPEC.md §8). */
 function logOutcome(log: LogFields, outcome: Outcome): void {
 	log["decision"] = outcome.decision;
-	if (outcome.reason !== undefined) {
-		log["reason"] = outcome.reason;
-	}
-	if (outcome.endpoint !== undefined) {
-		log["endpoint"] = outcome.endpoint;
-	}
-	if (outcome.status !== undefined) {
-		log["status"] = outcome.status;
-	}
-	if (outcome.errorName !== undefined) {
-		log["errorName"] = outcome.errorName;
+	for (const key of OPTIONAL_LOG_FIELDS) {
+		const value = outcome[key];
+		if (value !== undefined) {
+			log[key] = value;
+		}
 	}
 	console.log(log);
 }
