@@ -178,7 +178,7 @@ interface HttpFailure {
 /**
  * Narrows a thrown octokit failure: a RequestError (name "HttpError", with a
  * response for HTTP failures and without one for transport failures) or an
- * aborted fetch (the per-call timeout signal firing).
+ * aborted fetch (the delivery deadline firing).
  */
 function toHttpFailure(error: unknown): HttpFailure | null {
 	if (!(error instanceof Error)) {

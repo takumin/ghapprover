@@ -406,7 +406,7 @@ describe("createApprovalReview()", () => {
 const APP_URL = `${BASE}/app`;
 const RATE_LIMIT_URL = `${BASE}/rate_limit`;
 
-/** The composed signal the bounded fetch installs; absent means the wrapper did not run. */
+/** The delivery signal the bounded fetch installs; absent means the wrapper did not run. */
 function dispatchedSignal(init: RequestInit): AbortSignal {
 	const { signal } = init;
 	if (signal === undefined || signal === NULL) {

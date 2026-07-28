@@ -510,13 +510,13 @@ class of exceptions: GitHub's official `@octokit/*` packages. Hand-rolling the
 GitHub-facing plumbing is more code to audit than the packages it replaces, so where
 an official package covers a concern, the implementation must delegate to it:
 
-| Concern                              | Package                         | Notes                                                              |
-| ------------------------------------ | ------------------------------- | ------------------------------------------------------------------ |
-| Webhook signature verification (§4)  | `@octokit/webhooks-methods`     | `verify()` is Web Crypto based and timing-safe (§7)                |
-| App JWT and installation tokens (§7) | `@octokit/auth-app`             | RS256 JWT, token issuance, in-memory token cache                   |
-| REST calls (§3, §4)                  | `@octokit/core`                 | per-call timeouts via an `AbortSignal` in the request options (§9) |
-| Pagination (§3.2, §3 condition 5)    | `@octokit/plugin-paginate-rest` | follows the `Link` header; no manual page loops                    |
-| Webhook payload types                | `@octokit/webhooks-types`       | devDependency; type definitions only, never bundled                |
+| Concern                              | Package                         | Notes                                                        |
+| ------------------------------------ | ------------------------------- | ------------------------------------------------------------ |
+| Webhook signature verification (§4)  | `@octokit/webhooks-methods`     | `verify()` is Web Crypto based and timing-safe (§7)          |
+| App JWT and installation tokens (§7) | `@octokit/auth-app`             | RS256 JWT, token issuance, in-memory token cache             |
+| REST calls (§3, §4)                  | `@octokit/core`                 | a delivery-wide `AbortSignal` bounds every dispatch (§4, §9) |
+| Pagination (§3.2, §3 condition 5)    | `@octokit/plugin-paginate-rest` | follows the `Link` header; no manual page loops              |
+| Webhook payload types                | `@octokit/webhooks-types`       | devDependency; type definitions only, never bundled          |
 
 Rules:
 
