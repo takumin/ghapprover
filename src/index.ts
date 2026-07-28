@@ -197,19 +197,24 @@ async function findCommitProblem(
 	return null;
 }
 
-/** SPEC.md §4 step 5 (§3.2): fetch all commits and verify every one of them. */
+/** SPEC.md §4 step 5 (§3.2): the declared count, then every fetched commit verified. */
 async function checkCommitCondition(
 	payload: PullRequestEventPayload,
 	client: GithubClient,
 	trust: TrustResolver,
 ): Promise<Outcome | null> {
 	const { pull_request: pullRequest } = payload;
-	const commits = await listPullRequestCommits(client, repoRef(payload), pullRequest.number);
-	const countProblem = checkCommitCount(commits.length, pullRequest.commits);
-	if (countProblem !== null) {
-		return skippedOutcome(countProblem);
+	/* Ahead of the fetch: what the declared count alone settles costs no subrequest to decide. */
+	const declaredProblem = precheckCommitCount(pullRequest.commits);
+	if (declaredProblem !== null) {
+		return skippedOutcome(declaredProblem);
 	}
-	const problem = await findCommitProblem(commits, trust);
+	const commits = await listPullRequestCommits(client, repoRef(payload), pullRequest.number);
+	/* A list that does not match the declared count settles the condition on its own, so the
+	 * per-commit walk (and the membership lookups it spends) only runs once the list is whole. */
+	const problem =
+		checkCommitCount(commits.length, pullRequest.commits) ??
+		(await findCommitProblem(commits, trust));
 	if (problem !== null) {
 		return skippedOutcome(problem);
 	}
@@ -224,10 +229,6 @@ async function evaluateConditions(
 ): Promise<Outcome | null> {
 	if (!(await trust(payload.pull_request.user))) {
 		return skippedOutcome("author-not-trusted");
-	}
-	const countProblem = precheckCommitCount(payload.pull_request.commits);
-	if (countProblem !== null) {
-		return skippedOutcome(countProblem);
 	}
 	return checkCommitCondition(payload, client, trust);
 }
