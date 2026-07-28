@@ -152,10 +152,12 @@ or cannot be determined, do not approve (fail closed).
 
 An account that, in the context of the PR, falls under any of the following:
 
-- **The repository owner themselves**: for personal repositories, a user whose `login`
-  and numeric `id` both match `repository.owner` (the same id pinning as the bot
-  allowlist below; the owner's id is in the webhook payload already)
-- **An organization owner**: for org repositories, a user for whom
+- **The repository owner themselves**: on a personal repository —
+  `repository.owner.type` is anything but `"Organization"` — a user whose `login` and
+  numeric `id` both match `repository.owner` (the same id pinning as the bot allowlist
+  below; the owner's id is in the webhook payload already)
+- **An organization owner**: on an org repository
+  (`repository.owner.type == "Organization"`), a user for whom
   `GET /orgs/{org}/memberships/{username}` returns `state=active` and `role=admin`.
   The `author_association` field of the webhook payload is not used for org-owner
   determination (it only reveals MEMBER)
@@ -166,6 +168,11 @@ An account that, in the context of the PR, falls under any of the following:
 
 Notes:
 
+- The three are branches, not a fallback chain. `repository.owner.type` selects between
+  the first two, so an org owner is always resolved through the membership API — the
+  owner-match never applies on an org repository, where `repository.owner` is the org
+  itself. A `Bot` account is settled by the allowlist alone and falls through to neither,
+  so a lookalike bot is rejected without spending a lookup on it
 - The definition is applied both to the PR author (condition 3) and to every commit
   author / committer (§3.2). Memoize membership API results per delivery (in memory)
   so each distinct user is looked up at most once
@@ -261,10 +268,17 @@ Mitigation:
    the meantime
 2. Still pass the payload's `head.sha` as `commit_id` so the review is anchored to the
    verified commit for display and audit purposes
-3. The remaining window (between the live check and the POST completing) is accepted
-   as residual risk: an interleaved push is processed as its own `synchronize` event,
-   and an unsigned interleaved commit cannot be merged anyway under the required
-   "Require signed commits" rule (§3.4)
+3. The remaining window (between the live check and the POST completing) is accepted as
+   residual risk, and what it costs is bounded but real. The approval is submitted after
+   an interleaved push, so that push does not dismiss it (second bullet above) and the
+   commit it carries ends up covered by an approval that never verified it. The push is
+   processed as its own `synchronize` event, which does not approve — but that does not
+   retract the approval already posted. An unsigned interleaved commit is still blocked
+   from merging by the required "Require signed commits" rule (§3.4); a **signed** commit
+   from an untrusted principal — an org member who is not an owner (§3.1) — is not, and
+   is the residual risk proper. Narrowing the window further would take review semantics
+   GitHub does not offer: `commit_id` does not scope what the approval counts for (first
+   bullet above), so there is nothing to pin the approval to the head it verified
 
 ### 3.4 Prerequisite Branch Protection / Ruleset Configuration (User's Responsibility)
 
@@ -287,8 +301,10 @@ Mitigation:
 
 - Enable "Dismiss stale pull request approvals when new commits are pushed"
   (both branch protection and rulesets have an equivalent option)
-- ghapprover re-verifies all commits and re-approves on every push, so with this
-  setting enabled, a PR stays approved only while all of its commits are trusted
+- ghapprover re-verifies all commits and re-approves on every push, so with this setting
+  enabled, a PR stays approved only while all of its commits are trusted — outside the
+  §3.3 window, where an approval submitted just after an interleaved push is not
+  dismissed by that push
 
 **Keeping human review required under "All repositories":**
 
@@ -309,6 +325,11 @@ In that case, do not add the owner or the App to the bypass actors.
 > rulesets are available from Free for public repositories and from Pro / Team and
 > above for private repositories. Repositories without a ruleset fall back to the
 > default behavior where "one approval from ghapprover satisfies the required review".
+> Branch protection is bounded the same way — public repositories on Free, private ones
+> from Pro — so on a Free-plan private repository neither prerequisite in this section
+> can be configured at all. The App itself still fails closed there (§3.2 is evaluated
+> regardless of what the repository requires); what is missing is the merge-side backstop
+> the §3.3 residual-risk argument leans on.
 
 **Operational caveats:**
 
@@ -332,7 +353,11 @@ In that case, do not add the owner or the App to the bypass actors.
 
 ```mermaid
 flowchart TD
-    A["POST /webhook"] --> B{"1. Verify X-Hub-Signature-256"}
+    A["Request"] --> Z{"Routed to POST /webhook?"}
+    Z -->|no| R404["404 (not-found)"]
+    Z -->|yes| L{"Read the body within the 25 MB cap<br>(part of step 1: the HMAC covers it)"}
+    L -->|over the cap| R413["413 (payload-too-large)"]
+    L -->|within the cap| B{"1. Verify X-Hub-Signature-256"}
     B -->|invalid| R401["401"]
     B -->|valid| C{"2. Check the event and action, parse the payload,<br>check the PR condition (§3 cond. 1-2)"}
     C -->|out of scope / unsatisfied| R200A["200 (log the reason)"]
@@ -346,8 +371,9 @@ flowchart TD
     G -->|already approved| R200D["200 (already approved)"]
     G -->|not yet approved| H{"7. Fetch the live PR:<br>open, non-draft, head.sha unchanged?"}
     H -->|mismatch| R200F["200 (head-moved)"]
-    H -->|unchanged| I["8. Post APPROVE with commit_id=head.sha"]
-    I --> R200E["9. Return 200"]
+    H -->|unchanged| I{"8. Post APPROVE with commit_id=head.sha"}
+    I -->|422| R200G["200 (review-rejected)"]
+    I -->|created| R200E["9. Return 200"]
 ```
 
 - Processing is **synchronous** (not deferred to `ctx.waitUntil`). GitHub API calls per
@@ -356,9 +382,12 @@ flowchart TD
   fetch (`GET /app`, §3 condition 5 — the one call authenticated with the App JWT rather
   than an installation token (§7), and the one needing no permission at all), existing
   reviews (paginated), the live PR fetch, and the review POST — typically under 10 calls
-  for PRs authored by the owner or an allowed bot. Being synchronous means the outcome is
-  recorded as-is in GitHub's Recent Deliveries, and failures can be safely re-executed via
-  manual redelivery (the approval process is idempotent as described in §6).
+  for PRs authored by the owner or an allowed bot. The calls run in that order, with one
+  exception: the App slug fetch and the reviews list are issued concurrently, since
+  neither takes an argument the other produces and both feed only the duplication check.
+  Being synchronous means the outcome is recorded as-is in GitHub's Recent Deliveries, and
+  failures can be safely re-executed via manual redelivery (the approval process is
+  idempotent as described in §6).
 - **One deadline bounds the whole delivery**: a single wall-clock budget for the delivery
   as a whole, set below GitHub's 10-second webhook timeout. It is created with the client
   and installed on every dispatch, so everything that client spends time on draws on it —
@@ -495,6 +524,7 @@ exhaustive rather than illustrative:
 
 | Situation                                                             | Response | Notes                                                                                                                               |
 | --------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| A request outside `POST /webhook`                                     | 404      | `not-found`. Logged like every other outcome (§8), so a webhook URL pointing at the wrong path is greppable rather than silent      |
 | Invalid signature / missing signature header                          | 401      | Do not process the body                                                                                                             |
 | Request body above GitHub's 25 MB payload cap                         | 413      | `payload-too-large`. Rejected on the declared `Content-Length` before the body is buffered, and on the byte count while it is (§4)  |
 | Out-of-scope event / action                                           | 200      | Log the reason                                                                                                                      |
@@ -507,6 +537,7 @@ exhaustive rather than illustrative:
 | Whole-delivery deadline exhausted (§4)                                | 500      | `github-api-error` with `status: 0`. Fail closed                                                                                    |
 | Workers subrequest allowance exhausted (§4)                           | 500      | Fail closed. The reason follows how the runtime surfaces it — `github-api-error` if it reaches the client as a failure              |
 | Other GitHub API 4xx (401/403: insufficient permissions, rate limits) | 500      | Distinguish in logs as a configuration problem                                                                                      |
+| Any other thrown failure                                              | 500      | `internal-error` with `errorName` (§8). Fail closed; the class name keeps a configuration mistake distinguishable from a code bug   |
 
 No automatic retries of transient GitHub API failures (5xx / network errors /
 timeouts) inside the Worker. What bounds a call that hangs is the whole-delivery
@@ -514,13 +545,13 @@ deadline (§4), the only timeout in play: no per-call timeout is layered on top 
 it. Re-execution is consolidated into manual redelivery on the GitHub side.
 
 > [!NOTE]
-> The auth library (§11) internally performs two bounded auth-consistency
-> retries, accepted as part of the delegated concern: a request that receives a
-> 401 within five seconds of installation-token issuance is retried while that
-> window lasts (GitHub's token replication delay), and an App JWT rejected for
-> clock skew is re-signed once with the reported time difference. Neither
-> retries transient API failures; on exhaustion the delivery still fails loud
-> per this table.
+> The auth library (§11) internally performs two bounded kinds of
+> auth-consistency retry, accepted as part of the delegated concern: a request
+> that receives a 401 within five seconds of installation-token issuance is
+> retried while that window lasts (GitHub's token replication delay), and an App
+> JWT rejected for clock skew is re-signed once with the reported time
+> difference. Neither retries transient API failures; on exhaustion the delivery
+> still fails loud per this table.
 >
 > The 401 retries wait between attempts (1 s, then 2 s, then 3 s), and those
 > waits fall inside the §4 delivery budget: it is one wall-clock deadline
