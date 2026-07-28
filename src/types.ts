@@ -69,11 +69,17 @@ export interface EventPullRequest {
 
 export interface PullRequestHead {
 	readonly sha: string;
-	/** Null when the head repository (e.g. a fork) was deleted (SPEC.md §3). */
+	/**
+	 * Null when the head repository (e.g. a fork) was deleted. The id must equal
+	 * `repository.id`, or the branch lives in a repository the author controls
+	 * (SPEC.md §3).
+	 */
 	readonly repo: { readonly id: number } | null;
 }
 
 export interface EventRepository {
+	/** Compared against `head.repo.id` to reject fork pull requests (SPEC.md §3). */
+	readonly id: number;
 	readonly name: string;
 	readonly full_name: string;
 	readonly owner: GithubAccount;

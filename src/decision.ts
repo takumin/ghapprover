@@ -4,6 +4,7 @@
  */
 /* GitHub payloads and types.ts model absence as null (SPEC.md fails closed), so null literals are deliberate here. */
 /* oxlint-disable unicorn/no-null */
+/* oxlint-disable max-lines -- the §3 rule set and the fail-closed payload parsing live in one module by design */
 
 import { ALLOWED_BOTS, MAX_VERIFIABLE_COMMITS, WEB_FLOW_LOGIN } from "./allowlist";
 import type {
@@ -31,9 +32,16 @@ export function isTargetAction(action: string): boolean {
 	return TARGET_ACTION_SET.has(action);
 }
 
-export type PrStateProblem = "head-repo-missing" | "pr-draft" | "pr-not-open";
-/** SPEC.md §3 condition 2, plus the deleted-fork guard from the §3 note. */
-export function checkPullRequestState(pr: EventPullRequest): PrStateProblem | null {
+export type PrStateProblem = "fork-pull-request" | "head-repo-missing" | "pr-draft" | "pr-not-open";
+/* SPEC.md §3 condition 2. The head branch must live in the base repository itself: on a
+ * repository the author controls, commits can be created through the API with a freely chosen
+ * author and a web-flow committer, and GitHub signs them — so §3.2 verification attests that
+ * GitHub created the commit, not that the attribution is genuine. A null head repo (deleted
+ * fork) fails the same condition and keeps its own reason for the §8 log. */
+export function checkPullRequestState(
+	pr: EventPullRequest,
+	repository: EventRepository,
+): PrStateProblem | null {
 	if (pr.state !== "open") {
 		return "pr-not-open";
 	}
@@ -42,6 +50,9 @@ export function checkPullRequestState(pr: EventPullRequest): PrStateProblem | nu
 	}
 	if (pr.head.repo === null) {
 		return "head-repo-missing";
+	}
+	if (pr.head.repo.id !== repository.id) {
+		return "fork-pull-request";
 	}
 	return null;
 }
@@ -247,15 +258,15 @@ function parseRepository(value: unknown): EventRepository | null {
 	if (!isRecord(value)) {
 		return null;
 	}
-	const { full_name: fullName, name, owner } = value;
-	if (typeof name !== "string" || typeof fullName !== "string") {
+	const { full_name: fullName, id, name, owner } = value;
+	if (typeof id !== "number" || typeof name !== "string" || typeof fullName !== "string") {
 		return null;
 	}
 	const parsedOwner = parseAccount(owner);
 	if (parsedOwner === null) {
 		return null;
 	}
-	return { full_name: fullName, name, owner: parsedOwner };
+	return { full_name: fullName, id, name, owner: parsedOwner };
 }
 
 function parseInstallation(value: unknown): { readonly id: number } | null {

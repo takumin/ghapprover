@@ -7,6 +7,7 @@
 
 import type {
 	EventPullRequest,
+	EventRepository,
 	GithubAccount,
 	LivePullRequest,
 	OrgMembership,
@@ -58,6 +59,8 @@ function isTrustedFixture(login: string): boolean {
 	return TRUSTED_LOGINS.has(login);
 }
 
+const BASE_REPO_ID = 555;
+
 interface PrStateOverrides {
 	readonly draft?: boolean;
 	readonly repo?: { readonly id: number } | null;
@@ -65,8 +68,12 @@ interface PrStateOverrides {
 }
 
 function eventPullRequest(overrides: PrStateOverrides = {}): EventPullRequest {
-	const { draft = false, repo = { id: 555 }, state = "open" } = overrides;
+	const { draft = false, repo = { id: BASE_REPO_ID }, state = "open" } = overrides;
 	return { commits: 1, draft, head: { repo, sha: HEAD_SHA }, number: 11, state, user: OCTOCAT };
+}
+
+function eventRepository(): EventRepository {
+	return { full_name: "octocat/widgets", id: BASE_REPO_ID, name: "widgets", owner: OCTOCAT };
 }
 
 interface CommitOverrides {
@@ -109,12 +116,12 @@ function expectedPayload(): PullRequestEventPayload {
 		pull_request: {
 			commits: 3,
 			draft: false,
-			head: { repo: { id: 555 }, sha: HEAD_SHA },
+			head: { repo: { id: BASE_REPO_ID }, sha: HEAD_SHA },
 			number: 42,
 			state: "open",
 			user: OCTOCAT,
 		},
-		repository: { full_name: "octocat/widgets", name: "widgets", owner: OCTOCAT },
+		repository: eventRepository(),
 	};
 }
 
@@ -320,7 +327,7 @@ const MALFORMED_PAYLOADS = [
 	{ name: "user not an object", payload: pr({ user: "octocat" }) },
 	{ name: "user id not numeric", payload: pr({ user: { id: "1", login: "o", type: "User" } }) },
 	{ name: "head not an object", payload: pr({ head: "deadbeef" }) },
-	{ name: "head sha missing", payload: pr({ head: { repo: { id: 555 } } }) },
+	{ name: "head sha missing", payload: pr({ head: { repo: { id: BASE_REPO_ID } } }) },
 	{ name: "head repo not an object", payload: pr({ head: { repo: "x", sha: HEAD_SHA } }) },
 	{ name: "head repo id not numeric", payload: pr({ head: { repo: { id: "5" }, sha: HEAD_SHA } }) },
 	{
@@ -335,7 +342,21 @@ const MALFORMED_PAYLOADS = [
 	},
 	{
 		name: "full_name not a string",
-		payload: merged(expectedPayload(), { repository: { full_name: 7, name: "w", owner: OCTOCAT } }),
+		payload: merged(expectedPayload(), {
+			repository: { full_name: 7, id: BASE_REPO_ID, name: "w", owner: OCTOCAT },
+		}),
+	},
+	{
+		name: "repository id missing",
+		payload: merged(expectedPayload(), {
+			repository: { full_name: "o/w", name: "w", owner: OCTOCAT },
+		}),
+	},
+	{
+		name: "repository id not numeric",
+		payload: merged(expectedPayload(), {
+			repository: { full_name: "o/w", id: "555", name: "w", owner: OCTOCAT },
+		}),
 	},
 ];
 
@@ -368,6 +389,11 @@ describe("pull request state gate", () => {
 		{ expected: "pr-draft", name: "a draft pull request", overrides: { draft: true } },
 		{ expected: "head-repo-missing", name: "a deleted head repo", overrides: { repo: null } },
 		{
+			expected: "fork-pull-request",
+			name: "a head branch in a fork",
+			overrides: { repo: { id: 556 } },
+		},
+		{
 			expected: "pr-not-open",
 			name: "a closed draft without head repo",
 			overrides: { draft: true, repo: null, state: "closed" },
@@ -377,9 +403,14 @@ describe("pull request state gate", () => {
 			name: "an open draft without head repo",
 			overrides: { draft: true, repo: null },
 		},
+		{
+			expected: "pr-draft",
+			name: "a draft pull request from a fork",
+			overrides: { draft: true, repo: { id: 556 } },
+		},
 	])("returns $expected for $name", ({ expected, overrides }) => {
 		expect.hasAssertions();
-		expect(checkPullRequestState(eventPullRequest(overrides))).toBe(expected);
+		expect(checkPullRequestState(eventPullRequest(overrides), eventRepository())).toBe(expected);
 	});
 });
 

@@ -29,6 +29,8 @@ const SECRET = "test-secret";
 const DELIVERY_ID = "delivery-42";
 const HEAD_SHA = "head-sha";
 const PULL_NUMBER = 5;
+const BASE_REPO_ID = 555;
+const FORK_REPO_ID = 556;
 const INSTALLATION_ID = 67_890;
 const INSTALL_TOKEN = "install-token";
 const APP_SLUG = "ghapprover";
@@ -92,7 +94,7 @@ function buildPayload(overrides: PayloadOverrides = {}): string {
 		action = "opened",
 		commits = 1,
 		draft = false,
-		headRepo = { id: 555 },
+		headRepo = { id: BASE_REPO_ID },
 		installation = { id: INSTALLATION_ID },
 		repoOwner = OWNER,
 		state = "open",
@@ -109,7 +111,12 @@ function buildPayload(overrides: PayloadOverrides = {}): string {
 			state,
 			user,
 		},
-		repository: { full_name: `${repoOwner.login}/hello`, name: "hello", owner: repoOwner },
+		repository: {
+			full_name: `${repoOwner.login}/hello`,
+			id: BASE_REPO_ID,
+			name: "hello",
+			owner: repoOwner,
+		},
 	});
 }
 
@@ -390,6 +397,20 @@ describe("pull request state", () => {
 			body: { decision: "skipped", reason: "head-repo-missing" },
 			status: HTTP_OK,
 		});
+	});
+
+	/* SPEC.md §3 condition 2: a fork head is rejected before any API call, even when the
+	 * author is the repository owner — on a repository the author controls, the §3.2
+	 * signature checks no longer attest that the attribution is genuine. */
+	it("skips an owner's pull request from a fork, with no api call", async () => {
+		expect.hasAssertions();
+		const session = installFetchMock([]);
+		const response = await postSigned(buildPayload({ headRepo: { id: FORK_REPO_ID } }));
+		await expectReply(response, {
+			body: { decision: "skipped", reason: "fork-pull-request" },
+			status: HTTP_OK,
+		});
+		expect(session.requests).toHaveLength(0);
 	});
 });
 

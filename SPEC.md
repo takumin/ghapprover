@@ -103,7 +103,10 @@ or cannot be determined, do not approve (fail closed).
 
 1. **Event condition**: a `pull_request` event whose action is one of `opened` /
    `reopened` / `synchronize` / `ready_for_review`
-2. **PR state**: the PR is open and not a draft
+2. **PR state**: the PR is open, is not a draft, and its head branch lives in the base repository
+   itself — `pull_request.head.repo.id` equals `repository.id`. Fork PRs are never approved
+   (`fork-pull-request`), and a `head.repo` of `null` (e.g. the fork was deleted) fails the same
+   condition (`head-repo-missing`)
 3. **Author condition**: the PR author (`pull_request.user`) is a "trusted principal" (§3.1)
 4. **Commit condition**: every commit in the PR passes verification (§3.2)
 5. **Duplication condition**: no review whose `user` is the App's own bot user
@@ -121,8 +124,9 @@ or cannot be determined, do not approve (fail closed).
 > control on the Worker side is the App's installation scope (§2). When installed with
 > "All repositories", per-repository control is handled on the ruleset side (§3.4).
 >
-> Fork PRs are evaluated under exactly the same conditions (author and commit checks).
-> If `pull_request.head.repo` is `null` (e.g. the fork was deleted), do not approve.
+> Fork PRs are out of scope (condition 2, §10). The §3.2 commit checks rest on GitHub's
+> signature attesting the commit's attribution, and that attestation does not survive a
+> repository the PR author controls: see the fork caveat in §3.2.
 
 ### 3.1 Trusted Principals
 
@@ -174,6 +178,18 @@ For each commit:
 If even one commit fails these checks, do not approve. This ensures that if third-party
 commits get mixed into a trusted principal's PR (e.g. someone other than the maintainer
 pushes to a bot branch), it is not approved.
+
+> [!WARNING]
+> These checks assume the commits were created in a repository whose write access is
+> already the trust boundary — which is why condition 2 restricts approval to PRs whose
+> head branch lives in the base repository. The "or by GitHub itself" half of the
+> verification guarantee attests only that GitHub created the commit; the commit-creation
+> APIs take the author (and committer) as caller-supplied fields. In a repository the PR
+> author controls — any fork — a commit can therefore be created with `author` set to a
+> trusted principal's address and `committer` set to `noreply@github.com`, and GitHub
+> signs it. Such a commit satisfies every bullet above: `verified` is `true`, `author`
+> maps to the trusted principal, and `committer` maps to `web-flow`. Verification alone
+> does not close this path, so the same-repository condition does.
 
 > [!IMPORTANT]
 > The PR commits API returns at most 250 commits. A PR whose `pull_request.commits`
@@ -358,7 +374,7 @@ Emit at least the following to structured logs (Workers Logs):
 - `decision` (approved / skipped / error) and `reason`
   (e.g. `author-not-trusted`, `untrusted-commit`, `unverified-commit`,
   `already-approved`, `too-many-commits`, `commit-count-mismatch`, `no-commits`,
-  `head-moved`)
+  `head-moved`, `fork-pull-request`, `head-repo-missing`)
 
 > [!WARNING]
 > Never log tokens, private keys, or the full webhook payload.
@@ -396,6 +412,7 @@ consolidated into manual redelivery on the GitHub side.
 
 ## 10. Out of Scope
 
+- Approving PRs whose head branch lives outside the base repository (fork PRs, §3 condition 2)
 - Merging PRs or enabling auto-merge
 - Checking CI status (required checks are the responsibility of branch protection)
 - Decisions based on PR body or diff content
