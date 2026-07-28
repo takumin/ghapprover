@@ -127,14 +127,20 @@ function getRoute(url: string, payload: unknown): PlannedRoute {
 function appRoute(): PlannedRoute {
 	return getRoute(APP_URL, { slug: APP_SLUG });
 }
-function membershipRouteFor(
-	login: string,
-	route: { readonly payload: unknown; readonly status: number },
-): PlannedRoute {
+/** The two membership answers §3.1 turns on: an active admin, or the 404 that means "not a member". */
+function membershipAdminRoute(login: string): PlannedRoute {
 	return jsonRoute({
 		method: "GET",
-		payload: route.payload,
-		status: route.status,
+		payload: { role: "admin", state: "active" },
+		status: HTTP_OK,
+		url: membershipUrl(login),
+	});
+}
+function membershipMissingRoute(login: string): PlannedRoute {
+	return jsonRoute({
+		method: "GET",
+		payload: { message: "Not Found" },
+		status: HTTP_NOT_FOUND,
 		url: membershipUrl(login),
 	});
 }
@@ -438,7 +444,7 @@ describe("author trust", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
-			membershipRouteFor("octo", { payload: { role: "admin", state: "active" }, status: HTTP_OK }),
+			membershipAdminRoute("octo"),
 			...pipelineRoutes({ commits: [commitItem()], owner: "acme", reviews: [] }),
 			reviewPostRoute("acme", HTTP_OK),
 		]);
@@ -449,10 +455,7 @@ describe("author trust", () => {
 
 	it("skips when the membership lookup returns 404", async () => {
 		expect.hasAssertions();
-		const session = installFetchMock([
-			installTokenRoute(),
-			membershipRouteFor("octo", { payload: { message: "Not Found" }, status: HTTP_NOT_FOUND }),
-		]);
+		const session = installFetchMock([installTokenRoute(), membershipMissingRoute("octo")]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
 		await expectReply(response, {
 			body: { decision: "skipped", reason: "author-not-trusted" },
@@ -573,7 +576,7 @@ describe("commit verification", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
-			membershipRouteFor("octo", { payload: { role: "admin", state: "active" }, status: HTTP_OK }),
+			membershipAdminRoute("octo"),
 			commitsRouteFor("acme", [
 				commitItem({ author: STRANGER, verified: false }),
 				commitItem({ author: STRANGER }),
@@ -615,9 +618,9 @@ describe("principal trust resolution", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
-			membershipRouteFor("octo", { payload: { role: "admin", state: "active" }, status: HTTP_OK }),
+			membershipAdminRoute("octo"),
 			commitsRouteFor("acme", [commitItem({ author: STRANGER, committer: OTHER_STRANGER })]),
-			membershipRouteFor("mallory", { payload: { message: "Not Found" }, status: HTTP_NOT_FOUND }),
+			membershipMissingRoute("mallory"),
 		]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
 		await expectReply(response, {
