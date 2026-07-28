@@ -154,36 +154,15 @@ const TOKEN_ENDPOINT = "POST /app/installations/{installation_id}/access_tokens"
 const TOKEN_PATH_PATTERN = /^\/app\/installations\/\d+\/access_tokens$/u;
 
 interface HttpFailure {
+	/**
+	 * Whether the auth strategy's internal token request is the one that failed,
+	 * rather than the call the caller asked for. The strategy issues it lazily
+	 * inside whichever call runs first, so its failure surfaces as that call's
+	 * exception; those two are the only requests a single call dispatches.
+	 */
+	readonly fromTokenRequest: boolean;
 	readonly hasResponse: boolean;
 	readonly status: number;
-	/** URL of the failed request ("" when unavailable), to tell whose failure this is. */
-	readonly url: string;
-}
-
-/**
- * Narrows a thrown octokit failure: a RequestError (name "HttpError", with a
- * response for HTTP failures and without one for transport failures) or an
- * aborted fetch (the delivery deadline firing).
- */
-function toHttpFailure(error: unknown): HttpFailure | null {
-	if (!(error instanceof Error)) {
-		return null;
-	}
-	if (error.name === "AbortError" || error.name === "TimeoutError") {
-		return { hasResponse: false, status: NETWORK_FAILURE_STATUS, url: "" };
-	}
-	if (error.name !== "HttpError") {
-		return null;
-	}
-	const status = field(error, "status");
-	if (typeof status !== "number") {
-		return null;
-	}
-	return {
-		hasResponse: field(error, "response") !== undefined,
-		status,
-		url: stringField(field(error, "request"), "url") ?? "",
-	};
 }
 
 /** Path of the failed request ("" when the URL is absent or unparseable). */
@@ -194,15 +173,37 @@ function pathnameOf(url: string): string {
 		return "";
 	}
 }
+/** Whether a thrown failure's `request` descriptor is the auth strategy's token request. */
+function isTokenRequest(request: unknown): boolean {
+	return TOKEN_PATH_PATTERN.test(pathnameOf(stringField(request, "url") ?? ""));
+}
 
 /**
- * Whether the auth strategy's internal token request is the one that failed,
- * rather than the call the caller asked for. The strategy issues it lazily
- * inside whichever call runs first, so its failure surfaces as that call's
- * exception; those two are the only requests a single call dispatches.
+ * Narrows a thrown octokit failure: a RequestError (name "HttpError", with a
+ * response for HTTP failures and without one for transport failures) or an
+ * aborted fetch (the delivery deadline firing). The request URL is resolved to
+ * fromTokenRequest here rather than carried, so both consumers below read the
+ * one answer instead of re-parsing the URL for it.
  */
-function isTokenRequestFailure(failure: HttpFailure): boolean {
-	return TOKEN_PATH_PATTERN.test(pathnameOf(failure.url));
+function toHttpFailure(error: unknown): HttpFailure | null {
+	if (!(error instanceof Error)) {
+		return null;
+	}
+	if (error.name === "AbortError" || error.name === "TimeoutError") {
+		return { fromTokenRequest: false, hasResponse: false, status: NETWORK_FAILURE_STATUS };
+	}
+	if (error.name !== "HttpError") {
+		return null;
+	}
+	const status = field(error, "status");
+	if (typeof status !== "number") {
+		return null;
+	}
+	return {
+		fromTokenRequest: isTokenRequest(field(error, "request")),
+		hasResponse: field(error, "response") !== undefined,
+		status,
+	};
 }
 
 /*
@@ -216,7 +217,7 @@ function isHttpStatusOn(error: unknown, status: number): boolean {
 	if (failure === null) {
 		return false;
 	}
-	return failure.hasResponse && failure.status === status && !isTokenRequestFailure(failure);
+	return failure.hasResponse && failure.status === status && !failure.fromTokenRequest;
 }
 
 /** HTTP failures keep their status, attributed to the auth strategy's token endpoint when its internal request is the one that failed. */
@@ -224,7 +225,7 @@ function httpFailureError(endpoint: string, failure: HttpFailure): GithubApiErro
 	if (!failure.hasResponse) {
 		return new GithubApiError(endpoint, NETWORK_FAILURE_STATUS, "network failure or timeout");
 	}
-	if (isTokenRequestFailure(failure)) {
+	if (failure.fromTokenRequest) {
 		return new GithubApiError(TOKEN_ENDPOINT, failure.status, "unexpected response status");
 	}
 	return new GithubApiError(endpoint, failure.status, "unexpected response status");
