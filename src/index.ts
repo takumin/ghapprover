@@ -277,8 +277,14 @@ async function approvePullRequest(
 		pullNumber: payload.pull_request.number,
 		repo: repoRef(payload),
 	};
-	const botLogin = await fetchAppBotLogin(client);
-	const reviews = await listPullRequestReviews(client, target.repo, target.pullNumber);
+	/* Independent: GET /app takes no argument the reviews list produces, and both feed only the
+	 * check below. Concurrency here is not the burst §3.1 memoization cannot bound — that is the
+	 * per-principal membership lookups, whose count follows the PR — but two fixed calls, so the
+	 * round trip they would otherwise serialize is spent out of the delivery budget for nothing. */
+	const [botLogin, reviews] = await Promise.all([
+		fetchAppBotLogin(client),
+		listPullRequestReviews(client, target.repo, target.pullNumber),
+	]);
 	if (hasOwnApproval(reviews, botLogin, target.headSha)) {
 		return skippedOutcome("already-approved");
 	}
