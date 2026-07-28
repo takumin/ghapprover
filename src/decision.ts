@@ -54,24 +54,28 @@ export function checkPullRequestState(
 	return null;
 }
 
+/** Derived from the allowlist so "./allowlist" stays a single value import. */
+type AccountRef = typeof WEB_FLOW;
+
+/* The identity every §3 trust decision is made against: the (id, login) pair, never the login
+ * alone. Every identity comparison below goes through it, and callers that cache or compare
+ * principals must key on it too — an account reusing a trusted login would otherwise inherit that
+ * trust and defeat the id pinning. Injective, because a numeric id cannot contain the separator. */
+export function accountKey(account: AccountRef): string {
+	return `${account.id}:${account.login}`;
+}
+
 export type TrustEvaluation =
 	| { readonly kind: "trusted" }
 	| { readonly kind: "untrusted" }
 	| { readonly kind: "org-membership"; readonly org: string; readonly login: string };
 function isAllowedBot(user: GithubAccount): boolean {
-	return ALLOWED_BOTS.some((bot) => bot.id === user.id && bot.login === user.login);
+	return ALLOWED_BOTS.some((bot) => accountKey(bot) === accountKey(user));
 }
 /* SPEC.md §3.2: matched on login and numeric id, like the §3.1 allowlist. Both are identity
  * exemptions that decide approval, so neither may turn on a login string alone. */
 function isWebFlow(account: GithubAccount): boolean {
-	return account.id === WEB_FLOW.id && account.login === WEB_FLOW.login;
-}
-
-/* The identity every §3 trust decision is made against: the (id, login) pair, never the login
- * alone. Callers that cache or compare principals must key on this, or an account reusing a
- * trusted login would inherit that trust and defeat the id pinning above. */
-export function accountKey(account: GithubAccount): string {
-	return `${account.id}:${account.login}`;
+	return accountKey(account) === accountKey(WEB_FLOW);
 }
 
 /* SPEC.md §3.1: bots are trusted solely via the allowlist (login and numeric id both matching)
