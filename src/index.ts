@@ -41,11 +41,13 @@ const HTTP_INTERNAL_ERROR = 500;
 /**
  * Evaluation result mapped onto the §9 status table and the §8 log entry.
  * endpoint and status (the GithubApiError fields; 0 = network failure) are
- * set for the github-api-error outcome only.
+ * set for the github-api-error outcome only; errorName (a thrown error's
+ * class name, never its message) for the internal-error outcome only.
  */
 interface Outcome {
 	readonly decision: "approved" | "error" | "skipped";
 	readonly endpoint?: string;
+	readonly errorName?: string;
 	readonly httpStatus: number;
 	readonly reason?: string;
 	readonly status?: number;
@@ -101,6 +103,9 @@ function logOutcome(log: LogFields, outcome: Outcome): void {
 	}
 	if (outcome.status !== undefined) {
 		log["status"] = outcome.status;
+	}
+	if (outcome.errorName !== undefined) {
+		log["errorName"] = outcome.errorName;
 	}
 	console.log(log);
 }
@@ -261,6 +266,13 @@ async function runPipeline(payload: PullRequestEventPayload, env: Env): Promise<
 	}
 	return approveWhenConditionsHold(payload, env, payload.installation.id);
 }
+/** The thrown value's class name only — never its message, which could carry anything (§8). */
+function thrownErrorName(error: unknown): string {
+	if (error instanceof Error) {
+		return error.name;
+	}
+	return "unknown";
+}
 async function processPayload(payload: PullRequestEventPayload, env: Env): Promise<Outcome> {
 	try {
 		return await runPipeline(payload, env);
@@ -275,7 +287,14 @@ async function processPayload(payload: PullRequestEventPayload, env: Env): Promi
 				status: error.status,
 			};
 		}
-		return errorOutcome("internal-error");
+		/* SPEC.md §9: the bounded class name keeps configuration mistakes (e.g. a PKCS#1 key the
+		 * auth library rejects) distinguishable from code bugs without touching §8's leak surface. */
+		return {
+			decision: "error",
+			errorName: thrownErrorName(error),
+			httpStatus: HTTP_INTERNAL_ERROR,
+			reason: "internal-error",
+		};
 	}
 }
 function parseBody(body: string): PullRequestEventPayload | null {

@@ -209,14 +209,14 @@ function happyRoutes(): PlannedRoute[] {
 	];
 }
 
-async function dispatch(request: Request): Promise<Response> {
+async function dispatch(request: Request, env?: Env): Promise<Response> {
 	const ctx = createExecutionContext();
-	const response = await worker.fetch(request, await makeEnv(), ctx);
+	const response = await worker.fetch(request, env ?? (await makeEnv()), ctx);
 	await waitOnExecutionContext(ctx);
 	return response;
 }
 
-async function postSigned(body: string, eventName = "pull_request"): Promise<Response> {
+async function postSigned(body: string, eventName = "pull_request", env?: Env): Promise<Response> {
 	const request = new Request(WEBHOOK_URL, {
 		body,
 		headers: {
@@ -226,7 +226,7 @@ async function postSigned(body: string, eventName = "pull_request"): Promise<Res
 		},
 		method: "POST",
 	});
-	return dispatch(request);
+	return dispatch(request, env);
 }
 
 interface ExpectedReply {
@@ -615,6 +615,31 @@ describe("live state checks", () => {
 			body: { decision: "skipped", reason: "review-rejected" },
 			status: HTTP_OK,
 		});
+		session.assertDone();
+	});
+});
+
+/** The PKCS#1 PEM shape GitHub serves, which the auth library rejects at import (SPEC.md §7). */
+const PKCS1_KEY_ENV: Env = {
+	GITHUB_APP_ID: "12345",
+	GITHUB_APP_PRIVATE_KEY: "-----BEGIN RSA PRIVATE KEY-----\nAAAA\n-----END RSA PRIVATE KEY-----\n",
+	GITHUB_WEBHOOK_SECRET: SECRET,
+};
+
+describe("auth configuration failures", () => {
+	it("errors with a bounded diagnostic when the private key is rejected", async () => {
+		expect.hasAssertions();
+		const logSpy = vi.spyOn(console, "log");
+		const session = installFetchMock([]);
+		const response = await postSigned(buildPayload(), "pull_request", PKCS1_KEY_ENV);
+		await expectReply(response, {
+			body: { decision: "error", reason: "internal-error" },
+			status: HTTP_INTERNAL_ERROR,
+		});
+		expect(logSpy).toHaveBeenCalledWith(
+			expect.objectContaining({ errorName: "Error", reason: "internal-error" }),
+		);
+		logSpy.mockRestore();
 		session.assertDone();
 	});
 });
