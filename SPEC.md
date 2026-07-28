@@ -5,7 +5,7 @@ A Cloudflare Workers application that automatically approves GitHub pull request
 **What it does:**
 
 - Acts as a GitHub App and automatically approves PRs created by the organization /
-  repository owner themselves or by allowed bots (Renovate / Dependabot)
+  repository owner themselves or by allowed bots (Renovate / Dependabot / autofix.ci)
 - This satisfies the required-review rules of branch protection / rulesets
 
 **Intended use case:** solo development or small teams that want to keep a
