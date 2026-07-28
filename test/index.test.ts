@@ -122,7 +122,7 @@ function installTokenRoute(): PlannedRoute {
 }
 /** A 200 GET route; every route the pipeline reads apart from the membership lookups is one. */
 function getRoute(url: string, payload: unknown): PlannedRoute {
-	return jsonRoute({ method: "GET", payload, status: 200, url });
+	return jsonRoute({ method: "GET", payload, status: HTTP_OK, url });
 }
 function appRoute(): PlannedRoute {
 	return getRoute(APP_URL, { slug: APP_SLUG });
@@ -364,45 +364,27 @@ describe("payload validation", () => {
 	});
 });
 
+/* SPEC.md §4 step 2: the state conditions are decided on the payload alone, so each of them
+ * settles the delivery before the client is built — which is what the request count asserts. */
 describe("pull request state", () => {
-	it("skips a draft pull request", async () => {
-		expect.hasAssertions();
-		installFetchMock([]);
-		const response = await postSigned(buildPayload({ draft: true }));
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "pr-draft" },
-			status: HTTP_OK,
-		});
-	});
-
-	it("skips a closed pull request", async () => {
-		expect.hasAssertions();
-		installFetchMock([]);
-		const response = await postSigned(buildPayload({ state: "closed" }));
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "pr-not-open" },
-			status: HTTP_OK,
-		});
-	});
-
-	it("skips when the head repository is gone", async () => {
-		expect.hasAssertions();
-		installFetchMock([]);
-		const response = await postSigned(buildPayload({ headRepo: null }));
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "head-repo-missing" },
-			status: HTTP_OK,
-		});
-	});
-
-	it("skips a fork pull request without dispatching a single call", async () => {
+	it.each([
+		{ name: "a draft pull request", overrides: { draft: true }, reason: "pr-draft" },
+		{ name: "a closed pull request", overrides: { state: "closed" }, reason: "pr-not-open" },
+		{
+			name: "a deleted head repository",
+			overrides: { headRepo: null },
+			reason: "head-repo-missing",
+		},
+		{
+			name: "a fork pull request",
+			overrides: { headRepo: { id: REPO_ID + 1 } },
+			reason: "head-repo-forked",
+		},
+	])("skips $name without dispatching a single call", async ({ overrides, reason }) => {
 		expect.hasAssertions();
 		const session = installFetchMock([]);
-		const response = await postSigned(buildPayload({ headRepo: { id: REPO_ID + 1 } }));
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "head-repo-forked" },
-			status: HTTP_OK,
-		});
+		const response = await postSigned(buildPayload(overrides));
+		await expectReply(response, { body: { decision: "skipped", reason }, status: HTTP_OK });
 		expect(session.requests).toHaveLength(0);
 	});
 });
