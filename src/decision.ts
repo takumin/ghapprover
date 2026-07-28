@@ -4,6 +4,7 @@
  */
 /* GitHub payloads and types.ts model absence as null (SPEC.md fails closed), so null literals are deliberate here. */
 /* oxlint-disable unicorn/no-null */
+/* oxlint-disable max-lines -- every §3 condition and the fail-closed payload parser belong to one pure module (SPEC.md §12) */
 
 import { ALLOWED_BOTS, MAX_VERIFIABLE_COMMITS, WEB_FLOW_LOGIN } from "./allowlist";
 import type {
@@ -31,9 +32,12 @@ export function isTargetAction(action: string): boolean {
 	return TARGET_ACTION_SET.has(action);
 }
 
-export type PrStateProblem = "head-repo-missing" | "pr-draft" | "pr-not-open";
-/** SPEC.md §3 condition 2, plus the deleted-fork guard from the §3 note. */
-export function checkPullRequestState(pr: EventPullRequest): PrStateProblem | null {
+export type PrStateProblem = "head-repo-forked" | "head-repo-missing" | "pr-draft" | "pr-not-open";
+/* SPEC.md §3 condition 2, plus the §3 note's head-repository guards: deleted head repos and forks. */
+export function checkPullRequestState(
+	pr: EventPullRequest,
+	repository: EventRepository,
+): PrStateProblem | null {
 	if (pr.state !== "open") {
 		return "pr-not-open";
 	}
@@ -42,6 +46,9 @@ export function checkPullRequestState(pr: EventPullRequest): PrStateProblem | nu
 	}
 	if (pr.head.repo === null) {
 		return "head-repo-missing";
+	}
+	if (pr.head.repo.id !== repository.id) {
+		return "head-repo-forked";
 	}
 	return null;
 }
@@ -247,15 +254,15 @@ function parseRepository(value: unknown): EventRepository | null {
 	if (!isRecord(value)) {
 		return null;
 	}
-	const { full_name: fullName, name, owner } = value;
-	if (typeof name !== "string" || typeof fullName !== "string") {
+	const { full_name: fullName, id, name, owner } = value;
+	if (typeof id !== "number" || typeof name !== "string" || typeof fullName !== "string") {
 		return null;
 	}
 	const parsedOwner = parseAccount(owner);
 	if (parsedOwner === null) {
 		return null;
 	}
-	return { full_name: fullName, name, owner: parsedOwner };
+	return { full_name: fullName, id, name, owner: parsedOwner };
 }
 
 function parseInstallation(value: unknown): { readonly id: number } | null {

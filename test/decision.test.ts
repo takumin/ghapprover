@@ -7,6 +7,7 @@
 
 import type {
 	EventPullRequest,
+	EventRepository,
 	GithubAccount,
 	LivePullRequest,
 	OrgMembership,
@@ -66,6 +67,14 @@ interface PrStateOverrides {
 	readonly state?: string;
 }
 
+/** The base repository every PR-state fixture is evaluated against; head repo 555 is not a fork. */
+const BASE_REPO: EventRepository = {
+	full_name: "octocat/widgets",
+	id: 555,
+	name: "widgets",
+	owner: OCTOCAT,
+};
+
 function eventPullRequest(overrides: PrStateOverrides = {}): EventPullRequest {
 	const { draft = false, repo = { id: 555 }, state = "open" } = overrides;
 	return { commits: 1, draft, head: { repo, sha: HEAD_SHA }, number: 11, state, user: OCTOCAT };
@@ -116,7 +125,7 @@ function expectedPayload(): PullRequestEventPayload {
 			state: "open",
 			user: OCTOCAT,
 		},
-		repository: { full_name: "octocat/widgets", name: "widgets", owner: OCTOCAT },
+		repository: { full_name: "octocat/widgets", id: 555, name: "widgets", owner: OCTOCAT },
 	};
 }
 
@@ -344,12 +353,20 @@ const MALFORMED_PAYLOADS = [
 	{
 		name: "repository owner id missing",
 		payload: merged(expectedPayload(), {
-			repository: { full_name: "o/w", name: "w", owner: { login: "o", type: "User" } },
+			repository: { full_name: "o/w", id: 555, name: "w", owner: { login: "o", type: "User" } },
 		}),
 	},
 	{
 		name: "full_name not a string",
-		payload: merged(expectedPayload(), { repository: { full_name: 7, name: "w", owner: OCTOCAT } }),
+		payload: merged(expectedPayload(), {
+			repository: { full_name: 7, id: 555, name: "w", owner: OCTOCAT },
+		}),
+	},
+	{
+		name: "repository id missing",
+		payload: merged(expectedPayload(), {
+			repository: { full_name: "o/w", name: "w", owner: OCTOCAT },
+		}),
 	},
 ];
 
@@ -382,6 +399,11 @@ describe("pull request state gate", () => {
 		{ expected: "pr-draft", name: "a draft pull request", overrides: { draft: true } },
 		{ expected: "head-repo-missing", name: "a deleted head repo", overrides: { repo: null } },
 		{
+			expected: "head-repo-forked",
+			name: "a head repo other than the base repo",
+			overrides: { repo: { id: 999 } },
+		},
+		{
 			expected: "pr-not-open",
 			name: "a closed draft without head repo",
 			overrides: { draft: true, repo: null, state: "closed" },
@@ -391,9 +413,14 @@ describe("pull request state gate", () => {
 			name: "an open draft without head repo",
 			overrides: { draft: true, repo: null },
 		},
+		{
+			expected: "pr-draft",
+			name: "a draft fork pull request",
+			overrides: { draft: true, repo: { id: 999 } },
+		},
 	])("returns $expected for $name", ({ expected, overrides }) => {
 		expect.hasAssertions();
-		expect(checkPullRequestState(eventPullRequest(overrides))).toBe(expected);
+		expect(checkPullRequestState(eventPullRequest(overrides), BASE_REPO)).toBe(expected);
 	});
 });
 

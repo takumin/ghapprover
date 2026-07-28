@@ -269,7 +269,7 @@ async function runPipeline(payload: PullRequestEventPayload, env: Env): Promise<
 	if (!isTargetAction(payload.action)) {
 		return skippedOutcome("event-out-of-scope");
 	}
-	const stateProblem = checkPullRequestState(payload.pull_request);
+	const stateProblem = checkPullRequestState(payload.pull_request, payload.repository);
 	if (stateProblem !== null) {
 		return skippedOutcome(stateProblem);
 	}

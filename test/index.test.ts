@@ -80,6 +80,9 @@ async function signBody(secret: string, body: string): Promise<string> {
 	return `sha256=${hex}`;
 }
 
+/** The base repository id; the head repo defaults to the same one, so PRs are not forks. */
+const REPO_ID = 555;
+
 interface PayloadOverrides {
 	readonly action?: string;
 	readonly commits?: number;
@@ -96,7 +99,7 @@ function buildPayload(overrides: PayloadOverrides = {}): string {
 		action = "opened",
 		commits = 1,
 		draft = false,
-		headRepo = { id: 555 },
+		headRepo = { id: REPO_ID },
 		installation = { id: INSTALLATION_ID },
 		repoOwner = OWNER,
 		state = "open",
@@ -113,7 +116,12 @@ function buildPayload(overrides: PayloadOverrides = {}): string {
 			state,
 			user,
 		},
-		repository: { full_name: `${repoOwner.login}/hello`, name: "hello", owner: repoOwner },
+		repository: {
+			full_name: `${repoOwner.login}/hello`,
+			id: REPO_ID,
+			name: "hello",
+			owner: repoOwner,
+		},
 	});
 }
 
@@ -394,6 +402,17 @@ describe("pull request state", () => {
 			body: { decision: "skipped", reason: "head-repo-missing" },
 			status: HTTP_OK,
 		});
+	});
+
+	it("skips a fork pull request without dispatching a single call", async () => {
+		expect.hasAssertions();
+		const session = installFetchMock([]);
+		const response = await postSigned(buildPayload({ headRepo: { id: REPO_ID + 1 } }));
+		await expectReply(response, {
+			body: { decision: "skipped", reason: "head-repo-forked" },
+			status: HTTP_OK,
+		});
+		expect(session.requests).toHaveLength(0);
 	});
 });
 
