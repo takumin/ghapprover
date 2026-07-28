@@ -39,6 +39,8 @@ const ORG_OWNER: GithubAccount = { id: 88, login: "acme", type: "Organization" }
 const RENOVATE: GithubAccount = { id: 29_139_614, login: "renovate[bot]", type: "Bot" };
 const DEPENDABOT: GithubAccount = { id: 49_699_333, login: "dependabot[bot]", type: "Bot" };
 const GITHUB_ACTIONS: GithubAccount = { id: 41_898_282, login: "github-actions[bot]", type: "Bot" };
+const AUTOFIX_CI: GithubAccount = { id: 114_827_586, login: "autofix-ci[bot]", type: "Bot" };
+const AUTOFIX_CI_WRONG_ID: GithubAccount = { id: 3, login: "autofix-ci[bot]", type: "Bot" };
 const RENOVATE_WRONG_ID: GithubAccount = { id: 2, login: "renovate[bot]", type: "Bot" };
 const RENOVATE_WRONG_LOGIN: GithubAccount = { id: 29_139_614, login: "renovate-bot", type: "Bot" };
 const RENOVATE_TYPE_USER: GithubAccount = { id: 29_139_614, login: "renovate[bot]", type: "User" };
@@ -158,6 +160,18 @@ const CLASSIFY_CASES = [
 		name: "dependabot on an org repository",
 		owner: ORG_OWNER,
 		user: DEPENDABOT,
+	},
+	{
+		expected: { kind: "trusted" },
+		name: "autofix-ci with the exact login and id",
+		owner: OCTOCAT,
+		user: AUTOFIX_CI,
+	},
+	{
+		expected: { kind: "untrusted" },
+		name: "a bot with the autofix-ci login but another id",
+		owner: OCTOCAT,
+		user: AUTOFIX_CI_WRONG_ID,
 	},
 	{
 		expected: { kind: "untrusted" },

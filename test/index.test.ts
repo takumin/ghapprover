@@ -44,6 +44,7 @@ const JWT_PATTERN = /^bearer eyJ[\w-]+\.[\w-]+\.[\w-]+$/u;
 const OWNER: GithubAccount = { id: 7, login: "octo", type: "User" };
 const ORG: GithubAccount = { id: 88, login: "acme", type: "Organization" };
 const RENOVATE: GithubAccount = { id: 29_139_614, login: "renovate[bot]", type: "Bot" };
+const AUTOFIX_CI: GithubAccount = { id: 114_827_586, login: "autofix-ci[bot]", type: "Bot" };
 const WEB_FLOW: GithubAccount = { id: 19_864_447, login: "web-flow", type: "User" };
 const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User" };
 const APP_BOT_USER: GithubAccount = { id: 201, login: "ghapprover[bot]", type: "Bot" };
@@ -477,6 +478,30 @@ describe("author trust", () => {
 			reviewPostRoute("octo", HTTP_OK),
 		]);
 		const response = await postSigned(buildPayload({ user: RENOVATE }));
+		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
+		session.assertDone();
+	});
+});
+
+/* The shape autofix.ci pushes onto a bot PR (author autofix-ci[bot], committer web-flow,
+ * GitHub-signed): without the allowlist entry this commit makes the PR permanently
+ * unapprovable, which is exactly the PR ghapprover exists to approve (SPEC.md §3.1). */
+describe("autofix.ci commits", () => {
+	it("approves a renovate pull request carrying an autofix.ci commit", async () => {
+		expect.hasAssertions();
+		const session = installFetchMock([
+			tokenRoute(),
+			...pipelineRoutes({
+				commits: [
+					commitItem({ author: RENOVATE, committer: WEB_FLOW }),
+					commitItem({ author: AUTOFIX_CI, committer: WEB_FLOW }),
+				],
+				owner: "octo",
+				reviews: [],
+			}),
+			reviewPostRoute("octo", HTTP_OK),
+		]);
+		const response = await postSigned(buildPayload({ commits: 2, user: RENOVATE }));
 		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
 		session.assertDone();
 	});

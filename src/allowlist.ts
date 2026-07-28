@@ -12,13 +12,14 @@ export interface AllowedBot {
 /**
  * Bot accounts trusted as PR authors and commit authors/committers
  * (SPEC.md §3.1). The numeric id must match alongside the login as defense in
- * depth against lookalike logins. The entries are the Mend-hosted Renovate app
- * and GitHub-native Dependabot; self-hosted lookalikes run under different
- * logins/ids and are rejected by design.
+ * depth against lookalike logins. The entries are the Mend-hosted Renovate app,
+ * GitHub-native Dependabot, and the autofix.ci app; self-hosted lookalikes run
+ * under different logins/ids and are rejected by design.
  */
 export const ALLOWED_BOTS: readonly AllowedBot[] = [
 	{ id: 29_139_614, login: "renovate[bot]" },
 	{ id: 49_699_333, login: "dependabot[bot]" },
+	{ id: 114_827_586, login: "autofix-ci[bot]" },
 ];
 
 /**

@@ -135,7 +135,7 @@ An account that, in the context of the PR, falls under any of the following:
   The `author_association` field of the webhook payload is not used for org-owner
   determination (it only reveals MEMBER)
 - **An allowed bot**: a bot account whose login is included in the in-code allowlist
-  constant (§5) (`renovate[bot]`, `dependabot[bot]`). Also verify that
+  constant (§5) (`renovate[bot]`, `dependabot[bot]`, `autofix-ci[bot]`). Also verify that
   `user.type == "Bot"` and that the numeric user `id` matches the allowlisted one
   (defense in depth against lookalike logins)
 
@@ -146,6 +146,13 @@ Notes:
   so each distinct user is looked up at most once
 - Bots outside the allowlist (e.g. `github-actions[bot]`) are never trusted; commits
   created by them intentionally block approval
+- `autofix-ci[bot]` is allowlisted because CI autofixers push their fixes as commits
+  onto the PR branch: without it, a Renovate PR that trips a formatter receives an
+  autofix commit and is then permanently unapprovable (the commit cannot be removed
+  without a force-push), which defeats the very PRs this App exists to approve. The
+  trade-off is explicit — an app with push access to the branch is inside the trust
+  boundary either way, and anything it commits is approved. Repositories that do not
+  run autofix.ci can drop the entry (§5)
 
 ### 3.2 Commit Verification
 
@@ -216,9 +223,10 @@ Mitigation:
   never approved. This rule keeps day-to-day operation consistent with that requirement
 - The allowed bots satisfy it: Mend-hosted Renovate creates commits via the GitHub API
   (`platformCommit: "auto"` resolves to enabled for GitHub App tokens), so its commits
-  are GitHub-signed; Dependabot signs its own commits by default. A self-hosted
-  Renovate pushing unsigned commits over git is not approved (its login also differs
-  from `renovate[bot]`, §5)
+  are GitHub-signed; Dependabot signs its own commits by default; autofix.ci pushes
+  through the GitHub API, so its commits are GitHub-signed too and carry `web-flow` as
+  committer (accepted per §3.2). A self-hosted Renovate pushing unsigned commits over
+  git is not approved (its login also differs from `renovate[bot]`, §5)
 - Merge strategy caveat: GitHub does not sign the commits it creates for the rebase
   merge strategy. Use squash or merge-commit merges when this rule is enabled
 
