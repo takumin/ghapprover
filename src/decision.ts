@@ -155,8 +155,10 @@ export function checkCommitCount(
 }
 
 /* The half of the §3.2 per-commit check that does not depend on trust: the signature
- * verification, which comes first, then the principals the payload has to map at all. Split out
- * so the caller can settle a commit on these before spending a membership lookup on it. */
+ * verification, then the principals the payload has to map at all. Split out so the caller can
+ * settle a commit on these before spending a membership lookup on it — and it must run before
+ * checkCommitTrust, because the web-flow committer exemption that half applies rests on genuine
+ * web-flow commits being GitHub-signed, which is what the verification check here enforces. */
 export function checkCommitStructure(entry: PullRequestCommit): CommitProblem | null {
 	const { author, commit, committer } = entry;
 	const { verification } = commit;
@@ -181,17 +183,6 @@ export function checkCommitTrust(
 		return null;
 	}
 	return "untrusted-commit";
-}
-/* SPEC.md §3.2 per commit, whole: the signature verification is checked before author and
- * committer trust; web-flow is accepted as committer only, because genuine web-flow commits are
- * GitHub-signed, which the verification check enforces. This is the rule the spec states and the
- * §12 case matrix verifies; the pipeline applies the two halves separately so it can stop between
- * them, and this composition is what fixes their order. */
-export function checkCommit(
-	entry: PullRequestCommit,
-	isTrusted: (account: GithubAccount) => boolean,
-): CommitProblem | null {
-	return checkCommitStructure(entry) ?? checkCommitTrust(entry, isTrusted);
 }
 
 /* SPEC.md §3 condition 5: only an APPROVED review by the App's own bot user for the current head

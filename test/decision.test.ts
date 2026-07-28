@@ -19,8 +19,9 @@ import { MAX_VERIFIABLE_COMMITS, WEB_FLOW } from "../src/allowlist";
 import {
 	TARGET_ACTIONS,
 	accountKey,
-	checkCommit,
 	checkCommitCount,
+	checkCommitStructure,
+	checkCommitTrust,
 	checkPullRequestState,
 	classifyPrincipal,
 	commitPrincipals,
@@ -540,6 +541,16 @@ describe("commit count gate", () => {
 		},
 	);
 });
+
+/* The §3.2 per-commit check as the pipeline composes it (src/index.ts findCommitProblem): the
+ * structure half first, so the signature verification settles the commit before the trust half
+ * applies the web-flow committer exemption that rests on it. */
+function checkCommit(
+	entry: PullRequestCommit,
+	isTrusted: (account: GithubAccount) => boolean,
+): ReturnType<typeof checkCommitStructure> {
+	return checkCommitStructure(entry) ?? checkCommitTrust(entry, isTrusted);
+}
 
 describe("commit verification gate", () => {
 	it.each(COMMIT_CASES)("returns $expected for $name", ({ entry, expected }) => {
