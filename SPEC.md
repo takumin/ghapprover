@@ -314,13 +314,16 @@ flowchart TD
   allowed bot. Being synchronous means the outcome is
   recorded as-is in GitHub's Recent Deliveries, and failures can be safely re-executed via
   manual redelivery (the approval process is idempotent as described in §6).
-- **One deadline bounds the API calls**: a single budget for the delivery as a whole, set
-  below GitHub's 10-second webhook timeout. Without it a slow delivery could outlive that
-  timeout and still post its approval — recording a failed delivery for a PR that was in
-  fact approved, the opposite of the diagnostic property this synchronous design exists
-  for. A per-dispatch budget is deliberately not layered on top: it starts at or after the
-  delivery budget, so it could only fire first by being shorter than the whole delivery,
-  which is the delivery budget again. Exhausting the budget fails the delivery closed (§9)
+- **One deadline bounds the whole delivery**: a single wall-clock budget for the delivery
+  as a whole, set below GitHub's 10-second webhook timeout. It is created with the client
+  and installed on every dispatch, so everything that client spends time on draws on it —
+  the auth library's internal waits (§9) as much as the API calls themselves. Without it a
+  slow delivery could outlive that timeout and still post its approval — recording a failed
+  delivery for a PR that was in fact approved, the opposite of the diagnostic property this
+  synchronous design exists for. A per-dispatch budget is deliberately not layered on top:
+  it starts at or after the delivery budget, so it could only fire first by being shorter
+  than the whole delivery, which is the delivery budget again. Exhausting the budget fails
+  the delivery closed (§9)
 - **Membership lookups are resolved lazily, one at a time, in commit order** (memoized per
   delivery, §3.1), and the first failing commit stops the loop. This is not only a latency
   choice: Workers allows 50 subrequests per request on the Free plan (1000 on paid), and a
@@ -452,13 +455,16 @@ consolidated into manual redelivery on the GitHub side.
 > retries transient API failures; on exhaustion the delivery still fails loud
 > per this table.
 >
-> The 401 retries wait between attempts (1 s, then 2 s, then 3 s), and that wait
-> is outside the §4 delivery budget, which bounds API calls rather than sleeps —
-> so such a delivery can spend up to six extra seconds and overrun GitHub's
-> webhook timeout. It is left unbounded on purpose: the requests being retried
-> are themselves failing, so no review is posted, and the state the budget
-> exists to prevent — a delivery recorded as failed for a PR that was in fact
-> approved — cannot arise on this path.
+> The 401 retries wait between attempts (1 s, then 2 s, then 3 s), and those
+> waits fall inside the §4 delivery budget: it is one wall-clock deadline
+> installed on every dispatch, so a wait consumes it exactly like an API call
+> and the retry that follows aborts the moment it is exhausted. Such a delivery
+> therefore fails as `github-api-error` with `status: 0` like any other
+> exhaustion, and cannot overrun GitHub's webhook timeout. Losing the remaining
+> retries to the deadline costs nothing: the requests being retried are
+> themselves failing, so no review is posted, and the state the budget exists to
+> prevent — a delivery recorded as failed for a PR that was in fact approved —
+> cannot arise on this path.
 
 > [!NOTE]
 > GitHub does not automatically redeliver failed webhook deliveries. A transient
