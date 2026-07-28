@@ -5,11 +5,12 @@
 /* oxlint-disable unicorn/no-null */
 /* oxlint-disable max-lines */
 
-import { ALLOWED_BOTS, MAX_VERIFIABLE_COMMITS, WEB_FLOW } from "../src/allowlist";
 import { JWT_PATTERN, installFetchMock, jsonRoute, requestByUrl, tokenRoute } from "./fetch-stub";
+import { WEB_FLOW_USER, allowedBot } from "./accounts";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
 import type { GithubAccount } from "../src/types";
+import { MAX_VERIFIABLE_COMMITS } from "../src/allowlist";
 import { privateKeyPemOnce } from "./app-key";
 import { sign } from "@octokit/webhooks-methods";
 import worker from "../src/index";
@@ -41,25 +42,14 @@ const membershipUrl = (login: string): string => `${BASE}/orgs/acme/memberships/
 const COMMITS_SUFFIX = "/commits?per_page=100";
 const REVIEWS_SUFFIX = "/reviews?per_page=100";
 
-/** Builds the fixture from the allowlist itself, so an entry whose id changes cannot silently
- * turn these into ordinary accounts and reduce every §3.1 test to an author-not-trusted skip. */
-function allowedBot(login: string): GithubAccount {
-	const bot = ALLOWED_BOTS.find((entry) => entry.login === login);
-	if (bot === undefined) {
-		throw new Error(`not an allowlisted bot: ${login}`);
-	}
-	return { id: bot.id, login: bot.login, type: "Bot" };
-}
-
 const OWNER: GithubAccount = { id: 7, login: "octo", type: "User" };
 const ORG: GithubAccount = { id: 88, login: "acme", type: "Organization" };
 const RENOVATE = allowedBot("renovate[bot]");
 const AUTOFIX_CI = allowedBot("autofix-ci[bot]");
-const WEB_FLOW_USER: GithubAccount = { id: WEB_FLOW.id, login: WEB_FLOW.login, type: "User" };
 const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User" };
 const OTHER_STRANGER: GithubAccount = { id: 998, login: "eve", type: "User" };
 /** The allowlisted renovate login under a different account (SPEC.md §3.1 id pinning). */
-const RENOVATE_WRONG_ID: GithubAccount = { id: 2, login: "renovate[bot]", type: "Bot" };
+const RENOVATE_WRONG_ID = allowedBot("renovate[bot]", { id: 2 });
 const APP_BOT_USER: GithubAccount = { id: 201, login: "ghapprover[bot]", type: "Bot" };
 const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT_USER };
 

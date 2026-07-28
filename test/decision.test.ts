@@ -15,7 +15,6 @@ import type {
 	PullRequestEventPayload,
 	PullRequestReview,
 } from "../src/types";
-import { MAX_VERIFIABLE_COMMITS, WEB_FLOW } from "../src/allowlist";
 import {
 	TARGET_ACTIONS,
 	accountKey,
@@ -32,7 +31,9 @@ import {
 	parsePullRequestEvent,
 	precheckCommitCount,
 } from "../src/decision";
+import { WEB_FLOW_LOOKALIKE, WEB_FLOW_USER, allowedBot } from "./accounts";
 import { describe, expect, it } from "vitest";
+import { MAX_VERIFIABLE_COMMITS } from "../src/allowlist";
 
 const HEAD_SHA = "head-sha";
 const BOT_LOGIN = "ghapprover[bot]";
@@ -41,23 +42,21 @@ const OCTOCAT: GithubAccount = { id: 77, login: "octocat", type: "User" };
 const OCTOCAT_WRONG_ID: GithubAccount = { id: 78, login: "octocat", type: "User" };
 const OTHER_USER: GithubAccount = { id: 55, login: "someone-else", type: "User" };
 const ORG_OWNER: GithubAccount = { id: 88, login: "acme", type: "Organization" };
-const RENOVATE: GithubAccount = { id: 29_139_614, login: "renovate[bot]", type: "Bot" };
-const DEPENDABOT: GithubAccount = { id: 49_699_333, login: "dependabot[bot]", type: "Bot" };
+const RENOVATE = allowedBot("renovate[bot]");
+const DEPENDABOT = allowedBot("dependabot[bot]");
+/** Deliberately not on the allowlist: a bot GitHub ships, which §3.1 still rejects. */
 const GITHUB_ACTIONS: GithubAccount = { id: 41_898_282, login: "github-actions[bot]", type: "Bot" };
-const AUTOFIX_CI: GithubAccount = { id: 114_827_586, login: "autofix-ci[bot]", type: "Bot" };
-const AUTOFIX_CI_WRONG_ID: GithubAccount = { id: 3, login: "autofix-ci[bot]", type: "Bot" };
-const RENOVATE_WRONG_ID: GithubAccount = { id: 2, login: "renovate[bot]", type: "Bot" };
-const RENOVATE_WRONG_LOGIN: GithubAccount = { id: 29_139_614, login: "renovate-bot", type: "Bot" };
-const RENOVATE_TYPE_USER: GithubAccount = { id: 29_139_614, login: "renovate[bot]", type: "User" };
+const AUTOFIX_CI = allowedBot("autofix-ci[bot]");
+const AUTOFIX_CI_WRONG_ID = allowedBot("autofix-ci[bot]", { id: 3 });
+const RENOVATE_WRONG_ID = allowedBot("renovate[bot]", { id: 2 });
+const RENOVATE_WRONG_LOGIN = allowedBot("renovate[bot]", { login: "renovate-bot" });
+const RENOVATE_TYPE_USER = allowedBot("renovate[bot]", { type: "User" });
 const BOT_NAMED_OCTOCAT: GithubAccount = { id: 5, login: "octocat", type: "Bot" };
 const ALICE: GithubAccount = { id: 101, login: "alice", type: "User" };
 const BOB: GithubAccount = { id: 102, login: "bob", type: "User" };
 const MALLORY: GithubAccount = { id: 103, login: "mallory", type: "User" };
 /** Same login as a trusted user, different account: trust must not follow the login. */
 const ALICE_LOOKALIKE: GithubAccount = { id: 909, login: "alice", type: "User" };
-const WEB_FLOW_USER: GithubAccount = { id: WEB_FLOW.id, login: WEB_FLOW.login, type: "User" };
-/** Same login, different account: the committer exemption must not fire on the login alone. */
-const WEB_FLOW_LOOKALIKE: GithubAccount = { id: 999, login: WEB_FLOW.login, type: "User" };
 const HUMAN: GithubAccount = { id: 301, login: "human", type: "User" };
 const APP_BOT: GithubAccount = { id: 201, login: BOT_LOGIN, type: "Bot" };
 const ACTIVE_ADMIN: OrgMembership = { role: "admin", state: "active" };
