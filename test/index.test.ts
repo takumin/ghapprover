@@ -5,18 +5,16 @@
 /* oxlint-disable unicorn/no-null */
 /* oxlint-disable max-lines */
 
+import { JWT_PATTERN, installFetchMock, jsonRoute, requestByUrl, tokenRoute } from "./fetch-stub";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
-import { installFetchMock, jsonRoute } from "./fetch-stub";
 import type { GithubAccount } from "../src/types";
 import { MAX_VERIFIABLE_COMMITS } from "../src/allowlist";
 import { privateKeyPemOnce } from "./app-key";
 import worker from "../src/index";
 
 /** Derived from the harness so "./fetch-stub" stays a single import (no-duplicate-imports). */
-type FetchMockSession = ReturnType<typeof installFetchMock>;
 type PlannedRoute = ReturnType<typeof jsonRoute>;
-type RecordedRequest = FetchMockSession["requests"][number];
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
@@ -41,8 +39,6 @@ const APP_URL = `${BASE}/app`;
 const membershipUrl = (login: string): string => `${BASE}/orgs/acme/memberships/${login}`;
 const COMMITS_SUFFIX = "/commits?per_page=100";
 const REVIEWS_SUFFIX = "/reviews?per_page=100";
-/** App JWT authorization: "bearer" plus three dot-separated base64url segments. */
-const JWT_PATTERN = /^bearer eyJ[\w-]+\.[\w-]+\.[\w-]+$/u;
 
 const OWNER: GithubAccount = { id: 7, login: "octo", type: "User" };
 const ORG: GithubAccount = { id: 88, login: "acme", type: "Organization" };
@@ -143,13 +139,8 @@ function pullsUrl(owner: string, suffix: string): string {
 	return `${BASE}/repos/${owner}/hello/pulls/${PULL_NUMBER}${suffix}`;
 }
 
-function tokenRoute(): PlannedRoute {
-	return jsonRoute({
-		method: "POST",
-		payload: { expires_at: "2126-01-01T00:00:00Z", token: INSTALL_TOKEN },
-		status: 201,
-		url: TOKEN_URL,
-	});
+function installTokenRoute(): PlannedRoute {
+	return tokenRoute({ token: INSTALL_TOKEN, url: TOKEN_URL });
 }
 function appRoute(): PlannedRoute {
 	return jsonRoute({ method: "GET", payload: { slug: APP_SLUG }, status: 200, url: APP_URL });
@@ -224,7 +215,7 @@ function pipelineRoutes(options: PipelineRoutesOptions): PlannedRoute[] {
 
 function happyRoutes(): PlannedRoute[] {
 	return [
-		tokenRoute(),
+		installTokenRoute(),
 		...pipelineRoutes({ commits: [commitItem()], owner: "octo", reviews: [] }),
 		reviewPostRoute("octo", HTTP_OK),
 	];
@@ -260,14 +251,6 @@ async function expectReply(response: Response, expected: ExpectedReply): Promise
 	expect(response.headers.get("content-type")).toBe("application/json");
 	const body: unknown = await response.json();
 	expect(body).toStrictEqual(expected.body);
-}
-
-function requestByUrl(session: FetchMockSession, url: string): RecordedRequest {
-	const found = session.requests.find((entry) => entry.url === url);
-	if (found === undefined) {
-		throw new Error(`request not recorded: ${url}`);
-	}
-	return found;
 }
 
 describe("request routing", () => {
@@ -484,7 +467,7 @@ describe("author trust", () => {
 	it("approves an org owner author with a single membership lookup", async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
-			tokenRoute(),
+			installTokenRoute(),
 			membershipRoute({ payload: { role: "admin", state: "active" }, status: HTTP_OK }),
 			...pipelineRoutes({ commits: [commitItem()], owner: "acme", reviews: [] }),
 			reviewPostRoute("acme", HTTP_OK),
@@ -497,7 +480,7 @@ describe("author trust", () => {
 	it("skips when the membership lookup returns 404", async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
-			tokenRoute(),
+			installTokenRoute(),
 			membershipRoute({ payload: { message: "Not Found" }, status: HTTP_NOT_FOUND }),
 		]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
@@ -511,7 +494,7 @@ describe("author trust", () => {
 	it("approves an allowlisted renovate bot author", async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
-			tokenRoute(),
+			installTokenRoute(),
 			...pipelineRoutes({
 				commits: [commitItem({ author: RENOVATE, committer: WEB_FLOW })],
 				owner: "octo",
@@ -532,7 +515,7 @@ describe("autofix.ci commits", () => {
 	it("approves a renovate pull request carrying an autofix.ci commit", async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
-			tokenRoute(),
+			installTokenRoute(),
 			...pipelineRoutes({
 				commits: [
 					commitItem({ author: RENOVATE, committer: WEB_FLOW }),
@@ -574,7 +557,10 @@ describe("commit conditions", () => {
 
 	it("skips on a commit count mismatch", async () => {
 		expect.hasAssertions();
-		const session = installFetchMock([tokenRoute(), commitsRouteFor("octo", [commitItem()])]);
+		const session = installFetchMock([
+			installTokenRoute(),
+			commitsRouteFor("octo", [commitItem()]),
+		]);
 		const response = await postSigned(buildPayload({ commits: 2 }));
 		await expectReply(response, {
 			body: { decision: "skipped", reason: "commit-count-mismatch" },
@@ -588,7 +574,7 @@ describe("commit verification", () => {
 	it("skips an unverified commit", async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
-			tokenRoute(),
+			installTokenRoute(),
 			commitsRouteFor("octo", [commitItem({ verified: false })]),
 		]);
 		const response = await postSigned(buildPayload());
@@ -602,7 +588,7 @@ describe("commit verification", () => {
 	it("skips a commit from an untrusted author", async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
-			tokenRoute(),
+			installTokenRoute(),
 			commitsRouteFor("octo", [commitItem({ author: STRANGER })]),
 		]);
 		const response = await postSigned(buildPayload());
@@ -616,7 +602,7 @@ describe("commit verification", () => {
 	it("stops before any principal lookup when the first commit is unverified", async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
-			tokenRoute(),
+			installTokenRoute(),
 			membershipRoute({ payload: { role: "admin", state: "active" }, status: HTTP_OK }),
 			commitsRouteFor("acme", [
 				commitItem({ author: STRANGER, verified: false }),
@@ -640,7 +626,7 @@ describe("principal trust resolution", () => {
 	it("does not extend a trusted verdict to another id on the same login", async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
-			tokenRoute(),
+			installTokenRoute(),
 			commitsRouteFor("octo", [commitItem({ author: RENOVATE_WRONG_ID, committer: WEB_FLOW })]),
 		]);
 		const response = await postSigned(buildPayload({ user: RENOVATE }));
@@ -656,7 +642,7 @@ describe("principal trust resolution", () => {
 	it("stops resolving a commit's principals at the first untrusted one", async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
-			tokenRoute(),
+			installTokenRoute(),
 			membershipRoute({ payload: { role: "admin", state: "active" }, status: HTTP_OK }),
 			commitsRouteFor("acme", [commitItem({ author: STRANGER, committer: OTHER_STRANGER })]),
 			membershipRouteFor("mallory", { payload: { message: "Not Found" }, status: HTTP_NOT_FOUND }),
@@ -675,7 +661,7 @@ describe("duplicate approval check", () => {
 	it("skips when its own approval already exists", async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
-			tokenRoute(),
+			installTokenRoute(),
 			commitsRouteFor("octo", [commitItem()]),
 			appRoute(),
 			reviewsRouteFor("octo", [OWN_APPROVAL]),
@@ -693,7 +679,7 @@ describe("live state checks", () => {
 	it("skips when the head moved", async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
-			tokenRoute(),
+			installTokenRoute(),
 			...pipelineRoutes({
 				commits: [commitItem()],
 				liveSha: "moved-sha",
@@ -712,7 +698,7 @@ describe("live state checks", () => {
 	it("skips when the review post is rejected", async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
-			tokenRoute(),
+			installTokenRoute(),
 			...pipelineRoutes({ commits: [commitItem()], owner: "octo", reviews: [] }),
 			reviewPostRoute("octo", HTTP_UNPROCESSABLE_ENTITY),
 		]);
@@ -780,7 +766,7 @@ describe("github api failures", () => {
 	it("errors when the commits request fails", async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
-			tokenRoute(),
+			installTokenRoute(),
 			jsonRoute({
 				method: "GET",
 				payload: { message: "boom" },
@@ -799,7 +785,7 @@ describe("github api failures", () => {
 	it("errors when the commits request hits a network failure", async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
-			tokenRoute(),
+			installTokenRoute(),
 			jsonRoute({
 				method: "GET",
 				payload: {},

@@ -8,10 +8,14 @@
  */
 import { vi } from "vitest";
 
+const HTTP_CREATED = 201;
+/** App JWT authorization: "bearer" plus three dot-separated base64url segments. */
+export const JWT_PATTERN = /^bearer eyJ[\w-]+\.[\w-]+\.[\w-]+$/u;
+
 export interface PlannedRoute {
 	readonly body: string;
 	/** Extra response headers (e.g. link); the JSON content-type is implied. */
-	readonly headers?: Record<string, string>;
+	readonly headers?: Record<string, string> | undefined;
 	readonly method: string;
 	/** How a status-0 route rejects: a network TypeError (default) or an expired timeout signal. */
 	readonly rejectAs?: "timeout";
@@ -86,20 +90,12 @@ export function installFetchMock(routes: readonly PlannedRoute[]): FetchMockSess
 }
 
 export function jsonRoute(route: {
-	headers?: Record<string, string>;
+	headers?: Record<string, string> | undefined;
 	method: string;
 	payload: unknown;
 	status: number;
 	url: string;
 }): PlannedRoute {
-	if (route.headers === undefined) {
-		return {
-			body: JSON.stringify(route.payload),
-			method: route.method,
-			status: route.status,
-			url: route.url,
-		};
-	}
 	return {
 		body: JSON.stringify(route.payload),
 		headers: route.headers,
@@ -107,4 +103,27 @@ export function jsonRoute(route: {
 		status: route.status,
 		url: route.url,
 	};
+}
+
+/**
+ * The installation token the auth strategy issues lazily inside whichever
+ * installation-authed call runs first. The expiry is far enough out that the
+ * strategy never treats the stub token as stale.
+ */
+export function tokenRoute(route: { readonly token: string; readonly url: string }): PlannedRoute {
+	return jsonRoute({
+		method: "POST",
+		payload: { expires_at: "2126-01-01T00:00:00Z", token: route.token },
+		status: HTTP_CREATED,
+		url: route.url,
+	});
+}
+
+/** The recorded request for a planned URL; absence is a test-setup failure, not an assertion. */
+export function requestByUrl(session: FetchMockSession, url: string): RecordedRequest {
+	const found = session.requests.find((entry) => entry.url === url);
+	if (found === undefined) {
+		throw new Error(`request not recorded: ${url}`);
+	}
+	return found;
 }
