@@ -74,7 +74,10 @@ export function accountKey(account: GithubAccount): string {
 
 /* SPEC.md §3.1: bots are trusted solely via the allowlist (login and numeric id both matching)
  * and never fall through to the owner/org checks; users on org repositories resolve through the
- * membership API (the caller runs the returned query); personal-repo users must be the owner. */
+ * membership API (the caller runs the returned query); personal-repo users must be the owner,
+ * matched on the (id, login) pair like every other §3 identity check — the owner's id is in the
+ * same payload, and the org branch below is the only one that decides on a login, because the
+ * membership API is what resolves it. */
 export function classifyPrincipal(user: GithubAccount, repoOwner: GithubAccount): TrustEvaluation {
 	if (user.type === "Bot") {
 		if (isAllowedBot(user)) {
@@ -85,7 +88,7 @@ export function classifyPrincipal(user: GithubAccount, repoOwner: GithubAccount)
 	if (repoOwner.type === "Organization") {
 		return { kind: "org-membership", login: user.login, org: repoOwner.login };
 	}
-	if (user.login === repoOwner.login) {
+	if (accountKey(user) === accountKey(repoOwner)) {
 		return { kind: "trusted" };
 	}
 	return { kind: "untrusted" };

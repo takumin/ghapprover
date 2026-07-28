@@ -36,6 +36,8 @@ import { describe, expect, it } from "vitest";
 const HEAD_SHA = "head-sha";
 const BOT_LOGIN = "ghapprover[bot]";
 const OCTOCAT: GithubAccount = { id: 77, login: "octocat", type: "User" };
+/** The owner's login under a different account: §3.1 pins the personal-repo owner's id too. */
+const OCTOCAT_WRONG_ID: GithubAccount = { id: 78, login: "octocat", type: "User" };
 const OTHER_USER: GithubAccount = { id: 55, login: "someone-else", type: "User" };
 const ORG_OWNER: GithubAccount = { id: 88, login: "acme", type: "Organization" };
 const RENOVATE: GithubAccount = { id: 29_139_614, login: "renovate[bot]", type: "Bot" };
@@ -156,6 +158,12 @@ const CLASSIFY_CASES = [
 		name: "another user on a personal repository",
 		owner: OCTOCAT,
 		user: OTHER_USER,
+	},
+	{
+		expected: { kind: "untrusted" },
+		name: "a user with the owner's login but another id",
+		owner: OCTOCAT,
+		user: OCTOCAT_WRONG_ID,
 	},
 	{
 		expected: { kind: "org-membership", login: "octocat", org: "acme" },

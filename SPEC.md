@@ -136,8 +136,9 @@ or cannot be determined, do not approve (fail closed).
 
 An account that, in the context of the PR, falls under any of the following:
 
-- **The repository owner themselves**: for personal repositories, a user matching
-  `repository.owner.login`
+- **The repository owner themselves**: for personal repositories, a user whose `login`
+  and numeric `id` both match `repository.owner` (the same id pinning as the bot
+  allowlist below; the owner's id is in the webhook payload already)
 - **An organization owner**: for org repositories, a user for whom
   `GET /orgs/{org}/memberships/{username}` returns `state=active` and `role=admin`.
   The `author_association` field of the webhook payload is not used for org-owner
