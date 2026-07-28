@@ -309,9 +309,21 @@ flowchart TD
   distinct non-bot author/committer, memoized within the delivery, §3.1), the App slug
   fetch (`GET /app`, §3 condition 5), existing reviews (paginated), the live PR fetch,
   and the review POST — typically under 10 calls for PRs authored by the owner or an
-  allowed bot, which fits within the webhook timeout (10 seconds). Being synchronous means the outcome is
+  allowed bot. Being synchronous means the outcome is
   recorded as-is in GitHub's Recent Deliveries, and failures can be safely re-executed via
   manual redelivery (the approval process is idempotent as described in §6).
+- **Two deadlines bound the API calls**: one per dispatch, and one for the delivery as a
+  whole (below GitHub's 10-second webhook timeout). The per-dispatch budget alone would
+  bound each call and none of them together, so a slow delivery could outlive the webhook
+  timeout and still post its approval — recording a failed delivery for a PR that was in
+  fact approved, the opposite of the diagnostic property this synchronous design exists
+  for. Exhausting either budget fails the delivery closed (§9)
+- **Membership lookups are resolved lazily, one at a time, in commit order** (memoized per
+  delivery, §3.1), and the first failing commit stops the loop. This is not only a latency
+  choice: Workers allows 50 subrequests per request on the Free plan (1000 on paid), and a
+  250-commit PR with distinct principals would otherwise burst up to two lookups per commit
+  before any of them could matter. Parallelising them would reintroduce that burst — and a
+  race between two concurrent lookups of the same login that the memoization cannot bound
 - "Not approving" is a normal outcome (200), and its reason must always be logged.
   5xx is reserved for cases where the evaluation could not be completed (e.g. transient GitHub
   API failures).
