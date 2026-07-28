@@ -109,7 +109,10 @@ export function createBoundedFetch(delivery: AbortSignal): BoundedFetch {
  * pins the REST API version on every request, and the bounded fetch caps the
  * delivery as a whole, including the internal token request and pagination
  * follow-up pages (SPEC.md §4, §9, §11). The delivery budget starts here, so
- * the client is created once per delivery.
+ * the client is created once per delivery — with the one exception that
+ * @octokit/auth-app dedupes in-flight token issuance process-wide by
+ * installation id, so overlapping deliveries can share the first one's token
+ * request and therefore its deadline (accepted, SPEC.md §9).
  */
 export function createGithubClient(
 	credentials: AppCredentials,

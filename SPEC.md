@@ -465,6 +465,15 @@ consolidated into manual redelivery on the GitHub side.
 > themselves failing, so no review is posted, and the state the budget exists to
 > prevent — a delivery recorded as failed for a PR that was in fact approved —
 > cannot arise on this path.
+>
+> The library also dedupes in-flight token issuance process-wide, keyed by the
+> installation id. Two deliveries for the same installation that overlap in one
+> isolate therefore share the first one's token request — and its deadline — so
+> the second can fail with `status: 0` while its own budget is untouched. This
+> is accepted rather than worked around: the sharing window is exactly how long
+> that one request is in flight, a token request slow or broken enough to matter
+> would fail both deliveries anyway, and issuing tokens outside the library would
+> also give up the retries above.
 
 > [!NOTE]
 > GitHub does not automatically redeliver failed webhook deliveries. A transient
