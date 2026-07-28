@@ -192,6 +192,20 @@ If even one commit fails these checks, do not approve. This ensures that if thir
 commits get mixed into a trusted principal's PR (e.g. someone other than the maintainer
 pushes to a bot branch), it is not approved.
 
+> [!NOTE]
+> A GitHub-signed commit is the one case where the signature does not bind the `author`
+> to a key of its own, so the `web-flow` exemption rests on a further property: GitHub
+> does not sign a commit whose author the caller chose. The two are mutually exclusive
+> across the write paths — the contents API signs and substitutes `web-flow` as committer
+> only when `author` and `committer` are both omitted, `createCommitOnBranch` has no
+> author or committer input at all, and the git data API leaves an unsigned commit
+> unsigned. A verified `web-flow` commit therefore attributes its author to whoever
+> authenticated, and an actor with `contents: write` that is not a trusted principal
+> cannot put a commit naming one onto a bot's branch. This is observed behaviour rather
+> than a documented guarantee: what GitHub documents is that signing for apps and bots
+> requires "no custom author information, custom committer information, and no custom
+> signature information". Re-check it before relaxing either commit check.
+
 > [!IMPORTANT]
 > The PR commits API returns at most 250 commits. A PR whose `pull_request.commits`
 > exceeds 250 cannot be fully verified and is therefore not approved (fail closed).
