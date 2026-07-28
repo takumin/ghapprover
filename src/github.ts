@@ -23,14 +23,15 @@ import { paginateRest } from "@octokit/plugin-paginate-rest";
 
 const API_VERSION = "2022-11-28";
 const USER_AGENT = "ghapprover";
-/** SPEC.md §9: no retries inside the Worker, but a timeout on every call. */
-const REQUEST_TIMEOUT_MS = 10_000;
 /**
- * Whole-delivery budget, shared by every call the client makes (SPEC.md §4).
- * Bounding each dispatch alone bounds none of them together, so a delivery
- * could outlive GitHub's 10-second webhook timeout and land an approval whose
- * delivery is recorded as failed. Set below that timeout to leave room for the
- * signature check and the response.
+ * Whole-delivery budget, shared by every call the client makes (SPEC.md §4;
+ * §9: no retries inside the Worker, but a deadline on every call). Without it
+ * a delivery could outlive GitHub's 10-second webhook timeout and land an
+ * approval whose delivery is recorded as failed, so it is set below that
+ * timeout to leave room for the signature check and the response. A
+ * per-dispatch budget on top would never bind: it starts at or after this one,
+ * so it could only fire first by being shorter than the whole delivery — which
+ * is this budget again.
  */
 const DELIVERY_TIMEOUT_MS = 8000;
 const PAGE_SIZE = 100;
@@ -85,19 +86,18 @@ function shapeError(endpoint: string, status: number): GithubApiError {
 }
 
 /**
- * Fetch used for every dispatch the client makes, bounded by two deadlines at
- * once. The per-dispatch signal is created here, so plain calls, pagination
- * follow-up pages, and the auth strategy's internal token request each get
- * their own fresh budget (pagination page requests cannot carry per-call
- * request options, so this layer is the only place that reaches all three).
- * The delivery signal is created once per client and therefore caps the sum of
- * them. Both abort as TimeoutError, which maps to status 0 either way.
+ * Fetch used for every dispatch the client makes, bounded by the delivery
+ * deadline. The signal is installed at this layer because it is the only one
+ * that reaches all three kinds of dispatch — plain calls, pagination follow-up
+ * pages (which cannot carry per-call request options), and the auth strategy's
+ * internal token request. The signal is created once per client, so it caps
+ * their sum; it aborts as TimeoutError, which maps to status 0.
  */
 type BoundedFetch = (url: string, init: RequestInit) => Promise<Response>;
 /** Exported for tests: the delivery budget is 8 s of wall clock, which a test cannot wait out. */
 export function createBoundedFetch(delivery: AbortSignal): BoundedFetch {
 	return async (url: string, init: RequestInit): Promise<Response> => {
-		init.signal = AbortSignal.any([delivery, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]);
+		init.signal = delivery;
 		return fetch(url, init);
 	};
 }
@@ -106,10 +106,10 @@ export function createBoundedFetch(delivery: AbortSignal): BoundedFetch {
  * Creates the per-delivery client. @octokit/auth-app authenticates the app
  * endpoints (e.g. GET /app) with the App JWT and everything else with an
  * installation token it issues lazily on first use. A before-request hook
- * pins the REST API version on every request, and the bounded fetch caps both
- * each dispatch and the delivery as a whole — including the internal token
- * request and pagination follow-up pages (SPEC.md §4, §9, §11). The delivery
- * budget starts here, so the client is created once per delivery.
+ * pins the REST API version on every request, and the bounded fetch caps the
+ * delivery as a whole, including the internal token request and pagination
+ * follow-up pages (SPEC.md §4, §9, §11). The delivery budget starts here, so
+ * the client is created once per delivery.
  */
 export function createGithubClient(
 	credentials: AppCredentials,

@@ -411,7 +411,9 @@ describe("delivery deadline", () => {
 		expect(dispatchedSignal(init)).toMatchObject({ aborted: true });
 	});
 
-	it("gives each dispatch its own signal while the delivery budget lasts", async () => {
+	/* One budget, not one per dispatch: a per-dispatch deadline could only fire first by
+	 * being shorter than the whole delivery, which is the delivery budget again. */
+	it("installs the one delivery signal on every dispatch", async () => {
 		expect.hasAssertions();
 		installFetchMock([
 			jsonRoute({ method: "GET", payload: {}, status: HTTP_OK, url: APP_URL }),
@@ -423,8 +425,8 @@ describe("delivery deadline", () => {
 		const second: RequestInit = { method: "GET" };
 		await expect(bounded(APP_URL, first)).resolves.toBeInstanceOf(Response);
 		await expect(bounded(RATE_LIMIT_URL, second)).resolves.toBeInstanceOf(Response);
-		expect(dispatchedSignal(first)).not.toBe(dispatchedSignal(second));
-		expect(dispatchedSignal(first)).toMatchObject({ aborted: false });
+		expect(dispatchedSignal(first)).toBe(delivery.signal);
+		expect(dispatchedSignal(second)).toBe(delivery.signal);
 	});
 
 	it("aborts an in-flight dispatch when the delivery budget expires mid-call", async () => {
