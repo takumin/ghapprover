@@ -22,7 +22,7 @@ declare global {
 	interface Env {
 		/** GitHub App ID (or client ID), the `iss` claim of the App JWT. */
 		readonly GITHUB_APP_ID: string;
-		/** GitHub App private key, PEM (PKCS#8 or the PKCS#1 GitHub downloads). */
+		/** GitHub App private key, PKCS#8 PEM (SPEC.md §7); the PKCS#1 PEM GitHub serves is rejected at runtime. */
 		readonly GITHUB_APP_PRIVATE_KEY: string;
 		/** Webhook secret used for X-Hub-Signature-256 verification. */
 		readonly GITHUB_WEBHOOK_SECRET: string;
