@@ -306,10 +306,10 @@ flowchart TD
 
 - Processing is **synchronous** (not deferred to `ctx.waitUntil`). GitHub API calls per
   delivery: token issuance, commit list (up to 3 pages), membership checks (one per
-  distinct non-bot author/committer, memoized within the delivery, §3.1), existing
-  reviews (paginated), the live PR fetch, and the review POST — typically under 10
-  calls for PRs authored by the owner or an allowed bot, which fits within the webhook
-  timeout (10 seconds). Being synchronous means the outcome is
+  distinct non-bot author/committer, memoized within the delivery, §3.1), the App slug
+  fetch (`GET /app`, §3 condition 5), existing reviews (paginated), the live PR fetch,
+  and the review POST — typically under 10 calls for PRs authored by the owner or an
+  allowed bot. Being synchronous means the outcome is
   recorded as-is in GitHub's Recent Deliveries, and failures can be safely re-executed via
   manual redelivery (the approval process is idempotent as described in §6).
 - **Two deadlines bound the API calls**: one per dispatch, and one for the delivery as a
@@ -318,6 +318,12 @@ flowchart TD
   timeout and still post its approval — recording a failed delivery for a PR that was in
   fact approved, the opposite of the diagnostic property this synchronous design exists
   for. Exhausting either budget fails the delivery closed (§9)
+- **Membership lookups are resolved lazily, one at a time, in commit order** (memoized per
+  delivery, §3.1), and the first failing commit stops the loop. This is not only a latency
+  choice: Workers allows 50 subrequests per request on the Free plan (1000 on paid), and a
+  250-commit PR with distinct principals would otherwise burst up to two lookups per commit
+  before any of them could matter. Parallelising them would reintroduce that burst — and a
+  race between two concurrent lookups of the same login that the memoization cannot bound
 - "Not approving" is a normal outcome (200), and its reason must always be logged.
   5xx is reserved for cases where the evaluation could not be completed (e.g. transient GitHub
   API failures).
@@ -379,22 +385,52 @@ Emit at least the following to structured logs (Workers Logs):
 
 - `deliveryId` (X-GitHub-Delivery), `repo`, `prNumber`, `action`, `headSha`
 - `decision` (approved / skipped / error) and `reason`
-  (e.g. `author-not-trusted`, `untrusted-commit`, `unverified-commit`,
-  `already-approved`, `too-many-commits`, `commit-count-mismatch`, `no-commits`,
-  `head-moved`)
+
+`reason` is drawn from a closed vocabulary. This is the list an operator greps, so it is
+exhaustive rather than illustrative:
+
+| `decision` | `reason`                | Meaning                                                                    |
+| ---------- | ----------------------- | -------------------------------------------------------------------------- |
+| approved   | _(none)_                | The review was posted                                                      |
+| skipped    | `event-out-of-scope`    | Not a `pull_request` event, or an action outside §3 cond. 1                |
+| skipped    | `pr-not-open`           | §3 condition 2: the PR is closed or merged                                 |
+| skipped    | `pr-draft`              | §3 condition 2: the PR is a draft                                          |
+| skipped    | `head-repo-missing`     | §3 note: `head.repo` is null (the head repository was deleted)             |
+| skipped    | `head-repo-forked`      | §3 note: the head repository is not the base repository                    |
+| skipped    | `author-not-trusted`    | §3 condition 3, including a membership 404                                 |
+| skipped    | `no-commits`            | §3.2: `pull_request.commits` is 0                                          |
+| skipped    | `too-many-commits`      | §3.2: more than the 250 the commits API can return                         |
+| skipped    | `commit-count-mismatch` | §3.2: the fetched list differs from the declared count                     |
+| skipped    | `unverified-commit`     | §3.2: a commit is not `verification.verified`                              |
+| skipped    | `untrusted-commit`      | §3.2: a commit author / committer is not a trusted principal               |
+| skipped    | `already-approved`      | §3 condition 5 / §6: an own APPROVE for this head exists                   |
+| skipped    | `head-moved`            | §3.3: the live PR no longer matches the payload                            |
+| skipped    | `review-rejected`       | §9: the review POST returned 422                                           |
+| error      | `invalid-signature`     | §4 step 1: signature missing, malformed, or not matching                   |
+| error      | `payload-too-large`     | §4 step 1: `Content-Length` above GitHub's 25 MB cap                       |
+| error      | `not-found`             | A request outside `POST /webhook`                                          |
+| error      | `invalid-payload`       | The body is not JSON, or not the modeled `pull_request` shape              |
+| error      | `missing-installation`  | The delivery carries no `installation.id` (§7)                             |
+| error      | `github-api-error`      | §9: a GitHub API call failed; `endpoint` and `status` accompany it         |
+| error      | `internal-error`        | Any other thrown failure; `errorName` (the class name only) accompanies it |
 
 > [!WARNING]
-> Never log tokens, private keys, or the full webhook payload.
+> Never log tokens, private keys, or the full webhook payload. The accompanying fields
+> above are bounded on purpose: `endpoint` is a route template, and `errorName` is a
+> class name — never an error message, which could carry a response body excerpt.
 
 ## 9. Error Handling
 
 | Situation                                                             | Response | Notes                                                                                                                               |
 | --------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Invalid signature / missing signature header                          | 401      | Do not process the body                                                                                                             |
+| `Content-Length` above GitHub's 25 MB payload cap                     | 413      | `payload-too-large`. Rejected before the body is buffered (§4)                                                                      |
 | Out-of-scope event / action                                           | 200      | Log the reason                                                                                                                      |
 | Approval conditions unsatisfied                                       | 200      | Normal outcome. Log the reason                                                                                                      |
 | Membership API returns 404 (author is not an org member)              | 200      | Normal outcome (`author-not-trusted`), not an error                                                                                 |
 | Review POST returns 422 (PR closed / merged in the meantime)          | 200      | Normally prevented by the live PR check (§3.3); treated as a skip                                                                   |
+| Body is not the modeled `pull_request` payload                        | 500      | `invalid-payload`. The evaluation could not be completed                                                                            |
+| Delivery carries no `installation.id`                                 | 500      | `missing-installation`. An App delivery always carries one, so its absence is a configuration problem, not an unsatisfied condition |
 | Transient GitHub API failure                                          | 500      | Fail closed. Retryable via redelivery                                                                                               |
 | Per-dispatch or whole-delivery deadline exhausted (§4)                | 500      | `github-api-error` with `status: 0`. Fail closed                                                                                    |
 | Other GitHub API 4xx (401/403: insufficient permissions, rate limits) | 500      | Distinguish in logs as a configuration problem                                                                                      |
