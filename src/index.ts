@@ -53,6 +53,29 @@ const HTTP_INTERNAL_ERROR = 500;
 const MAX_BODY_BYTES = 26_214_400;
 
 /**
+ * SPEC.md §8's reason vocabulary, closed rather than illustrative because it is
+ * what an operator greps. The §3 rows are the decision module's own unions, so
+ * a renamed problem there is a compile error here rather than a silent change
+ * to the logged vocabulary; the rest are this module's outcomes. Derived from
+ * the decision signatures so "./decision" stays a single value import.
+ */
+type Reason =
+	| NonNullable<ReturnType<typeof checkCommitStructure>>
+	| NonNullable<ReturnType<typeof checkPullRequestState>>
+	| "already-approved"
+	| "author-not-trusted"
+	| "event-out-of-scope"
+	| "github-api-error"
+	| "head-moved"
+	| "internal-error"
+	| "invalid-payload"
+	| "invalid-signature"
+	| "missing-installation"
+	| "not-found"
+	| "payload-too-large"
+	| "review-rejected";
+
+/**
  * Evaluation result mapped onto the §9 status table and the §8 log entry.
  * endpoint and status (the GithubApiError fields; 0 = network failure) are
  * set for the github-api-error outcome only; errorName (a thrown error's
@@ -63,7 +86,7 @@ interface Outcome {
 	readonly endpoint?: string;
 	readonly errorName?: string;
 	readonly httpStatus: number;
-	readonly reason?: string;
+	readonly reason?: Reason;
 	readonly status?: number;
 }
 
@@ -85,11 +108,11 @@ interface ReviewTarget {
 	readonly repo: RepoRef;
 }
 
-function skippedOutcome(reason: string): Outcome {
+function skippedOutcome(reason: Reason): Outcome {
 	return { decision: "skipped", httpStatus: HTTP_OK, reason };
 }
 /** 5xx marks an evaluation that could not be completed: loud in Recent Deliveries, redeliverable (SPEC.md §9). */
-function errorOutcome(reason: string): Outcome {
+function errorOutcome(reason: Reason): Outcome {
 	return { decision: "error", httpStatus: HTTP_INTERNAL_ERROR, reason };
 }
 function respond(outcome: Outcome): Response {
