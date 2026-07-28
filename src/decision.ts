@@ -223,18 +223,21 @@ function parseAccount(value: unknown): GithubAccount | null {
 	return { id, login, type };
 }
 
-function parseHeadRepo(value: unknown): { readonly repo: PullRequestHead["repo"] } | null {
+/* A deleted head repository is absent rather than malformed, so it parses to null (SPEC.md §3
+ * note); undefined is the parse failure, which is what keeps the two apart without boxing the
+ * result — the same sentinel the response mappers use (src/github.ts). */
+function parseHeadRepo(value: unknown): PullRequestHead["repo"] | undefined {
 	if (value === null || value === undefined) {
-		return { repo: null };
+		return null;
 	}
 	if (!isRecord(value)) {
-		return null;
+		return undefined;
 	}
 	const { id } = value;
 	if (typeof id !== "number") {
-		return null;
+		return undefined;
 	}
-	return { repo: { id } };
+	return { id };
 }
 
 function parseHead(value: unknown): PullRequestHead | null {
@@ -246,10 +249,10 @@ function parseHead(value: unknown): PullRequestHead | null {
 		return null;
 	}
 	const parsedRepo = parseHeadRepo(repo);
-	if (parsedRepo === null) {
+	if (parsedRepo === undefined) {
 		return null;
 	}
-	return { repo: parsedRepo.repo, sha };
+	return { repo: parsedRepo, sha };
 }
 
 function parsePullRequest(value: unknown): EventPullRequest | null {
