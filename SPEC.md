@@ -312,6 +312,12 @@ flowchart TD
   timeout (10 seconds). Being synchronous means the outcome is
   recorded as-is in GitHub's Recent Deliveries, and failures can be safely re-executed via
   manual redelivery (the approval process is idempotent as described in §6).
+- **Two deadlines bound the API calls**: one per dispatch, and one for the delivery as a
+  whole (below GitHub's 10-second webhook timeout). The per-dispatch budget alone would
+  bound each call and none of them together, so a slow delivery could outlive the webhook
+  timeout and still post its approval — recording a failed delivery for a PR that was in
+  fact approved, the opposite of the diagnostic property this synchronous design exists
+  for. Exhausting either budget fails the delivery closed (§9)
 - "Not approving" is a normal outcome (200), and its reason must always be logged.
   5xx is reserved for cases where the evaluation could not be completed (e.g. transient GitHub
   API failures).
@@ -382,18 +388,29 @@ Emit at least the following to structured logs (Workers Logs):
 
 ## 9. Error Handling
 
-| Situation                                                             | Response | Notes                                                             |
-| --------------------------------------------------------------------- | -------- | ----------------------------------------------------------------- |
-| Invalid signature / missing signature header                          | 401      | Do not process the body                                           |
-| Out-of-scope event / action                                           | 200      | Log the reason                                                    |
-| Approval conditions unsatisfied                                       | 200      | Normal outcome. Log the reason                                    |
-| Membership API returns 404 (author is not an org member)              | 200      | Normal outcome (`author-not-trusted`), not an error               |
-| Review POST returns 422 (PR closed / merged in the meantime)          | 200      | Normally prevented by the live PR check (§3.3); treated as a skip |
-| Transient GitHub API failure                                          | 500      | Fail closed. Retryable via redelivery                             |
-| Other GitHub API 4xx (401/403: insufficient permissions, rate limits) | 500      | Distinguish in logs as a configuration problem                    |
+| Situation                                                             | Response | Notes                                                                                                                               |
+| --------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Invalid signature / missing signature header                          | 401      | Do not process the body                                                                                                             |
+| Out-of-scope event / action                                           | 200      | Log the reason                                                                                                                      |
+| Approval conditions unsatisfied                                       | 200      | Normal outcome. Log the reason                                                                                                      |
+| Membership API returns 404 (author is not an org member)              | 200      | Normal outcome (`author-not-trusted`), not an error                                                                                 |
+| Review POST returns 422 (PR closed / merged in the meantime)          | 200      | Normally prevented by the live PR check (§3.3); treated as a skip                                                                   |
+| Transient GitHub API failure                                          | 500      | Fail closed. Retryable via redelivery                                                                                               |
+| Per-dispatch or whole-delivery deadline exhausted (§4)                | 500      | `github-api-error` with `status: 0`. Fail closed                                                                                    |
+| Other GitHub API 4xx (401/403: insufficient permissions, rate limits) | 500      | Distinguish in logs as a configuration problem                                                                                      |
 
-No automatic retries inside the Worker (set timeouts on GitHub API calls).
-Re-execution is consolidated into manual redelivery on the GitHub side.
+No automatic retries of transient GitHub API failures (5xx / network errors /
+timeouts) inside the Worker (set timeouts on GitHub API calls). Re-execution is
+consolidated into manual redelivery on the GitHub side.
+
+> [!NOTE]
+> The auth library (§11) internally performs two bounded auth-consistency
+> retries, accepted as part of the delegated concern: a request that receives a
+> 401 within five seconds of installation-token issuance is retried while that
+> window lasts (GitHub's token replication delay), and an App JWT rejected for
+> clock skew is re-signed once with the reported time difference. Neither
+> retries transient API failures; on exhaustion the delivery still fails loud
+> per this table.
 
 > [!NOTE]
 > GitHub does not automatically redeliver failed webhook deliveries. A transient
@@ -441,8 +458,10 @@ Rules:
 > The composite packages are deliberately not used: `@octokit/rest` adds generated
 > endpoint methods and request logging this Worker does not need, and `octokit`
 > further bundles webhooks, OAuth, and retry / throttling plugins — automatic retries
-> would even conflict with §9. `@octokit/webhooks` targets long-running Node servers;
-> its verification primitive is published standalone as `@octokit/webhooks-methods`.
+> of transient failures would even conflict with §9 (the auth library's bounded
+> auth-consistency retries are the accepted exception noted there). `@octokit/webhooks`
+> targets long-running Node servers; its verification primitive is published
+> standalone as `@octokit/webhooks-methods`.
 
 ## 12. Implementation Notes (Informative)
 
