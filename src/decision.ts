@@ -166,7 +166,9 @@ export function checkCommit(
 
 /* SPEC.md §3 condition 5: only an APPROVED review by the App's own bot user for the current head
  * suppresses re-approval; DISMISSED reviews do not (they are simply not APPROVED), so a manually
- * dismissed PR can be approved again. */
+ * dismissed PR can be approved again. Matching on login alone (unlike the §3.1 allowlist, which
+ * also pins an id) is deliberate: GET /app returns the App's id, not its bot user's, and "[" is
+ * not legal in a login, so "<slug>[bot]" is unforgeable; a false match would only suppress. */
 export function hasOwnApproval(
 	reviews: readonly PullRequestReview[],
 	botLogin: string,
