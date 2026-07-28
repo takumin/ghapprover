@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { sign } from "@octokit/webhooks-methods";
 import { verifyWebhookSignature } from "../src/webhook";
 
 /** The frozen signature accepts string | null for the missing-header case. */
@@ -7,26 +8,17 @@ const NO_HEADER = null;
 
 const SECRET = "test-webhook-secret";
 const BODY = '{"action":"opened","number":1}';
-const HEX_RADIX = 16;
-const HEX_PAD = 2;
+const SHA256_PREFIX = "sha256=";
 /** Named booleans satisfy both boolean-matcher style rules at once. */
 const VALID = true;
 const INVALID = false;
 
-/** Computes the expected HMAC-SHA256 hex digest with real Web Crypto. */
+/* The header is produced by the same package's sign() — the counterpart of the verify() under
+ * test, and an independent function from it, so this asserts against the real GitHub format
+ * rather than against a second HMAC implementation maintained here. */
 async function signHex(secret: string, body: string): Promise<string> {
-	const encoder = new TextEncoder();
-	const key = await crypto.subtle.importKey(
-		"raw",
-		encoder.encode(secret),
-		{ hash: "SHA-256", name: "HMAC" },
-		false,
-		["sign"],
-	);
-	const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
-	return Array.from(new Uint8Array(signature), (byte) =>
-		byte.toString(HEX_RADIX).padStart(HEX_PAD, "0"),
-	).join("");
+	const header = await sign(secret, body);
+	return header.slice(SHA256_PREFIX.length);
 }
 
 describe("verifyWebhookSignature acceptance", () => {
