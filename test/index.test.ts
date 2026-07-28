@@ -21,8 +21,11 @@ type RecordedRequest = FetchMockSession["requests"][number];
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_NOT_FOUND = 404;
+const HTTP_PAYLOAD_TOO_LARGE = 413;
 const HTTP_UNPROCESSABLE_ENTITY = 422;
 const HTTP_INTERNAL_ERROR = 500;
+/** One byte past GitHub's 25 MB webhook payload cap. */
+const OVERSIZED_BODY_BYTES = 26_214_401;
 
 const WEBHOOK_URL = "http://example.com/webhook";
 const SECRET = "test-secret";
@@ -732,5 +735,41 @@ describe("github api failures", () => {
 			status: HTTP_INTERNAL_ERROR,
 		});
 		session.assertDone();
+	});
+});
+
+/** A signed delivery declaring an explicit Content-Length, which postSigned leaves unset. */
+async function postSignedWithLength(body: string, contentLength: number): Promise<Response> {
+	const request = new Request(WEBHOOK_URL, {
+		body,
+		headers: {
+			"content-length": String(contentLength),
+			"x-github-delivery": DELIVERY_ID,
+			"x-github-event": "pull_request",
+			"x-hub-signature-256": await signBody(SECRET, body),
+		},
+		method: "POST",
+	});
+	return dispatch(request);
+}
+
+describe("request body limits", () => {
+	it("rejects a Content-Length above the 25 MB webhook cap before reading the body", async () => {
+		expect.hasAssertions();
+		const session = installFetchMock([]);
+		const response = await postSignedWithLength(buildPayload(), OVERSIZED_BODY_BYTES);
+		await expectReply(response, {
+			body: { decision: "error", reason: "payload-too-large" },
+			status: HTTP_PAYLOAD_TOO_LARGE,
+		});
+		expect(session.requests).toHaveLength(0);
+	});
+
+	it("processes a delivery whose Content-Length is within the cap", async () => {
+		expect.hasAssertions();
+		installFetchMock(happyRoutes());
+		const body = buildPayload();
+		const response = await postSignedWithLength(body, new TextEncoder().encode(body).length);
+		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
 	});
 });

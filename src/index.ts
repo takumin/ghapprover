@@ -36,7 +36,19 @@ import { verifyWebhookSignature } from "./webhook";
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_NOT_FOUND = 404;
+const HTTP_PAYLOAD_TOO_LARGE = 413;
 const HTTP_INTERNAL_ERROR = 500;
+
+/**
+ * GitHub caps webhook payloads at 25 MB, so anything larger is not a delivery
+ * this Worker could act on. The HMAC covers the raw body, so the body must be
+ * buffered before the caller can be authenticated (SPEC.md §4 step 1) — the
+ * declared length is the one thing that can be checked first, and it bounds
+ * what an unauthenticated caller on the public endpoint can make the Worker
+ * hold in memory and hash. A body sent without a usable Content-Length (e.g.
+ * chunked) is still read: rejecting those would reject genuine deliveries.
+ */
+const MAX_BODY_BYTES = 26_214_400;
 
 /**
  * Evaluation result mapped onto the §9 status table and the §8 log entry.
@@ -314,8 +326,23 @@ async function evaluateBody(body: string, env: Env, log: LogFields): Promise<Out
 	recordPayload(log, payload);
 	return processPayload(payload, env);
 }
+/** True only for a Content-Length that parses and exceeds the cap; anything else is read. */
+function exceedsBodyLimit(header: string | null): boolean {
+	if (header === null) {
+		return false;
+	}
+	const declared = Number(header);
+	return Number.isFinite(declared) && declared > MAX_BODY_BYTES;
+}
 /** SPEC.md §4 step 1 and §9: verify the signature and scope the event before parsing the body. */
 async function evaluateDelivery(request: Request, env: Env, log: LogFields): Promise<Outcome> {
+	if (exceedsBodyLimit(request.headers.get("content-length"))) {
+		return {
+			decision: "error",
+			httpStatus: HTTP_PAYLOAD_TOO_LARGE,
+			reason: "payload-too-large",
+		};
+	}
 	const body = await request.text();
 	const verified = await verifyWebhookSignature(
 		env.GITHUB_WEBHOOK_SECRET,
