@@ -121,8 +121,16 @@ or cannot be determined, do not approve (fail closed).
 > control on the Worker side is the App's installation scope (§2). When installed with
 > "All repositories", per-repository control is handled on the ruleset side (§3.4).
 >
-> Fork PRs are evaluated under exactly the same conditions (author and commit checks).
-> If `pull_request.head.repo` is `null` (e.g. the fork was deleted), do not approve.
+> PRs whose head repository is not the base repository (fork PRs) are not approved
+> (`head-repo-forked`), and neither are PRs whose `pull_request.head.repo` is `null`
+> because the head repository was deleted (`head-repo-missing`). §3.2's guarantee —
+> that third-party commits mixed into a trusted principal's PR block approval — rests
+> on `verification.verified` proving attribution, which holds only where write access
+> to the repository is itself the trust boundary. On a fork it is not: the base
+> repository's owner cannot see who is able to push to the head branch, so a
+> `synchronize` event can carry commits from someone else while the PR author stays
+> trusted. The intended use case (§1) pushes branches to the repository itself, so the
+> check costs nothing it needs, and it runs before any API call.
 
 ### 3.1 Trusted Principals
 
@@ -316,6 +324,7 @@ the information needed for evaluation comes from the following.
 | Decision               | Source                                                                                                                                                                                                                                                                     |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Target repositories    | The GitHub App's installation scope (§2). Webhooks are simply not delivered from outside the scope. With "All repositories", per-repository control is handled via rulesets (§3.4)                                                                                         |
+| Target branches        | Not a control axis. `pull_request.base` is not read at all, so a PR into a long-lived release branch is approved on exactly the same terms as one into the default branch. Per-branch differences belong in rulesets (§3.4), which is where branch targeting already lives |
 | Repository / org owner | Webhook payload + GitHub API (§3.1)                                                                                                                                                                                                                                        |
 | Allowed bots           | In-code constant pairing login and numeric user id (e.g. `ALLOWED_BOTS = [{ login: "renovate[bot]", id: 29139614 }, { login: "dependabot[bot]", id: 49699333 }, { login: "autofix-ci[bot]", id: 114827586 }] as const`)                                                    |
 
