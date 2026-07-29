@@ -113,14 +113,16 @@
 	},
 	"overrides": [
 		{
-			"files": ["src/**/*.ts"],
+			"files": ["src/decision.ts", "src/pipeline.ts"],
 			"rules": {
 				// Trust resolution walks principals and commits sequentially on purpose
 				// (SPEC.md §3.1, §3.2): the first failure ends the loop, so a delivery
 				// that ends in a skip never bursts one membership lookup per principal
 				// against the Worker subrequest allowance or GitHub's secondary rate
 				// limits. Awaiting in parallel is the burst the sequential walk exists
-				// to bound, which is why the rule is off rather than worked around.
+				// to bound, which is why the rule is off rather than worked around. The
+				// two modules that own those walks are named rather than src/ as a
+				// whole, so an awaited loop anywhere else is still reported.
 				"eslint/no-await-in-loop": "off",
 			},
 		},
