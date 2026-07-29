@@ -61,7 +61,11 @@
 		// named individually.
 		"eslint/no-unreachable-loop": "error",
 		"eslint/no-useless-assignment": "error",
-		// Duplicates typescript/require-await, which is settled below.
+		// Not the duplicate of typescript/require-await the name suggests: this one
+		// also reports an `async` function that returns a promise without awaiting
+		// it, which is the shape most of the async helpers in src/ have. The
+		// type-aware rule, which reports only a function with nothing async about
+		// it at all, is left on by category to carry the check.
 		"eslint/require-await": "off",
 		// The import group, in the order oxlint sorts it:
 		// - exports-last, group-exports, no-named-export and prefer-default-export
