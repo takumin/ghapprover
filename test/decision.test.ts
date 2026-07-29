@@ -24,7 +24,6 @@ import type {
 	PullRequestReview,
 } from "../src/types";
 import {
-	TARGET_ACTIONS,
 	accountKey,
 	checkCommit,
 	checkCommitCount,
@@ -401,11 +400,6 @@ const MALFORMED_PAYLOADS = [
 ];
 
 describe("target action filtering", () => {
-	it("exposes exactly the four in-scope actions", () => {
-		expect.hasAssertions();
-		expect(TARGET_ACTIONS).toStrictEqual(["opened", "reopened", "synchronize", "ready_for_review"]);
-	});
-
 	it.each([
 		{ action: "opened", expected: true },
 		{ action: "reopened", expected: true },

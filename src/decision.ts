@@ -24,15 +24,15 @@ import { isRecord, toAccount, toIdRef } from "./parse";
 import type { AccountRef } from "./allowlist";
 
 /** Actions evaluated for approval (SPEC.md §3 condition 1). */
-export const TARGET_ACTIONS: readonly string[] = [
+const TARGET_ACTIONS: ReadonlySet<string> = new Set([
 	"opened",
 	"reopened",
 	"synchronize",
 	"ready_for_review",
-];
+]);
 
 export function isTargetAction(action: string): boolean {
-	return TARGET_ACTIONS.includes(action);
+	return TARGET_ACTIONS.has(action);
 }
 
 export type PrStateProblem = "head-repo-forked" | "head-repo-missing" | "pr-draft" | "pr-not-open";
