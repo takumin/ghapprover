@@ -185,7 +185,6 @@ async function checkCommitTrust(
 	isTrusted: (account: GithubAccount) => Promise<boolean>,
 ): Promise<"untrusted-commit" | null> {
 	for (const account of principals) {
-		// oxlint-disable-next-line no-await-in-loop -- sequential by design: parallel lookups are the burst §3.1 memoization cannot bound
 		if (!(await isTrusted(account))) {
 			return "untrusted-commit";
 		}

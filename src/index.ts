@@ -187,7 +187,6 @@ async function findCommitProblem(
 	trust: TrustResolver,
 ): Promise<CommitProblem | null> {
 	for (const entry of commits) {
-		// oxlint-disable-next-line no-await-in-loop -- sequential by design: the first failing commit ends the loop, so later commits must not be resolved up front
 		const problem = await checkCommit(entry, trust);
 		if (problem !== null) {
 			return problem;
