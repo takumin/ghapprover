@@ -26,9 +26,8 @@ import type {
 import {
 	TARGET_ACTIONS,
 	accountKey,
+	checkCommit,
 	checkCommitCount,
-	checkCommitStructure,
-	checkCommitTrust,
 	checkPullRequestState,
 	classifyPrincipal,
 	commitPrincipals,
@@ -543,18 +542,6 @@ describe("fetched commit count", () => {
 		},
 	);
 });
-
-/* The §3.2 per-commit check as the pipeline composes it (src/index.ts findCommitProblem): the
- * structure half first, so the signature verification settles the commit before the trust half
- * applies the web-flow committer exemption that rests on it. */
-async function checkCommit(
-	entry: PullRequestCommit,
-	isTrusted: (account: GithubAccount) => Promise<boolean>,
-): Promise<ReturnType<typeof checkCommitStructure>> {
-	return (
-		checkCommitStructure(entry) ?? (await checkCommitTrust(commitPrincipals(entry), isTrusted))
-	);
-}
 
 describe("commit verification gate", () => {
 	it.each(COMMIT_CASES)("returns $expected for $name", async ({ entry, expected }) => {

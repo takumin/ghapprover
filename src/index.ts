@@ -27,12 +27,10 @@ import {
 import type { GithubClient, RepoRef } from "./github";
 import {
 	accountKey,
+	checkCommit,
 	checkCommitCount,
-	checkCommitStructure,
-	checkCommitTrust,
 	checkPullRequestState,
 	classifyPrincipal,
-	commitPrincipals,
 	hasOwnApproval,
 	isLiveStateCurrent,
 	isOwnerMembership,
@@ -182,21 +180,17 @@ function createTrustResolver(client: GithubClient, repoOwner: GithubAccount): Tr
 	};
 }
 
-/* SPEC.md §3.2 in commit order. A trust-independent problem settles the commit before any lookup
- * runs, and the first failing commit ends the loop, so a delivery that ends in a skip never
- * bursts a lookup per principal against the Worker subrequest allowance or GitHub's secondary
- * rate limits. */
+/* SPEC.md §3.2 in commit order: checkCommit settles one commit (spending a lookup only on what it
+ * cannot settle without one), and the first failing commit ends the loop, so a delivery that ends
+ * in a skip never bursts a lookup per principal against the Worker subrequest allowance or
+ * GitHub's secondary rate limits. */
 async function findCommitProblem(
 	commits: readonly PullRequestCommit[],
 	trust: TrustResolver,
 ): Promise<CommitProblem | null> {
 	for (const entry of commits) {
-		const structural = checkCommitStructure(entry);
-		if (structural !== null) {
-			return structural;
-		}
 		// oxlint-disable-next-line no-await-in-loop -- sequential by design: the first failing commit ends the loop, so later commits must not be resolved up front
-		const problem = await checkCommitTrust(commitPrincipals(entry), trust);
+		const problem = await checkCommit(entry, trust);
 		if (problem !== null) {
 			return problem;
 		}

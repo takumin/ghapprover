@@ -161,7 +161,7 @@ export type CommitProblem = "untrusted-commit" | "unverified-commit";
  * settle a commit on these before spending a membership lookup on it — and it must run before
  * checkCommitTrust, because the web-flow committer exemption that half applies rests on genuine
  * web-flow commits being GitHub-signed, which is what the verification check here enforces. */
-export function checkCommitStructure(entry: PullRequestCommit): CommitProblem | null {
+function checkCommitStructure(entry: PullRequestCommit): CommitProblem | null {
 	const { author, commit, committer } = entry;
 	const { verification } = commit;
 	if (verification === null || !verification.verified) {
@@ -179,8 +179,9 @@ export function checkCommitStructure(entry: PullRequestCommit): CommitProblem | 
  * first untrusted principal: a further lookup could not change this commit's outcome, and a
  * delivery that ends in a skip must not burst one lookup per principal against the Worker
  * subrequest allowance or GitHub's secondary rate limits. Meaningful only for a commit that has
- * passed checkCommitStructure: commitPrincipals drops unmapped principals rather than failing. */
-export async function checkCommitTrust(
+ * passed checkCommitStructure: commitPrincipals drops unmapped principals rather than failing,
+ * which is why checkCommit below owns the order rather than leaving it to each caller. */
+async function checkCommitTrust(
 	principals: readonly GithubAccount[],
 	isTrusted: (account: GithubAccount) => Promise<boolean>,
 ): Promise<"untrusted-commit" | null> {
@@ -191,6 +192,22 @@ export async function checkCommitTrust(
 		}
 	}
 	return null;
+}
+
+/* SPEC.md §3.2 for one commit: the whole per-commit check, with the order its two halves must run
+ * in made structural rather than left to the caller. Both directions of that order are load-bearing
+ * — the trust-independent half settles a commit before any membership lookup is spent on it, and
+ * the web-flow committer exemption commitPrincipals applies is only safe once the signature check
+ * has run — so a caller composing the halves itself is a caller that can get it wrong. */
+export async function checkCommit(
+	entry: PullRequestCommit,
+	isTrusted: (account: GithubAccount) => Promise<boolean>,
+): Promise<CommitProblem | null> {
+	const structural = checkCommitStructure(entry);
+	if (structural !== null) {
+		return structural;
+	}
+	return checkCommitTrust(commitPrincipals(entry), isTrusted);
 }
 
 /* SPEC.md §3 condition 5: only an APPROVED review by the App's own bot user for the current head
