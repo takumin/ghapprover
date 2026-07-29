@@ -72,10 +72,11 @@
 		//   all push a module towards a single default export, which rejects the
 		//   named `export function` shape SPEC §12 asks for so that the decision
 		//   logic can be unit-tested without mocking the GitHub API.
-		// - extensions assumes a resolver this project does not use.
 		// - no-default-export bans the Workers entrypoint.
 		"import/exports-last": "off",
-		"import/extensions": "off",
+		// Reports nothing against the extensionless imports this codebase writes, so
+		// it is carried as a guard on that style rather than switched off.
+		"import/extensions": "error",
 		"import/group-exports": "off",
 		"import/no-default-export": "off",
 		"import/no-named-export": "off",
@@ -104,8 +105,6 @@
 		"typescript/prefer-optional-chain": "error",
 		// Too broad for Workers handler signatures.
 		"typescript/prefer-readonly-parameter-types": "off",
-		// Assumes the Node runtime this project does not run on.
-		"unicorn/import-style": "off",
 		// GitHub's webhook payloads and REST responses really carry `null`, and the
 		// frozen contract (src/types.ts) models that absence as `null` rather than
 		// converting it -- `undefined` is already spoken for as the parse-failure
