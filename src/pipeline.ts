@@ -197,7 +197,7 @@ async function submitApproval(client: GithubClient, target: ReviewTarget): Promi
 	if (!isLiveStateCurrent(live, headSha)) {
 		return skippedOutcome("head-moved");
 	}
-	const posted = await createApprovalReview(client, repo, pullNumber, headSha);
+	const posted = await createApprovalReview(client, { commitId: headSha, pullNumber, repo });
 	if (posted === "rejected") {
 		return skippedOutcome("review-rejected");
 	}

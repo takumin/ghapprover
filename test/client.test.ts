@@ -109,7 +109,11 @@ describe("token request attribution", () => {
 				url: reviewsPostUrl(repo.repo),
 			}),
 		]);
-		const promise = createApprovalReview(await makeClient(), repo, PULL_NUMBER, "head-sha");
+		const promise = createApprovalReview(await makeClient(), {
+			commitId: "head-sha",
+			pullNumber: PULL_NUMBER,
+			repo,
+		});
 		await expect(promise).rejects.toMatchObject({
 			endpoint: "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
 			status: HTTP_INTERNAL_ERROR,

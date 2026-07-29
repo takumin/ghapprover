@@ -219,17 +219,22 @@ export async function fetchPullRequest(
 	}
 }
 
+/** The pull request and head commit one approval review is anchored to. */
+export interface ApprovalTarget {
+	readonly commitId: string;
+	readonly pullNumber: number;
+	readonly repo: RepoRef;
+}
+
 /**
  * POST an APPROVE review anchored to commitId; a 422 means the PR was closed
  * or merged in the meantime and is treated as a skip (SPEC.md §9).
  */
-// oxlint-disable-next-line max-params -- frozen public API signature
 export async function createApprovalReview(
 	client: GithubClient,
-	repo: RepoRef,
-	pullNumber: number,
-	commitId: string,
+	target: ApprovalTarget,
 ): Promise<"created" | "rejected"> {
+	const { commitId, pullNumber, repo } = target;
 	const endpoint = "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews";
 	try {
 		await client.request(endpoint, {
