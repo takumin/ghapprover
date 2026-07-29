@@ -334,13 +334,22 @@ export async function fetchAppBotLogin(client: GithubClient): Promise<string> {
 	}
 }
 
-/** All PR commits via Link-header pagination (SPEC.md §3.2); the 250-commit cap is enforced upstream by precheckCommitCount. */
-export async function listPullRequestCommits(
+/** The two paginated per-PR list endpoints; both take the same parameters and differ only in the item shape. */
+type PullRequestListEndpoint =
+	| "GET /repos/{owner}/{repo}/pulls/{pull_number}/commits"
+	| "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews";
+
+/** Follows the Link header to the last page and maps every item through the frozen contract. */
+async function listPullRequestItems<Item>(
 	client: GithubClient,
-	repo: RepoRef,
-	pullNumber: number,
-): Promise<readonly PullRequestCommit[]> {
-	const endpoint = "GET /repos/{owner}/{repo}/pulls/{pull_number}/commits";
+	list: {
+		readonly endpoint: PullRequestListEndpoint;
+		readonly pullNumber: number;
+		readonly repo: RepoRef;
+	},
+	toItem: (value: unknown) => Item | undefined,
+): Promise<readonly Item[]> {
+	const { endpoint, pullNumber, repo } = list;
 	try {
 		const items = await client.paginate(endpoint, {
 			owner: repo.owner,
@@ -348,10 +357,23 @@ export async function listPullRequestCommits(
 			pull_number: pullNumber,
 			repo: repo.repo,
 		});
-		return items.map((item) => required(toCommitItem(item), endpoint, HTTP_OK));
+		return items.map((item) => required(toItem(item), endpoint, HTTP_OK));
 	} catch (error) {
 		throw toApiError(endpoint, error);
 	}
+}
+
+/** All PR commits via Link-header pagination (SPEC.md §3.2); the 250-commit cap is enforced upstream by precheckCommitCount. */
+export async function listPullRequestCommits(
+	client: GithubClient,
+	repo: RepoRef,
+	pullNumber: number,
+): Promise<readonly PullRequestCommit[]> {
+	return listPullRequestItems(
+		client,
+		{ endpoint: "GET /repos/{owner}/{repo}/pulls/{pull_number}/commits", pullNumber, repo },
+		toCommitItem,
+	);
 }
 
 /** GET /orgs/{org}/memberships/{username}; a 404 means "not a member" → null (SPEC.md §9). */
@@ -378,18 +400,11 @@ export async function listPullRequestReviews(
 	repo: RepoRef,
 	pullNumber: number,
 ): Promise<readonly PullRequestReview[]> {
-	const endpoint = "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews";
-	try {
-		const items = await client.paginate(endpoint, {
-			owner: repo.owner,
-			per_page: PAGE_SIZE,
-			pull_number: pullNumber,
-			repo: repo.repo,
-		});
-		return items.map((item) => required(toReviewItem(item), endpoint, HTTP_OK));
-	} catch (error) {
-		throw toApiError(endpoint, error);
-	}
+	return listPullRequestItems(
+		client,
+		{ endpoint: "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews", pullNumber, repo },
+		toReviewItem,
+	);
 }
 
 /** GET /repos/{owner}/{repo}/pulls/{n} for the live TOCTOU check (SPEC.md §3.3). */
