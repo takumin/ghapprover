@@ -7,6 +7,12 @@
 /* oxlint-disable unicorn/no-null */
 /* oxlint-disable max-lines -- the §4 pipeline and its outcome mapping live in one module by design */
 
+import type {
+	CommitCountProblem,
+	CommitListProblem,
+	CommitProblem,
+	PrStateProblem,
+} from "./decision";
 import type { GithubAccount, PullRequestCommit, PullRequestEventPayload } from "./types";
 import {
 	GithubApiError,
@@ -18,6 +24,7 @@ import {
 	listPullRequestCommits,
 	listPullRequestReviews,
 } from "./github";
+import type { GithubClient, RepoRef } from "./github";
 import {
 	accountKey,
 	checkCommitCount,
@@ -52,19 +59,17 @@ const MAX_BODY_BYTES = 26_214_400;
 
 /**
  * SPEC.md §8's reason vocabulary, closed rather than illustrative because it is
- * what an operator greps. The §3 rows are one per decision check, each derived
- * from what that check can actually return, so a renamed problem there is a
- * compile error here rather than a silent change to the logged vocabulary — and
- * a check narrowed to fewer members is caught here too, rather than being
- * absorbed by a union wide enough to cover its siblings. The rest are this
- * module's outcomes. Derived from the signatures rather than imported as types
- * so "./decision" stays a single value import.
+ * what an operator greps. The §3 rows are one per decision check, named by what
+ * that check can actually return, so a renamed problem there is a compile error
+ * here rather than a silent change to the logged vocabulary — and a check
+ * narrowed to fewer members is caught here too, rather than being absorbed by a
+ * union wide enough to cover its siblings. The rest are this module's outcomes.
  */
 type Reason =
-	| NonNullable<ReturnType<typeof checkCommitCount>>
-	| NonNullable<ReturnType<typeof checkCommitStructure>>
-	| NonNullable<ReturnType<typeof checkPullRequestState>>
-	| NonNullable<ReturnType<typeof precheckCommitCount>>
+	| CommitCountProblem
+	| CommitListProblem
+	| CommitProblem
+	| PrStateProblem
 	| "already-approved"
 	| "author-not-trusted"
 	| "event-out-of-scope"
@@ -95,9 +100,6 @@ interface Outcome {
 
 /** SPEC.md §8 flat log entry, accumulating fields as they become known per delivery. */
 type LogFields = Record<string, number | string>;
-/** Derived from the client signatures so "./github" stays a single value import. */
-type GithubClient = ReturnType<typeof createGithubClient>;
-type RepoRef = Parameters<typeof fetchPullRequest>[1];
 
 /** Resolves one account's §3.1 trust, memoized per delivery; see createTrustResolver. */
 type TrustResolver = (user: GithubAccount) => Promise<boolean>;
@@ -187,7 +189,7 @@ function createTrustResolver(client: GithubClient, repoOwner: GithubAccount): Tr
 async function findCommitProblem(
 	commits: readonly PullRequestCommit[],
 	trust: TrustResolver,
-): Promise<ReturnType<typeof checkCommitStructure>> {
+): Promise<CommitProblem | null> {
 	for (const entry of commits) {
 		const structural = checkCommitStructure(entry);
 		if (structural !== null) {

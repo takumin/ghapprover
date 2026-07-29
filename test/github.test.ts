@@ -12,13 +12,10 @@ import {
 	listPullRequestReviews,
 } from "../src/github";
 import { JWT_PATTERN, installFetchMock, jsonRoute, requestByUrl, tokenRoute } from "./fetch-stub";
+import type { PlannedRoute, RecordedRequest } from "./fetch-stub";
 import { describe, expect, it } from "vitest";
+import type { GithubClient } from "../src/github";
 import { privateKeyPemOnce } from "./app-key";
-
-/** Derived from the harness so "./fetch-stub" stays a single import (no-duplicate-imports). */
-type PlannedRoute = ReturnType<typeof jsonRoute>;
-type RecordedRequest = ReturnType<typeof requestByUrl>;
-type GithubClient = ReturnType<typeof createGithubClient>;
 
 const BASE = "https://api.github.com";
 const REPO = { owner: "octo", repo: "hello" };

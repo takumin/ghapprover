@@ -21,6 +21,7 @@ import type {
 	PullRequestReview,
 } from "./types";
 import { isRecord, toAccount, toIdRef } from "./parse";
+import type { AccountRef } from "./allowlist";
 
 /** Actions evaluated for approval (SPEC.md §3 condition 1). */
 export const TARGET_ACTIONS: readonly string[] = [
@@ -55,9 +56,6 @@ export function checkPullRequestState(
 	}
 	return null;
 }
-
-/** Derived from the allowlist so "./allowlist" stays a single value import. */
-type AccountRef = typeof WEB_FLOW;
 
 /* The identity every §3 trust decision is made against: the (id, login) pair, never the login
  * alone. Every identity comparison below goes through it, and callers that cache or compare
@@ -142,12 +140,13 @@ export function precheckCommitCount(declaredCount: number): CommitCountProblem |
 	return null;
 }
 
+export type CommitListProblem = "commit-count-mismatch";
 /* SPEC.md §3.2: the fetched list must match the count the payload declared. The declared count
  * itself is settled by precheckCommitCount, which the caller runs before it spends the fetch. */
 export function checkCommitCount(
 	fetchedCount: number,
 	declaredCount: number,
-): "commit-count-mismatch" | null {
+): CommitListProblem | null {
 	if (fetchedCount !== declaredCount) {
 		return "commit-count-mismatch";
 	}

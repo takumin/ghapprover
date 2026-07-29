@@ -11,12 +11,10 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { describe, expect, it, vi } from "vitest";
 import type { GithubAccount } from "../src/types";
 import { MAX_VERIFIABLE_COMMITS } from "../src/allowlist";
+import type { PlannedRoute } from "./fetch-stub";
 import { privateKeyPemOnce } from "./app-key";
 import { sign } from "@octokit/webhooks-methods";
 import worker from "../src/index";
-
-/** Derived from the harness so "./fetch-stub" stays a single import (no-duplicate-imports). */
-type PlannedRoute = ReturnType<typeof jsonRoute>;
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
