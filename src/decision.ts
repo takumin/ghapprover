@@ -70,7 +70,8 @@ export type TrustEvaluation =
 	| { readonly kind: "untrusted" }
 	| { readonly kind: "org-membership"; readonly org: string; readonly login: string };
 function isAllowedBot(user: GithubAccount): boolean {
-	return ALLOWED_BOTS.some((bot) => accountKey(bot) === accountKey(user));
+	const key = accountKey(user);
+	return ALLOWED_BOTS.some((bot) => accountKey(bot) === key);
 }
 /* SPEC.md §3.2: matched on login and numeric id, like the §3.1 allowlist. Both are identity
  * exemptions that decide approval, so neither may turn on a login string alone. */
