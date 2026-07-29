@@ -33,8 +33,7 @@ async function generatePrivateKeyPem(): Promise<string> {
 	return wrapPem(btoa(chars.join("")));
 }
 
-// oxlint-disable-next-line unicorn/no-useless-undefined -- init-declarations requires the initializer
-let cached: Promise<string> | undefined = undefined;
+let cached: Promise<string> | null = null;
 
 /** Generates the PEM once and shares it across tests. */
 export async function privateKeyPemOnce(): Promise<string> {
