@@ -1,10 +1,11 @@
 /**
- * Account fixtures built from the in-code allowlist itself (src/allowlist.ts),
- * shared so both suites derive them the same way. An entry whose id or login
- * changes must not silently turn a trusted fixture into an ordinary account —
- * that would reduce every §3.1 case to an author-not-trusted skip while the
- * assertions still pass. The near-miss fixtures are stated as the allowlisted
- * account with exactly one field overridden, so they stay near-misses too.
+ * Account fixtures shared across the suites. The allowlisted ones are built from the in-code
+ * allowlist itself (src/allowlist.ts) so every suite derives them the same way: an entry whose id
+ * or login changes must not silently turn a trusted fixture into an ordinary account — that would
+ * reduce every §3.1 case to an author-not-trusted skip while the assertions still pass. The
+ * near-miss fixtures are stated as the allowlisted account with exactly one field overridden, so
+ * they stay near-misses too. The plain accounts at the bottom carry no standing of their own and
+ * are here only because more than one suite builds a payload around them.
  */
 
 import { ALLOWED_BOTS, WEB_FLOW } from "../src/allowlist";
@@ -44,3 +45,8 @@ export const WEB_FLOW_USER: GithubAccount = {
 
 /** Same login, different account: the committer exemption must not fire on the login alone. */
 export const WEB_FLOW_LOOKALIKE: GithubAccount = { id: 999, login: WEB_FLOW.login, type: "User" };
+
+/** The repository owner the payload fixtures are built around. */
+export const OCTOCAT: GithubAccount = { id: 77, login: "octocat", type: "User" };
+/** An ordinary user: not allowlisted, not an owner, and not the App's own bot. */
+export const HUMAN: GithubAccount = { id: 301, login: "human", type: "User" };
