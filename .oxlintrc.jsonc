@@ -40,12 +40,13 @@
 		// SPEC §8 requires structured logs, and `console` is how a Worker emits
 		// them.
 		"eslint/no-console": "off",
-		// Without the exemption the two rules contradict each other: this one
-		// counted an `import type { X }` beside an existing value import from the
-		// same module as a duplicate, while import/consistent-type-specifier-style
-		// rejected the inline `{ type X }` spelling, leaving no way to import a
-		// type from a module whose values are already imported. A second *value*
-		// import of an already-imported module is still reported.
+		// Pairs with typescript/consistent-type-imports below. Without the
+		// exemption the two rules contradict each other: this one counted an
+		// `import type { X }` beside an existing value import from the same module
+		// as a duplicate, while import/consistent-type-specifier-style rejected the
+		// inline `{ type X }` spelling, leaving no way to import a type from a
+		// module whose values are already imported. A second *value* import of an
+		// already-imported module is still reported.
 		"eslint/no-duplicate-imports": ["error", { "allowSeparateTypeImports": true }],
 		// Tuned, as above: 0/1/-1 and array indexes stay writable.
 		"eslint/no-magic-numbers": [
@@ -79,6 +80,18 @@
 		"oxc/no-async-await": "off",
 		// Nursery, as above.
 		"promise/no-return-in-finally": "error",
+		// Pairs with eslint/no-duplicate-imports above, and is what makes that
+		// exemption safe to grant: the exemption only holds while a type import is
+		// always spelled as a separate `import type { X }` declaration. `prefer`
+		// forces a type-only import to be spelled as a type import at all, and
+		// `fixStyle` keeps the autofix from writing the inline `{ type X }` form
+		// that import/consistent-type-specifier-style then rejects. Both match
+		// oxlint's current defaults and are pinned so the pair cannot drift apart
+		// if a default changes.
+		"typescript/consistent-type-imports": [
+			"error",
+			{ "prefer": "type-imports", "fixStyle": "separate-type-imports" },
+		],
 		// Both are on by category already. no-floating-promises is spelled out for
 		// `ignoreVoid: false`, which stops a `void` prefix from silencing it;
 		// no-misused-promises restates the severity the category already gives it.
