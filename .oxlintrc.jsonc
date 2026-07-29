@@ -92,11 +92,9 @@
 			"error",
 			{ "prefer": "type-imports", "fixStyle": "separate-type-imports" },
 		],
-		// Both are on by category already. no-floating-promises is spelled out for
-		// `ignoreVoid: false`, which stops a `void` prefix from silencing it;
-		// no-misused-promises restates the severity the category already gives it.
+		// On by category already; the entry is here for `ignoreVoid: false`, which
+		// stops a `void` prefix from silencing it.
 		"typescript/no-floating-promises": ["error", { "ignoreVoid": false }],
-		"typescript/no-misused-promises": "error",
 		// Nursery, as above.
 		"typescript/no-unnecessary-condition": "error",
 		"typescript/prefer-optional-chain": "error",
