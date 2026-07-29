@@ -4,7 +4,6 @@
  * The one condition that needs a lookup takes it as an injected predicate rather than reaching for
  * a client, so a test supplies a plain function instead of a stubbed API.
  */
-/* oxlint-disable max-lines -- every §3 condition and the fail-closed payload parser belong to one pure module (SPEC.md §12) */
 
 import { ALLOWED_BOTS, MAX_VERIFIABLE_COMMITS, WEB_FLOW } from "./allowlist";
 import type {
@@ -14,11 +13,8 @@ import type {
 	LivePullRequest,
 	OrgMembership,
 	PullRequestCommit,
-	PullRequestEventPayload,
-	PullRequestHead,
 	PullRequestReview,
 } from "./types";
-import { isRecord, toAccount, toIdRef } from "./parse";
 import type { AccountRef } from "./allowlist";
 
 /** Actions evaluated for approval (SPEC.md §3 condition 1). */
@@ -229,94 +225,4 @@ export function hasOwnApproval(
 /** SPEC.md §3.3: the live PR must still be open, non-draft, and on the payload's head. */
 export function isLiveStateCurrent(live: LivePullRequest, expectedHeadSha: string): boolean {
 	return live.state === "open" && !live.draft && live.head.sha === expectedHeadSha;
-}
-
-/* A deleted head repository is absent rather than malformed, so it parses to null (SPEC.md §3
- * condition 2); undefined is the parse failure, which is what keeps the two apart without boxing the
- * result — the sentinel every narrowing primitive uses (src/parse.ts). */
-function parseHeadRepo(value: unknown): PullRequestHead["repo"] | undefined {
-	if (value === null || value === undefined) {
-		return null;
-	}
-	return toIdRef(value);
-}
-
-function parseHead(value: unknown): PullRequestHead | null {
-	if (!isRecord(value)) {
-		return null;
-	}
-	const { repo, sha } = value;
-	if (typeof sha !== "string") {
-		return null;
-	}
-	const parsedRepo = parseHeadRepo(repo);
-	if (parsedRepo === undefined) {
-		return null;
-	}
-	return { repo: parsedRepo, sha };
-}
-
-function parsePullRequest(value: unknown): EventPullRequest | null {
-	if (!isRecord(value)) {
-		return null;
-	}
-	const { commits, draft, head, number, state, user } = value;
-	if (
-		typeof number !== "number" ||
-		typeof state !== "string" ||
-		typeof draft !== "boolean" ||
-		typeof commits !== "number"
-	) {
-		return null;
-	}
-	const parsedUser = toAccount(user);
-	const parsedHead = parseHead(head);
-	if (parsedUser === undefined || parsedHead === null) {
-		return null;
-	}
-	return { commits, draft, head: parsedHead, number, state, user: parsedUser };
-}
-
-function parseRepository(value: unknown): EventRepository | null {
-	if (!isRecord(value)) {
-		return null;
-	}
-	const { full_name: fullName, id, name, owner } = value;
-	if (typeof id !== "number" || typeof name !== "string" || typeof fullName !== "string") {
-		return null;
-	}
-	const parsedOwner = toAccount(owner);
-	if (parsedOwner === undefined) {
-		return null;
-	}
-	return { full_name: fullName, id, name, owner: parsedOwner };
-}
-
-/** Absent or malformed alike leave the payload valid with no installation (SPEC.md §9). */
-function parseInstallation(value: unknown): { readonly id: number } | null {
-	return toIdRef(value) ?? null;
-}
-
-/* Fail-closed structural validation (SPEC.md §3): the typed payload is rebuilt field-by-field
- * from narrowed unknown values (never asserted), so a body that does not match the modeled shape
- * yields null. A missing or malformed installation stays null while the payload remains valid. */
-export function parsePullRequestEvent(payload: unknown): PullRequestEventPayload | null {
-	if (!isRecord(payload)) {
-		return null;
-	}
-	const { action, installation, pull_request: rawPullRequest, repository: rawRepository } = payload;
-	if (typeof action !== "string") {
-		return null;
-	}
-	const pullRequest = parsePullRequest(rawPullRequest);
-	const repository = parseRepository(rawRepository);
-	if (pullRequest === null || repository === null) {
-		return null;
-	}
-	return {
-		action,
-		installation: parseInstallation(installation),
-		pull_request: pullRequest,
-		repository,
-	};
 }

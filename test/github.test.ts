@@ -1,18 +1,17 @@
 /* oxlint-disable max-lines -- exhaustive coverage of the six-endpoint client in one deliverable file */
+import { GithubApiError, createGithubClient } from "../src/client";
+import { JWT_PATTERN, installFetchMock, jsonRoute, requestByUrl, tokenRoute } from "./fetch-stub";
+import type { PlannedRoute, RecordedRequest } from "./fetch-stub";
 import {
-	GithubApiError,
 	createApprovalReview,
-	createGithubClient,
 	fetchAppBotLogin,
 	fetchOrgMembership,
 	fetchPullRequest,
 	listPullRequestCommits,
 	listPullRequestReviews,
 } from "../src/github";
-import { JWT_PATTERN, installFetchMock, jsonRoute, requestByUrl, tokenRoute } from "./fetch-stub";
-import type { PlannedRoute, RecordedRequest } from "./fetch-stub";
 import { describe, expect, it } from "vitest";
-import type { GithubClient } from "../src/github";
+import type { GithubClient } from "../src/client";
 import { privateKeyPemOnce } from "./app-key";
 
 const BASE = "https://api.github.com";

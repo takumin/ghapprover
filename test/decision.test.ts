@@ -31,11 +31,11 @@ import {
 	isLiveStateCurrent,
 	isOwnerMembership,
 	isTargetAction,
-	parsePullRequestEvent,
 	precheckCommitCount,
 } from "../src/decision";
 import { describe, expect, it } from "vitest";
 import { MAX_VERIFIABLE_COMMITS } from "../src/allowlist";
+import { parsePullRequestEvent } from "../src/payload";
 
 const HEAD_SHA = "head-sha";
 const BOT_LOGIN = "ghapprover[bot]";
