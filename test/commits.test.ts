@@ -24,8 +24,10 @@ const MALLORY: GithubAccount = { id: 103, login: "mallory", type: "User" };
 const ALICE_LOOKALIKE: GithubAccount = { id: 909, login: "alice", type: "User" };
 const TRUSTED_ACCOUNTS: ReadonlySet<string> = new Set([accountKey(ALICE), accountKey(BOB)]);
 
-/** Stands in for the pipeline's membership lookup, which is why the predicate is async. */
+/** Stands in for the pipeline's membership lookup: it settles on a later microtask, as the
+ * network-backed resolver it replaces does, rather than answering within the same tick. */
 async function isTrustedFixture(account: GithubAccount): Promise<boolean> {
+	await Promise.resolve();
 	return TRUSTED_ACCOUNTS.has(accountKey(account));
 }
 

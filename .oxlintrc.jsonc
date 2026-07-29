@@ -100,9 +100,6 @@
 		"typescript/prefer-optional-chain": "error",
 		// Too broad for Workers handler signatures.
 		"typescript/prefer-readonly-parameter-types": "off",
-		// A test fixture has to be `async` to match the awaited signature it stands
-		// in for, even when it has nothing of its own to await.
-		"typescript/require-await": "off",
 		// Assumes the Node runtime this project does not run on.
 		"unicorn/import-style": "off",
 		// GitHub's webhook payloads and REST responses really carry `null`, and the
