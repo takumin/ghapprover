@@ -1,8 +1,5 @@
-/* SPEC.md and src/types.ts model absence as null (GitHub API convention), so
- * the fixtures and expectations below must produce null literals. The suite is
- * a deliberately exhaustive case matrix for every decision function (SPEC.md
- * §12), which does not fit the default file length budget. */
-/* oxlint-disable unicorn/no-null */
+/* A deliberately exhaustive case matrix for every decision function (SPEC.md §12),
+ * which does not fit the default file length budget. */
 /* oxlint-disable max-lines */
 
 import {

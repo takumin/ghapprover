@@ -1,8 +1,5 @@
-/* GitHub payloads model absence as null (src/types.ts), so the fixtures below
- * need null literals. The suite drives the whole SPEC.md §4 pipeline through
- * the stubbed fetch for every §8/§9 outcome, which does not fit the default
- * file length budget. */
-/* oxlint-disable unicorn/no-null */
+/* The suite drives the whole SPEC.md §4 pipeline through the stubbed fetch for every
+ * §8/§9 outcome, which does not fit the default file length budget. */
 /* oxlint-disable max-lines */
 
 import { AUTOFIX_CI, RENOVATE, RENOVATE_WRONG_ID, WEB_FLOW_USER } from "./accounts";

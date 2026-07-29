@@ -1,5 +1,3 @@
-/* GitHub payloads model absent data as null (src/types.ts), so null literals are deliberate here. */
-/* oxlint-disable unicorn/no-null */
 /* oxlint-disable max-lines -- exhaustive coverage of the six-endpoint client in one deliverable file */
 import {
 	GithubApiError,

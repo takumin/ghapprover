@@ -3,7 +3,6 @@ import { sign } from "@octokit/webhooks-methods";
 import { verifyWebhookSignature } from "../src/webhook";
 
 /** The frozen signature accepts string | null for the missing-header case. */
-// oxlint-disable-next-line unicorn/no-null -- single sanctioned null literal for the contract above
 const NO_HEADER = null;
 
 const SECRET = "test-webhook-secret";

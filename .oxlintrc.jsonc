@@ -105,6 +105,13 @@
 		"typescript/require-await": "off",
 		// Assumes the Node runtime this project does not run on.
 		"unicorn/import-style": "off",
+		// GitHub's webhook payloads and REST responses really carry `null`, and the
+		// frozen contract (src/types.ts) models that absence as `null` rather than
+		// converting it -- `undefined` is already spoken for as the parse-failure
+		// sentinel (see eslint/no-undefined above), so the two cannot be collapsed.
+		// Banning the literal would leave no way to spell the shape the API sends,
+		// in src or in the fixtures that stand in for it.
+		"unicorn/no-null": "off",
 	},
 	"overrides": [
 		{

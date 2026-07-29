@@ -3,8 +3,6 @@
  * Processing is synchronous (no ctx.waitUntil), so every outcome is recorded
  * as-is in GitHub's Recent Deliveries and redeliverable (§9).
  */
-/* The decision contract and Headers.get model absence as null (SPEC.md fails closed), so null literals are deliberate here. */
-/* oxlint-disable unicorn/no-null */
 /* oxlint-disable max-lines -- the §4 pipeline and its outcome mapping live in one module by design */
 
 import type {

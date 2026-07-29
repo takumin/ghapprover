@@ -4,8 +4,6 @@
  * The one condition that needs a lookup takes it as an injected predicate rather than reaching for
  * a client, so a test supplies a plain function instead of a stubbed API.
  */
-/* GitHub payloads and types.ts model absence as null (SPEC.md fails closed), so null literals are deliberate here. */
-/* oxlint-disable unicorn/no-null */
 /* oxlint-disable max-lines -- every §3 condition and the fail-closed payload parser belong to one pure module (SPEC.md §12) */
 
 import { ALLOWED_BOTS, MAX_VERIFIABLE_COMMITS, WEB_FLOW } from "./allowlist";

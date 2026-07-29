@@ -8,8 +8,6 @@
  * contract and throws (fail closed, SPEC.md §9).
  */
 
-/* The frozen contract (src/types.ts) models absent data as null, like the API, so null literals are deliberate here. */
-/* oxlint-disable unicorn/no-null */
 /* oxlint-disable max-lines -- the client factory, error mapping, and six-endpoint frozen API live in one module by design */
 
 import type {
