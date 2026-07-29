@@ -37,9 +37,6 @@
 		// writable while the rules still bite everywhere else.
 		"eslint/func-style": ["error", "declaration", { "allowArrowFunctions": true }],
 		"eslint/id-length": ["error", { "min": 2, "exceptions": ["_"] }],
-		// SPEC §8 requires structured logs, and `console` is how a Worker emits
-		// them.
-		"eslint/no-console": "off",
 		// Pairs with typescript/consistent-type-imports below. Without the
 		// exemption the two rules contradict each other: this one counted an
 		// `import type { X }` beside an existing value import from the same module
@@ -72,13 +69,14 @@
 		//   all push a module towards a single default export, which rejects the
 		//   named `export function` shape SPEC §12 asks for so that the decision
 		//   logic can be unit-tested without mocking the GitHub API.
-		// - no-default-export bans the Workers entrypoint.
+		// - no-default-export bans the Workers entrypoint, so it is narrowed to the
+		//   two files that cannot avoid a default export (see the override below)
+		//   rather than switched off everywhere.
 		"import/exports-last": "off",
 		// Reports nothing against the extensionless imports this codebase writes, so
 		// it is carried as a guard on that style rather than switched off.
 		"import/extensions": "error",
 		"import/group-exports": "off",
-		"import/no-default-export": "off",
 		"import/no-named-export": "off",
 		"import/prefer-default-export": "off",
 		// Bans async/await outright.
@@ -124,6 +122,25 @@
 				// limits. Awaiting in parallel is the burst the sequential walk exists
 				// to bound, which is why the rule is off rather than worked around.
 				"eslint/no-await-in-loop": "off",
+			},
+		},
+		{
+			"files": ["src/index.ts"],
+			"rules": {
+				// SPEC §8 requires exactly one structured log entry per delivery, and
+				// `console` is the only sink a Worker has. Scoped to the entrypoint,
+				// which is the one module that emits it, so a stray `console` anywhere
+				// else in src/ is still reported.
+				"eslint/no-console": "off",
+			},
+		},
+		{
+			"files": ["src/index.ts", "vitest.config.mts"],
+			"rules": {
+				// The two files whose default export is imposed from outside: the
+				// Workers entrypoint, and the vitest config. Every other module is
+				// still held to the named-export shape SPEC §12 asks for.
+				"import/no-default-export": "off",
 			},
 		},
 		{
