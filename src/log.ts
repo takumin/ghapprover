@@ -83,5 +83,6 @@ export function logOutcome(log: LogFields, outcome: Outcome): void {
 	if (errorMessage !== undefined) {
 		log["errorMessage"] = errorMessage.slice(0, MAX_ERROR_MESSAGE_CHARS);
 	}
+	// oxlint-disable-next-line eslint/no-console -- §8's one entry: `console` is the only sink a Worker has
 	console.log(log);
 }

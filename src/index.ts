@@ -154,6 +154,7 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 	return respond(outcome);
 }
 
+// oxlint-disable-next-line import/no-default-export -- the Workers runtime takes its handler as the module's default export
 export default {
 	async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
 		return handleWebhook(request, env);
