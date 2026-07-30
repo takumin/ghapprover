@@ -18,7 +18,7 @@ export const PULL_NUMBER = 5;
 const INSTALLATION_ID = 12_345;
 export const TOKENS_URL = `${BASE}/app/installations/${INSTALLATION_ID}/access_tokens`;
 export const APP_URL = `${BASE}/app`;
-export const MEMBERSHIP_URL = `${BASE}/orgs/octo/memberships/someone`;
+const MEMBERSHIP_URL = `${BASE}/orgs/octo/memberships/someone`;
 export const FULL_PAGE = 100;
 export const ACCOUNT = { id: 7, login: "octo", type: "User" };
 

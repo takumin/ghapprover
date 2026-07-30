@@ -32,15 +32,15 @@ export const TOKEN_URL = `${BASE}/app/installations/${INSTALLATION_ID}/access_to
 export const APP_URL = `${BASE}/app`;
 export const membershipUrl = (login: string): string => `${BASE}/orgs/acme/memberships/${login}`;
 export const COMMITS_SUFFIX = "/commits?per_page=100";
-export const REVIEWS_SUFFIX = "/reviews?per_page=100";
+const REVIEWS_SUFFIX = "/reviews?per_page=100";
 
-export const OWNER: GithubAccount = { id: 7, login: "octo", type: "User" };
+const OWNER: GithubAccount = { id: 7, login: "octo", type: "User" };
 export const ORG: GithubAccount = { id: 88, login: "acme", type: "Organization" };
 export const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User" };
 export const OTHER_STRANGER: GithubAccount = { id: 998, login: "eve", type: "User" };
 export const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT };
 
-export async function makeEnv(): Promise<Env> {
+async function makeEnv(): Promise<Env> {
 	return {
 		GITHUB_APP_ID: "12345",
 		GITHUB_APP_PRIVATE_KEY: await privateKeyPemOnce(),
