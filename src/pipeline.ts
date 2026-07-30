@@ -167,18 +167,6 @@ async function checkCommitCondition(
 	return null;
 }
 
-/** SPEC.md §4 steps 4-5: the author condition, then the commit condition. */
-async function evaluateConditions(
-	payload: PullRequestEventPayload,
-	client: GithubClient,
-	trust: TrustResolver,
-): Promise<Outcome | null> {
-	if (!(await trust(payload.pull_request.user))) {
-		return skippedOutcome("author-not-trusted");
-	}
-	return checkCommitCondition(payload, client, trust);
-}
-
 /** SPEC.md §4 steps 7-8: the live TOCTOU check (§3.3), then the review POST. */
 async function submitApproval(client: GithubClient, target: ApprovalTarget): Promise<Outcome> {
 	const { commitId, pullNumber, repo } = target;
@@ -215,7 +203,11 @@ async function approvePullRequest(
 	}
 	return submitApproval(client, target);
 }
-/** SPEC.md §4 steps 3-8: the auth strategy signs the JWT and issues the token on first use. */
+/**
+ * SPEC.md §4 steps 3-8, in the order they must run: the client, whose auth strategy signs the JWT
+ * and issues the token on first use, then the author condition (step 4), the commit condition
+ * (step 5), and the approval.
+ */
 async function approveWhenConditionsHold(
 	payload: PullRequestEventPayload,
 	env: Env,
@@ -226,9 +218,12 @@ async function approveWhenConditionsHold(
 		installationId,
 	);
 	const trust = createTrustResolver(client, payload.repository.owner);
-	const conditions = await evaluateConditions(payload, client, trust);
-	if (conditions !== null) {
-		return conditions;
+	if (!(await trust(payload.pull_request.user))) {
+		return skippedOutcome("author-not-trusted");
+	}
+	const commitOutcome = await checkCommitCondition(payload, client, trust);
+	if (commitOutcome !== null) {
+		return commitOutcome;
 	}
 	return approvePullRequest(payload, client);
 }
