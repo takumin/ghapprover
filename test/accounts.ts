@@ -1,6 +1,7 @@
 /**
- * Account fixtures shared across the suites. The allowlisted ones are built from the in-code
- * allowlist itself (src/allowlist.ts) so every suite derives them the same way: an entry whose id
+ * Account fixtures shared across the suites, and the repository fixture built around one of them.
+ * The allowlisted accounts are built from the in-code allowlist itself (src/allowlist.ts) so every
+ * suite derives them the same way: an entry whose id
  * or login changes must not silently turn a trusted fixture into an ordinary account — that would
  * reduce every §3.1 case to an author-not-trusted skip while the assertions still pass. The
  * near-miss fixtures are stated as the allowlisted account with exactly one field overridden, so
@@ -9,7 +10,7 @@
  */
 
 import { ALLOWED_BOTS, WEB_FLOW } from "../src/allowlist";
-import type { GithubAccount } from "../src/types";
+import type { EventRepository, GithubAccount } from "../src/types";
 
 interface AccountOverrides {
 	readonly id?: number;
@@ -56,6 +57,18 @@ export const APP_BOT: GithubAccount = { id: 201, login: "ghapprover[bot]", type:
 
 /** The repository owner the payload fixtures are built around. */
 export const OCTOCAT: GithubAccount = { id: 77, login: "octocat", type: "User" };
+/**
+ * The repository those fixtures are for, stated with its owner rather than beside it: the suite
+ * that drives the payload schema (payload.test.ts) and the one that drives the §3 conditions
+ * evaluated against it (decision.test.ts) both build it, so a field the schema gains has to reach
+ * both — two declarations can disagree about the modeled repository and both still pass.
+ */
+export const WIDGETS_REPO: EventRepository = {
+	full_name: `${OCTOCAT.login}/widgets`,
+	id: 555,
+	name: "widgets",
+	owner: OCTOCAT,
+};
 /**
  * The owner of the `octo/hello` fixture repository both route-helper families build their calls
  * against (delivery.ts, github-routes.ts): the delivery suites approve its pull request and the

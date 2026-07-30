@@ -7,7 +7,7 @@
  * never rides along with the path (§8 warning).
  */
 
-import { HUMAN, OCTOCAT } from "./accounts";
+import { HUMAN, OCTOCAT, WIDGETS_REPO } from "./accounts";
 import { describe, expect, it } from "vitest";
 import type { PullRequestEventPayload } from "../src/types";
 import { parsePullRequestEvent } from "../src/payload";
@@ -21,12 +21,12 @@ function expectedPayload(): PullRequestEventPayload {
 		pull_request: {
 			commits: 3,
 			draft: false,
-			head: { repo: { id: 555 }, sha: HEAD_SHA },
+			head: { repo: { id: WIDGETS_REPO.id }, sha: HEAD_SHA },
 			number: 42,
 			state: "open",
 			user: OCTOCAT,
 		},
-		repository: { full_name: "octocat/widgets", id: 555, name: "widgets", owner: OCTOCAT },
+		repository: WIDGETS_REPO,
 	};
 }
 

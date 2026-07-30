@@ -6,10 +6,9 @@
  * commits.test.ts.
  */
 
-import { APP_BOT, HUMAN, OCTOCAT } from "./accounts";
+import { APP_BOT, HUMAN, OCTOCAT, WIDGETS_REPO } from "./accounts";
 import type {
 	EventPullRequest,
-	EventRepository,
 	GithubAccount,
 	LivePullRequest,
 	PullRequestReview,
@@ -31,16 +30,10 @@ interface PrStateOverrides {
 	readonly state?: string;
 }
 
-/** The base repository every PR-state fixture is evaluated against; head repo 555 is not a fork. */
-const BASE_REPO: EventRepository = {
-	full_name: "octocat/widgets",
-	id: 555,
-	name: "widgets",
-	owner: OCTOCAT,
-};
-
 function eventPullRequest(overrides: PrStateOverrides = {}): EventPullRequest {
-	const { draft = false, repo = { id: 555 }, state = "open" } = overrides;
+	/* The head repo defaults to the base repository's own id, which is what makes the fixture PR
+	 * not a fork. */
+	const { draft = false, repo = { id: WIDGETS_REPO.id }, state = "open" } = overrides;
 	return { commits: 1, draft, head: { repo, sha: HEAD_SHA }, number: 11, state, user: OCTOCAT };
 }
 
@@ -111,7 +104,7 @@ describe("pull request state gate", () => {
 		},
 	])("returns $expected for $name", ({ expected, overrides }) => {
 		expect.hasAssertions();
-		expect(checkPullRequestState(eventPullRequest(overrides), BASE_REPO)).toBe(expected);
+		expect(checkPullRequestState(eventPullRequest(overrides), WIDGETS_REPO)).toBe(expected);
 	});
 });
 
