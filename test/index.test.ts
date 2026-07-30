@@ -29,21 +29,18 @@ import { installFetchMock } from "./fetch-stub";
 import { sign } from "@octokit/webhooks-methods";
 
 describe("request routing", () => {
-	it("returns 404 for GET on the webhook path", async () => {
+	/** The two halves of the one route check: the method, and the path (SPEC.md §9). */
+	it.each([
+		{ init: { method: "GET" }, name: "GET on the webhook path", url: WEBHOOK_URL },
+		{
+			init: { body: "{}", method: "POST" },
+			name: "POST outside the webhook path",
+			url: "http://example.com/other",
+		},
+	])("returns 404 for $name", async ({ init, url }) => {
 		expect.hasAssertions();
 		installFetchMock([]);
-		const response = await dispatch(new Request(WEBHOOK_URL, { method: "GET" }));
-		await expectReply(response, {
-			body: { decision: "error", reason: "not-found" },
-			status: HTTP_NOT_FOUND,
-		});
-	});
-
-	it("returns 404 for POST outside the webhook path", async () => {
-		expect.hasAssertions();
-		installFetchMock([]);
-		const request = new Request("http://example.com/other", { body: "{}", method: "POST" });
-		await expectReply(await dispatch(request), {
+		await expectReply(await dispatch(new Request(url, init)), {
 			body: { decision: "error", reason: "not-found" },
 			status: HTTP_NOT_FOUND,
 		});
