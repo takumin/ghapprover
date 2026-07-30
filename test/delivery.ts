@@ -40,12 +40,14 @@ export const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User"
 export const OTHER_STRANGER: GithubAccount = { id: 998, login: "eve", type: "User" };
 export const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT };
 
-async function makeEnv(): Promise<Env> {
-	return {
+/** The env a delivery runs against; a case about the configuration itself overrides the one secret it is about. */
+export async function makeEnv(overrides: Partial<Env> = {}): Promise<Env> {
+	const env: Env = {
 		GITHUB_APP_ID: "12345",
 		GITHUB_APP_PRIVATE_KEY: await privateKeyPemOnce(),
 		GITHUB_WEBHOOK_SECRET: SECRET,
 	};
+	return Object.assign(env, overrides);
 }
 
 /** The base repository id; the head repo defaults to the same one, so PRs are not forks. */

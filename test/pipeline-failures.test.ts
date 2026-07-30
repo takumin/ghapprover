@@ -22,11 +22,11 @@ import {
 	COMMITS_SUFFIX,
 	DELIVERY_ID,
 	HEAD_SHA,
-	SECRET,
 	TOKEN_URL,
 	buildPayload,
 	expectReply,
 	installTokenRoute,
+	makeEnv,
 	postSigned,
 	pullsUrl,
 } from "./delivery";
@@ -38,18 +38,15 @@ import type { PlannedRoute } from "./fetch-stub";
 const PKCS1_MESSAGE =
 	"[universal-github-app-jwt] Private Key is in PKCS#1 format, but only PKCS#8 is supported. See https://github.com/gr2m/universal-github-app-jwt#private-key-formats";
 /** The PKCS#1 PEM shape GitHub serves, which the auth library rejects at import (SPEC.md §7). */
-const PKCS1_KEY_ENV: Env = {
-	GITHUB_APP_ID: "12345",
-	GITHUB_APP_PRIVATE_KEY: "-----BEGIN RSA PRIVATE KEY-----\nAAAA\n-----END RSA PRIVATE KEY-----\n",
-	GITHUB_WEBHOOK_SECRET: SECRET,
-};
+const PKCS1_PEM = "-----BEGIN RSA PRIVATE KEY-----\nAAAA\n-----END RSA PRIVATE KEY-----\n";
 
 describe("auth configuration failures", () => {
 	it("errors with a bounded diagnostic when the private key is rejected", async () => {
 		expect.hasAssertions();
 		const logSpy = vi.spyOn(console, "log");
 		const session = installFetchMock([]);
-		const response = await postSigned(buildPayload(), "pull_request", PKCS1_KEY_ENV);
+		const env = await makeEnv({ GITHUB_APP_PRIVATE_KEY: PKCS1_PEM });
+		const response = await postSigned(buildPayload(), "pull_request", env);
 		await expectReply(response, {
 			body: { decision: "error", reason: "internal-error" },
 			status: HTTP_INTERNAL_ERROR,
