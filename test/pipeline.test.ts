@@ -24,6 +24,7 @@ import {
 	TOKEN_URL,
 	appRoute,
 	buildPayload,
+	captureLog,
 	commitItem,
 	commitsRouteFor,
 	expectReply,
@@ -37,7 +38,7 @@ import {
 	reviewPostRouteFor,
 	reviewsRouteFor,
 } from "./delivery";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 /* SPEC.md §4 step 2: the state conditions are decided on the payload alone, so each of them
  * settles the delivery before the client is built — which is what the request count asserts. */
@@ -91,7 +92,7 @@ describe("owner approval flow", () => {
 
 	it("emits one structured decision log", async () => {
 		expect.hasAssertions();
-		const logSpy = vi.spyOn(console, "log");
+		const logSpy = captureLog();
 		installFetchMock(happyRoutes());
 		await postSigned(buildPayload());
 		expect(logSpy).toHaveBeenCalledWith(
@@ -104,7 +105,6 @@ describe("owner approval flow", () => {
 				repo: "octo/hello",
 			}),
 		);
-		logSpy.mockRestore();
 	});
 });
 

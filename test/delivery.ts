@@ -18,9 +18,10 @@ import {
 	tokenUrl,
 } from "./fetch-stub";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+import { expect, onTestFinished, vi } from "vitest";
 import type { GithubAccount } from "../src/types";
+import type { MockInstance } from "vitest";
 import type { PlannedRoute } from "./fetch-stub";
-import { expect } from "vitest";
 import { privateKeyPemOnce } from "./app-key";
 import { sign } from "@octokit/webhooks-methods";
 import worker from "../src/index";
@@ -230,6 +231,18 @@ export async function postSigned(
 		method: "POST",
 	});
 	return dispatch(request, env);
+}
+
+/* The spy on the one §8 log entry a delivery leaves, installed before the delivery is dispatched
+ * and restored when the test finishes rather than by the test itself: a suite that asserted the
+ * entry and forgot the restore would leak the spy into the next one, and the failure would land
+ * wherever that happened to matter. Each caller is left stating only the entry it expects. */
+export function captureLog(): MockInstance<typeof console.log> {
+	const spy = vi.spyOn(console, "log");
+	onTestFinished(() => {
+		spy.mockRestore();
+	});
+	return spy;
 }
 
 interface ExpectedReply {

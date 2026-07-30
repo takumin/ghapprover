@@ -12,6 +12,7 @@ import {
 	UNCHECKED_SIGNATURE,
 	WEBHOOK_URL,
 	buildPayload,
+	captureLog,
 	deliveryHeaders,
 	dispatch,
 	expectReply,
@@ -27,7 +28,7 @@ import {
 	HTTP_UNAUTHORIZED,
 	installFetchMock,
 } from "./fetch-stub";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { sign } from "@octokit/webhooks-methods";
 
 describe("request routing", () => {
@@ -66,11 +67,10 @@ describe("request routing", () => {
 		},
 	])("logs the not-found decision $name", async ({ expected, headers }) => {
 		expect.hasAssertions();
-		const logSpy = vi.spyOn(console, "log");
+		const logSpy = captureLog();
 		installFetchMock([]);
 		await dispatch(new Request(WEBHOOK_URL, { headers, method: "GET" }));
 		expect(logSpy).toHaveBeenCalledWith(expected);
-		logSpy.mockRestore();
 	});
 });
 
@@ -148,14 +148,13 @@ const INVALID_PAYLOADS = [
 describe("payload validation", () => {
 	it.each(INVALID_PAYLOADS)("errors on $name", async ({ body, entry }) => {
 		expect.hasAssertions();
-		const logSpy = vi.spyOn(console, "log");
+		const logSpy = captureLog();
 		installFetchMock([]);
 		await expectReply(await postSigned(body), {
 			body: { decision: "error", reason: "invalid-payload" },
 			status: HTTP_INTERNAL_ERROR,
 		});
 		expect(logSpy).toHaveBeenCalledWith(entry);
-		logSpy.mockRestore();
 	});
 
 	it("errors when the installation is absent", async () => {
@@ -273,7 +272,7 @@ describe("unreadable deliveries", () => {
 	 * message that says which failure of that class it was. */
 	it("errors with the thrown class and message when the body cannot be read", async () => {
 		expect.hasAssertions();
-		const logSpy = vi.spyOn(console, "log");
+		const logSpy = captureLog();
 		const session = installFetchMock([]);
 		await expectReply(await dispatch(requestWithFailingBody()), {
 			body: { decision: "error", reason: "internal-error" },
@@ -288,7 +287,6 @@ describe("unreadable deliveries", () => {
 				reason: "internal-error",
 			}),
 		);
-		logSpy.mockRestore();
 		session.assertDone();
 	});
 });

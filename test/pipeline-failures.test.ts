@@ -24,13 +24,14 @@ import {
 	HEAD_SHA,
 	TOKEN_URL,
 	buildPayload,
+	captureLog,
 	expectReply,
 	installTokenRoute,
 	makeEnv,
 	postSigned,
 	pullsUrl,
 } from "./delivery";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { ORG } from "./accounts";
 import type { PlannedRoute } from "./fetch-stub";
 
@@ -43,7 +44,7 @@ const PKCS1_PEM = "-----BEGIN RSA PRIVATE KEY-----\nAAAA\n-----END RSA PRIVATE K
 describe("auth configuration failures", () => {
 	it("errors with a bounded diagnostic when the private key is rejected", async () => {
 		expect.hasAssertions();
-		const logSpy = vi.spyOn(console, "log");
+		const logSpy = captureLog();
 		const session = installFetchMock([]);
 		const env = await makeEnv({ GITHUB_APP_PRIVATE_KEY: PKCS1_PEM });
 		const response = await postSigned(buildPayload(), "pull_request", env);
@@ -60,13 +61,12 @@ describe("auth configuration failures", () => {
 				reason: "internal-error",
 			}),
 		);
-		logSpy.mockRestore();
 		session.assertDone();
 	});
 
 	it("errors loudly when the installation token cannot be issued", async () => {
 		expect.hasAssertions();
-		const logSpy = vi.spyOn(console, "log");
+		const logSpy = captureLog();
 		const session = installFetchMock([
 			jsonRoute({
 				method: "POST",
@@ -83,7 +83,6 @@ describe("auth configuration failures", () => {
 		expect(logSpy).toHaveBeenCalledWith(
 			expect.objectContaining({ endpoint: TOKEN_ENDPOINT, status: HTTP_NOT_FOUND }),
 		);
-		logSpy.mockRestore();
 		session.assertDone();
 	});
 });
@@ -152,7 +151,7 @@ function commitsFailureRoute(
 describe("api failure diagnostics", () => {
 	it("logs what tells a refused call apart from an exhausted rate limit", async () => {
 		expect.hasAssertions();
-		const logSpy = vi.spyOn(console, "log");
+		const logSpy = captureLog();
 		const session = installFetchMock([
 			installTokenRoute(),
 			commitsFailureRoute({ message: "API rate limit exceeded" }, HTTP_FORBIDDEN, REFUSAL_HEADERS),
@@ -170,7 +169,6 @@ describe("api failure diagnostics", () => {
 				status: HTTP_FORBIDDEN,
 			}),
 		);
-		logSpy.mockRestore();
 		session.assertDone();
 	});
 
@@ -178,7 +176,7 @@ describe("api failure diagnostics", () => {
 	 * that are *not* there, a failure with no response having no headers to read them off. */
 	it("logs the message but no headers when the call never received a response", async () => {
 		expect.hasAssertions();
-		const logSpy = vi.spyOn(console, "log");
+		const logSpy = captureLog();
 		const session = installFetchMock([installTokenRoute(), commitsFailureRoute({}, 0)]);
 		await postSigned(buildPayload());
 		expect(logSpy).toHaveBeenCalledWith({
@@ -193,7 +191,6 @@ describe("api failure diagnostics", () => {
 			repo: "octo/hello",
 			status: 0,
 		});
-		logSpy.mockRestore();
 		session.assertDone();
 	});
 });
@@ -204,7 +201,7 @@ describe("api failure diagnostics", () => {
 describe("error message bounds", () => {
 	it("truncates a message the source does not bound", async () => {
 		expect.hasAssertions();
-		const logSpy = vi.spyOn(console, "log");
+		const logSpy = captureLog();
 		const session = installFetchMock([
 			installTokenRoute(),
 			commitsFailureRoute({ message: OVERLONG_MESSAGE }, HTTP_INTERNAL_ERROR),
@@ -213,7 +210,6 @@ describe("error message bounds", () => {
 		expect(logSpy).toHaveBeenCalledWith(
 			expect.objectContaining({ errorMessage: OVERLONG_MESSAGE.slice(0, MESSAGE_LIMIT) }),
 		);
-		logSpy.mockRestore();
 		session.assertDone();
 	});
 });
