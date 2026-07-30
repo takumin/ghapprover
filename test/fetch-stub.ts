@@ -39,6 +39,22 @@ export const APP_URL = `${BASE}/app`;
 export function tokenUrl(installationId: number): string {
 	return `${BASE}/app/installations/${installationId}/access_tokens`;
 }
+/* The per-PR route template, stated here for the same reason: both families plan their routes on
+ * `/repos/{owner}/{repo}/pulls/{n}`, so a template stated per family is one they can disagree
+ * about — and the disagreement surfaces as an unplanned request in whichever suite was not
+ * updated, which reads as a routing bug rather than as a stale route helper. */
+export function pullRequestUrl(target: {
+	readonly owner: string;
+	readonly repo: string;
+	readonly suffix?: string;
+}): string {
+	return `${BASE}/repos/${target.owner}/${target.repo}/pulls/${PULL_NUMBER}${target.suffix ?? ""}`;
+}
+/* The page size src/github.ts asks the two paginated list endpoints for: the query every list route
+ * carries, and the length of a page that is full — which is what makes pagination follow the link
+ * header — so the two are one value rather than a query string and a count that can disagree. */
+export const PAGE_SIZE = 100;
+export const PAGE_QUERY = `?per_page=${PAGE_SIZE}`;
 /* The route templates SPEC.md §8's `endpoint` names, which is the vocabulary an operator greps: one
  * suite drives the call that raises them (github.test.ts, client.test.ts) and another the log entry
  * they end up in (pipeline-failures.test.ts), so a template stated per suite is one that can be
@@ -163,6 +179,11 @@ export function jsonRoute(route: {
 		status: route.status,
 		url: route.url,
 	};
+}
+
+/** A 200 GET route, which is what every route the suites plan for a read is. */
+export function getRoute(url: string, payload: unknown): PlannedRoute {
+	return jsonRoute({ method: "GET", payload, status: HTTP_OK, url });
 }
 
 /**

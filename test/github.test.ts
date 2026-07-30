@@ -77,8 +77,8 @@ describe("fetchAppBotLogin()", () => {
 describe("listPullRequestCommits() pagination", () => {
 	it("follows the link header across two pages", async () => {
 		expect.hasAssertions();
-		const firstUrl = commitsUrl("?per_page=100");
-		const secondUrl = commitsUrl("?per_page=100&page=2");
+		const firstUrl = commitsUrl();
+		const secondUrl = commitsUrl("&page=2");
 		const mock = installFetchMock([
 			installTokenRoute(),
 			linkedRoute({ next: secondUrl, payload: commitPage(FULL_PAGE, 0), url: firstUrl }),
@@ -103,7 +103,7 @@ describe("listPullRequestCommits() mapping", () => {
 		};
 		const mock = installFetchMock([
 			installTokenRoute(),
-			linkedRoute({ payload: [commitBody("sha-a"), webCommit], url: commitsUrl("?per_page=100") }),
+			linkedRoute({ payload: [commitBody("sha-a"), webCommit], url: commitsUrl() }),
 		]);
 		const commits = await listPullRequestCommits(await makeClient(), REPO, PULL_NUMBER);
 		expect(commits).toStrictEqual([
@@ -129,7 +129,7 @@ describe("listPullRequestCommits() mapping", () => {
 			installTokenRoute(),
 			linkedRoute({
 				payload: [{ commit: { verification: { verified: true } } }],
-				url: commitsUrl("?per_page=100"),
+				url: commitsUrl(),
 			}),
 		]);
 		const promise = listPullRequestCommits(await makeClient(), REPO, PULL_NUMBER);
@@ -174,8 +174,8 @@ describe("fetchOrgMembership()", () => {
 describe("listPullRequestReviews()", () => {
 	it("follows the link header until the last page", async () => {
 		expect.hasAssertions();
-		const firstUrl = reviewsUrl("?per_page=100");
-		const secondUrl = reviewsUrl("?per_page=100&page=2");
+		const firstUrl = reviewsUrl();
+		const secondUrl = reviewsUrl("&page=2");
 		const mock = installFetchMock([
 			installTokenRoute(),
 			linkedRoute({
@@ -195,7 +195,7 @@ describe("listPullRequestReviews()", () => {
 		const dismissed = { commit_id: null, state: "DISMISSED", submitted_at: "ignored", user: null };
 		const mock = installFetchMock([
 			installTokenRoute(),
-			linkedRoute({ payload: [dismissed], url: reviewsUrl("?per_page=100") }),
+			linkedRoute({ payload: [dismissed], url: reviewsUrl() }),
 		]);
 		await expect(
 			listPullRequestReviews(await makeClient(), REPO, PULL_NUMBER),

@@ -12,8 +12,11 @@ import {
 	BASE,
 	HTTP_NOT_FOUND,
 	HTTP_OK,
+	PAGE_QUERY,
 	PULL_NUMBER,
+	getRoute,
 	jsonRoute,
+	pullRequestUrl,
 	tokenRoute,
 	tokenUrl,
 } from "./fetch-stub";
@@ -45,8 +48,8 @@ export const TOKEN_URL = tokenUrl(INSTALLATION_ID);
  * "unplanned request", which reads as a routing bug rather than as a stale fixture. */
 export const membershipUrl = (member: GithubAccount): string =>
 	`${BASE}/orgs/${ORG.login}/memberships/${member.login}`;
-export const COMMITS_SUFFIX = "/commits?per_page=100";
-const REVIEWS_SUFFIX = "/reviews?per_page=100";
+export const COMMITS_SUFFIX = `/commits${PAGE_QUERY}`;
+const REVIEWS_SUFFIX = `/reviews${PAGE_QUERY}`;
 
 /** The owner of the repository every payload fixture is for, and of the pull request its routes serve. */
 export const OWNER = OCTO;
@@ -124,15 +127,11 @@ export function commitItem(overrides: CommitOverrides = {}): Record<string, unkn
 }
 
 export function pullsUrl(suffix: string, owner: GithubAccount = OWNER): string {
-	return `${BASE}/repos/${owner.login}/${REPO_NAME}/pulls/${PULL_NUMBER}${suffix}`;
+	return pullRequestUrl({ owner: owner.login, repo: REPO_NAME, suffix });
 }
 
 export function installTokenRoute(): PlannedRoute {
 	return tokenRoute({ token: INSTALL_TOKEN, url: TOKEN_URL });
-}
-/** A 200 GET route; every route the pipeline reads apart from the membership lookups is one. */
-function getRoute(url: string, payload: unknown): PlannedRoute {
-	return jsonRoute({ method: "GET", payload, status: HTTP_OK, url });
 }
 export function appRoute(): PlannedRoute {
 	return getRoute(APP_URL, { slug: APP_SLUG });

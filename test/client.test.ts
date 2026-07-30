@@ -36,7 +36,7 @@ describe("client authentication", () => {
 
 	it("authenticates everything else with the installation token", async () => {
 		expect.hasAssertions();
-		const firstUrl = commitsUrl("?per_page=100");
+		const firstUrl = commitsUrl();
 		const mock = installFetchMock([
 			installTokenRoute(),
 			linkedRoute({ payload: [commitBody("sha-a")], url: firstUrl }),
@@ -62,8 +62,8 @@ describe("delivery deadline", () => {
 	 * pagination follow-up page, which carries no per-call request options. */
 	it("puts the one delivery signal on the token request, the call, and each follow-up page", async () => {
 		expect.hasAssertions();
-		const firstUrl = commitsUrl("?per_page=100");
-		const secondUrl = commitsUrl("?per_page=100&page=2");
+		const firstUrl = commitsUrl();
+		const secondUrl = commitsUrl("&page=2");
 		const mock = installFetchMock([
 			installTokenRoute(),
 			linkedRoute({ next: secondUrl, payload: commitPage(FULL_PAGE, 0), url: firstUrl }),
