@@ -44,8 +44,26 @@ function recordPayload(log: LogFields, payload: PullRequestEventPayload): void {
 	log["prNumber"] = payload.pull_request.number;
 	log["repo"] = payload.repository.full_name;
 }
-/** The §8 fields an outcome carries only for the outcomes they apply to; httpStatus is not logged. */
-const OPTIONAL_LOG_FIELDS = ["reason", "endpoint", "status", "errorName"] as const;
+/** The §8 fields an outcome carries only for the outcomes they apply to, in that table's order; httpStatus is not logged. */
+const OPTIONAL_LOG_FIELDS = [
+	"reason",
+	"endpoint",
+	"status",
+	"requestId",
+	"acceptedPermissions",
+	"rateLimitRemaining",
+	"rateLimitReset",
+	"errorName",
+] as const;
+/**
+ * The one bound on the one §8 field that has none at its source: @octokit/request
+ * builds an error message from the response body and takes the whole body when
+ * that body is not JSON (an HTML error page from GitHub or a proxy in front of
+ * it). Truncating here, where the entry is built, is what makes it one rule for
+ * every path onto the field rather than one per place an error is raised
+ * (SPEC.md §12).
+ */
+const MAX_ERROR_MESSAGE_CHARS = 512;
 /** Exactly one structured log entry per handled webhook delivery (SPEC.md §8). */
 function logOutcome(log: LogFields, outcome: Outcome): void {
 	log["decision"] = outcome.decision;
@@ -55,15 +73,29 @@ function logOutcome(log: LogFields, outcome: Outcome): void {
 			log[key] = value;
 		}
 	}
+	const { errorMessage } = outcome;
+	if (errorMessage !== undefined) {
+		log["errorMessage"] = errorMessage.slice(0, MAX_ERROR_MESSAGE_CHARS);
+	}
 	console.log(log);
 }
 
-/** The thrown value's class name only — never its message, which could carry anything (§8). */
+/** The thrown value's class name, which stays bounded whatever was thrown (§8). */
 function thrownErrorName(error: unknown): string {
 	if (error instanceof Error) {
 		return error.name;
 	}
 	return "unknown";
+}
+/* §8 pairs the class name with the message the thrown value carries, truncated with every other
+ * path onto that field above. A value thrown that is not an Error has no message to report — the
+ * class name already says so — so the field is left off rather than filled with a stringification
+ * of whatever it was. */
+function thrownErrorMessage(error: unknown): string | undefined {
+	if (error instanceof Error) {
+		return error.message;
+	}
+	return undefined;
 }
 function parseBody(body: string): PullRequestEventPayload | null {
 	try {
@@ -172,20 +204,31 @@ async function evaluateOrFail(request: Request, env: Env, log: LogFields): Promi
 		return await evaluateRequest(request, env, log);
 	} catch (error) {
 		if (error instanceof GithubApiError) {
-			/* SPEC.md §9: keep status and endpoint so 401/403 configuration problems are distinguishable in logs. */
+			/* SPEC.md §9: keep status and endpoint so 401/403 configuration problems are
+			 * distinguishable in logs, and the §8 diagnostics with them — status alone does not say
+			 * whether a 403 was a missing permission or a rate limit, which is the distinction §9
+			 * asks for. They are absent when the failure carried no response to read them from. */
+			const { acceptedPermissions, errorMessage, rateLimitRemaining, rateLimitReset, requestId } =
+				error.diagnostics;
 			return {
+				acceptedPermissions,
 				decision: "error",
 				endpoint: error.endpoint,
+				errorMessage,
 				httpStatus: HTTP_INTERNAL_ERROR,
+				rateLimitRemaining,
+				rateLimitReset,
 				reason: "github-api-error",
+				requestId,
 				status: error.status,
 			};
 		}
-		/* SPEC.md §9's "any other thrown failure": the bounded class name keeps configuration
-		 * mistakes (e.g. a PKCS#1 key the auth library rejects) distinguishable from code bugs
-		 * without touching §8's leak surface. */
+		/* SPEC.md §9's "any other thrown failure": the class name keeps configuration mistakes
+		 * (e.g. a PKCS#1 key the auth library rejects) distinguishable from code bugs, and §8's
+		 * errorMessage is what says which mistake it was — the class alone is `Error` for both. */
 		return {
 			decision: "error",
+			errorMessage: thrownErrorMessage(error),
 			errorName: thrownErrorName(error),
 			httpStatus: HTTP_INTERNAL_ERROR,
 			reason: "internal-error",

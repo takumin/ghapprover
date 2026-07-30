@@ -263,8 +263,10 @@ function requestWithFailingBody(): Request {
 describe("unreadable deliveries", () => {
 	/* SPEC.md §8 requires one log entry per delivery and §9 maps any other thrown failure to
 	 * internal-error. Reading the body runs before the pipeline's own guard, so without a
-	 * catch-all this delivery would answer with the runtime's 500 and log nothing at all. */
-	it("errors with a bounded diagnostic when the body cannot be read", async () => {
+	 * catch-all this delivery would answer with the runtime's 500 and log nothing at all. The
+	 * entry carries the §8 pair for a failure that is nobody's endpoint: the class name, and the
+	 * message that says which failure of that class it was. */
+	it("errors with the thrown class and message when the body cannot be read", async () => {
 		expect.hasAssertions();
 		const logSpy = vi.spyOn(console, "log");
 		const session = installFetchMock([]);
@@ -276,6 +278,8 @@ describe("unreadable deliveries", () => {
 			expect.objectContaining({
 				decision: "error",
 				deliveryId: DELIVERY_ID,
+				errorMessage: "connection reset",
+				errorName: "TypeError",
 				reason: "internal-error",
 			}),
 		);

@@ -9,6 +9,7 @@
 import {
 	APP_URL,
 	FULL_PAGE,
+	HTTP_FORBIDDEN,
 	HTTP_INTERNAL_ERROR,
 	HTTP_NOT_FOUND,
 	PULL_NUMBER,
@@ -60,13 +61,19 @@ describe("client authentication", () => {
 	});
 });
 
+/* A failure with no response has no §8 headers to report, so its own message is the whole of what
+ * it can say about itself — which is why both cases below assert it (SPEC.md §8). */
 describe("transport failure mapping", () => {
 	it("wraps network failures with status 0", async () => {
 		expect.hasAssertions();
 		installFetchMock([jsonRoute({ method: "GET", payload: {}, status: 0, url: APP_URL })]);
 		const promise = fetchAppBotLogin(await makeClient());
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
-		await expect(promise).rejects.toMatchObject({ endpoint: "GET /app", status: 0 });
+		await expect(promise).rejects.toMatchObject({
+			diagnostics: { errorMessage: "simulated network failure", requestId: undefined },
+			endpoint: "GET /app",
+			status: 0,
+		});
 	});
 
 	it("wraps an expired timeout signal with status 0", async () => {
@@ -74,7 +81,62 @@ describe("transport failure mapping", () => {
 		installFetchMock([{ body: "", method: "GET", rejectAs: "timeout", status: 0, url: APP_URL }]);
 		const promise = fetchAppBotLogin(await makeClient());
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
-		await expect(promise).rejects.toMatchObject({ endpoint: "GET /app", status: 0 });
+		await expect(promise).rejects.toMatchObject({
+			diagnostics: { errorMessage: "The operation timed out.", requestId: undefined },
+			endpoint: "GET /app",
+			status: 0,
+		});
+	});
+});
+
+/** The headers GitHub sends on a refused call, which SPEC.md §8 logs alongside the status. */
+const REFUSAL_HEADERS = {
+	"x-accepted-github-permissions": "pull_requests=write",
+	"x-github-request-id": "F1E2:3D4C",
+	"x-ratelimit-remaining": "0",
+	"x-ratelimit-reset": "1770000000",
+};
+
+/* SPEC.md §8: what turns a grep hit on github-api-error into a cause. The status alone does not
+ * say whether a 403 was a missing permission or a rate limit, and the fixed message this Worker
+ * builds says nothing the endpoint and status do not — so both the response headers and the
+ * originating message are carried on the error rather than dropped at the mapping. */
+describe("failure diagnostics", () => {
+	it("carries the response headers and the originating message of a refused call", async () => {
+		expect.hasAssertions();
+		installFetchMock([
+			jsonRoute({
+				headers: REFUSAL_HEADERS,
+				method: "GET",
+				payload: { message: "API rate limit exceeded" },
+				status: HTTP_FORBIDDEN,
+				url: APP_URL,
+			}),
+		]);
+		const promise = fetchAppBotLogin(await makeClient());
+		await expect(promise).rejects.toMatchObject({
+			diagnostics: {
+				acceptedPermissions: "pull_requests=write",
+				errorMessage: "API rate limit exceeded",
+				rateLimitRemaining: "0",
+				rateLimitReset: "1770000000",
+				requestId: "F1E2:3D4C",
+			},
+			endpoint: "GET /app",
+			status: HTTP_FORBIDDEN,
+		});
+	});
+
+	/* A 200 whose body does not match the contract is this Worker's own verdict, not GitHub's: no
+	 * originating error to quote, and a response that was never a failure to read headers off. */
+	it("carries nothing for a failure the worker raises itself", async () => {
+		expect.hasAssertions();
+		installFetchMock([appRoute({})]);
+		const promise = fetchAppBotLogin(await makeClient());
+		await expect(promise).rejects.toMatchObject({
+			diagnostics: { errorMessage: undefined, requestId: undefined },
+			endpoint: "GET /app",
+		});
 	});
 });
 

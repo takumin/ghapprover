@@ -482,8 +482,11 @@ the information needed for evaluation comes from the following.
 
 Emit at least the following to structured logs (Workers Logs):
 
+Emit at least the following to structured logs (Workers Logs):
+
 - `deliveryId` (X-GitHub-Delivery), `repo`, `prNumber`, `action`, `headSha`
 - `decision` (approved / skipped / error) and `reason`
+- the diagnostic fields the outcome carries (table below)
 
 Every field is logged as soon as it is known, so an outcome decided early carries only
 what had been read by then. `deliveryId` comes from the headers alone, so it survives on
@@ -497,54 +500,88 @@ is absent, which is the ordinary case for `not-found`: a request that never reac
 `reason` is drawn from a closed vocabulary. This is the list an operator greps, so it is
 exhaustive rather than illustrative:
 
-| `decision` | `reason`                | Meaning                                                                    |
-| ---------- | ----------------------- | -------------------------------------------------------------------------- |
-| approved   | _(none)_                | The review was posted                                                      |
-| skipped    | `event-out-of-scope`    | Not a `pull_request` event, or an action outside §3 cond. 1                |
-| skipped    | `pr-not-open`           | §3 condition 2: the PR is closed or merged                                 |
-| skipped    | `pr-draft`              | §3 condition 2: the PR is a draft                                          |
-| skipped    | `head-repo-missing`     | §3 condition 2: `head.repo` is null (the head repository was deleted)      |
-| skipped    | `head-repo-forked`      | §3 condition 2: the head repository is not the repository itself (a fork)  |
-| skipped    | `author-not-trusted`    | §3 condition 3, including a membership 404                                 |
-| skipped    | `no-commits`            | §3.2: `pull_request.commits` is 0                                          |
-| skipped    | `too-many-commits`      | §3.2: more than the 250 the commits API can return                         |
-| skipped    | `commit-count-mismatch` | §3.2: the fetched list differs from the declared count                     |
-| skipped    | `unverified-commit`     | §3.2: a commit is not `verification.verified`                              |
-| skipped    | `untrusted-commit`      | §3.2: a commit author / committer is not a trusted principal               |
-| skipped    | `already-approved`      | §3 condition 5 / §6: an own APPROVE for this head exists                   |
-| skipped    | `head-moved`            | §3.3: the live PR was closed, turned draft, or left the payload's head     |
-| skipped    | `review-rejected`       | §9: the review POST returned 422                                           |
-| error      | `invalid-signature`     | §4 step 1: signature missing, malformed, or not matching                   |
-| error      | `payload-too-large`     | §4 step 1: a body above GitHub's 25 MB cap                                 |
-| error      | `not-found`             | A request outside `POST /webhook`                                          |
-| error      | `invalid-payload`       | The body is not JSON, or not the modeled `pull_request` shape              |
-| error      | `missing-installation`  | The delivery carries no `installation.id` (§7)                             |
-| error      | `github-api-error`      | §9: a GitHub API call failed; `endpoint` and `status` accompany it         |
-| error      | `internal-error`        | Any other thrown failure; `errorName` (the class name only) accompanies it |
+| `decision` | `reason`                | Meaning                                                                   |
+| ---------- | ----------------------- | ------------------------------------------------------------------------- |
+| approved   | _(none)_                | The review was posted                                                     |
+| skipped    | `event-out-of-scope`    | Not a `pull_request` event, or an action outside §3 cond. 1               |
+| skipped    | `pr-not-open`           | §3 condition 2: the PR is closed or merged                                |
+| skipped    | `pr-draft`              | §3 condition 2: the PR is a draft                                         |
+| skipped    | `head-repo-missing`     | §3 condition 2: `head.repo` is null (the head repository was deleted)     |
+| skipped    | `head-repo-forked`      | §3 condition 2: the head repository is not the repository itself (a fork) |
+| skipped    | `author-not-trusted`    | §3 condition 3, including a membership 404                                |
+| skipped    | `no-commits`            | §3.2: `pull_request.commits` is 0                                         |
+| skipped    | `too-many-commits`      | §3.2: more than the 250 the commits API can return                        |
+| skipped    | `commit-count-mismatch` | §3.2: the fetched list differs from the declared count                    |
+| skipped    | `unverified-commit`     | §3.2: a commit is not `verification.verified`                             |
+| skipped    | `untrusted-commit`      | §3.2: a commit author / committer is not a trusted principal              |
+| skipped    | `already-approved`      | §3 condition 5 / §6: an own APPROVE for this head exists                  |
+| skipped    | `head-moved`            | §3.3: the live PR was closed, turned draft, or left the payload's head    |
+| skipped    | `review-rejected`       | §9: the review POST returned 422                                          |
+| error      | `invalid-signature`     | §4 step 1: signature missing, malformed, or not matching                  |
+| error      | `payload-too-large`     | §4 step 1: a body above GitHub's 25 MB cap                                |
+| error      | `not-found`             | A request outside `POST /webhook`                                         |
+| error      | `invalid-payload`       | The body is not JSON, or not the modeled `pull_request` shape             |
+| error      | `missing-installation`  | The delivery carries no `installation.id` (§7)                            |
+| error      | `github-api-error`      | §9: a GitHub API call failed; the diagnostic fields below accompany it    |
+| error      | `internal-error`        | Any other thrown failure; the diagnostic fields below accompany it        |
+
+Diagnostic fields accompany the outcome named, and only that one. Unlike `reason`, they
+are not a vocabulary an operator greps for — they are what turns a grep hit into a cause.
+
+| Field                 | Accompanies                          | Value                                                                  |
+| --------------------- | ------------------------------------ | ---------------------------------------------------------------------- |
+| `endpoint`            | `github-api-error`                   | Route template ("METHOD /path"), never a resolved URL                  |
+| `status`              | `github-api-error`                   | HTTP status; 0 for a transport failure or an exhausted §4 deadline     |
+| `requestId`           | `github-api-error`                   | `x-github-request-id`, the identifier GitHub support asks for          |
+| `acceptedPermissions` | `github-api-error` (401 / 403)       | `x-accepted-github-permissions`: the permission the call needed        |
+| `rateLimitRemaining`  | `github-api-error` (403)             | `x-ratelimit-remaining`; 0 marks a rate limit rather than a permission |
+| `rateLimitReset`      | `github-api-error` (403)             | `x-ratelimit-reset`                                                    |
+| `errorName`           | `internal-error`                     | The thrown value's class name, never its message                       |
+| `errorMessage`        | `github-api-error`, `internal-error` | The originating error's message, truncated to 512 characters           |
+
+- The three response headers are what make §9's "distinguish a configuration problem in
+  logs" actionable: a 403 is a missing permission or a rate limit, and `status` alone does
+  not say which. They are read from the failed response, so they are absent when there was
+  none (a transport failure or the §4 deadline)
+- `errorMessage` is the originating error's, captured before it is mapped: the error this
+  Worker raises carries a fixed message of its own, which would log nothing the other
+  fields do not already say. It is truncated because it is not bounded at the source —
+  `@octokit/request` builds it from the response body, and takes the **whole** body when
+  that body is not JSON (an HTML error page from GitHub or an upstream proxy)
 
 > [!WARNING]
-> Never log tokens, private keys, or the full webhook payload. The accompanying fields
-> above are bounded on purpose: `endpoint` is a route template, and `errorName` is a
-> class name — never an error message, which could carry a response body excerpt.
+> The response body carries `decision` and `reason` and nothing else. GitHub displays it
+> in Recent Deliveries, which is outside this account's control, so it stays a closed
+> vocabulary rather than a diagnostic channel.
+
+> [!WARNING]
+> Structured logs never carry tokens, private keys, or webhook payload values. What
+> separates them from the response body above is the audience rather than the sensitivity:
+> Workers Logs stay inside the Cloudflare account, and that premise is what makes
+> `errorMessage` acceptable there and unacceptable in the response. **Enabling Logpush or
+> a Tail Worker forwards these logs to an external destination and voids that premise** —
+> treat the destination as part of the trust boundary before enabling either. The bounded
+> fields stay bounded either way: `endpoint` is a route template, `errorName` a class
+> name, and `errorMessage` is truncated.
 
 ## 9. Error Handling
 
-| Situation                                                             | Response | Notes                                                                                                                               |
-| --------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| A request outside `POST /webhook`                                     | 404      | `not-found`. Logged like every other outcome (§8), so a webhook URL pointing at the wrong path is greppable rather than silent      |
-| Invalid signature / missing signature header                          | 401      | Do not process the body                                                                                                             |
-| Request body above GitHub's 25 MB payload cap                         | 413      | `payload-too-large`. Rejected on the declared `Content-Length` before the body is buffered, and on the byte count while it is (§4)  |
-| Out-of-scope event / action                                           | 200      | Log the reason                                                                                                                      |
-| Approval conditions unsatisfied                                       | 200      | Normal outcome. Log the reason                                                                                                      |
-| Membership API returns 404 (the account is not an org member)         | 200      | Normal outcome, not an error: `author-not-trusted` for the PR author, `untrusted-commit` for a commit principal (§3.2)              |
-| Review POST returns 422 (PR closed / merged in the meantime)          | 200      | Normally prevented by the live PR check (§3.3); treated as a skip                                                                   |
-| Body is not the modeled `pull_request` payload                        | 500      | `invalid-payload`. The evaluation could not be completed                                                                            |
-| Delivery carries no `installation.id`                                 | 500      | `missing-installation`. An App delivery always carries one, so its absence is a configuration problem, not an unsatisfied condition |
-| Transient GitHub API failure                                          | 500      | Fail closed. Retryable via redelivery                                                                                               |
-| Whole-delivery deadline exhausted (§4)                                | 500      | `github-api-error` with `status: 0`. Fail closed                                                                                    |
-| Workers subrequest allowance exhausted (§4)                           | 500      | Fail closed. The reason follows how the runtime surfaces it — `github-api-error` if it reaches the client as a failure              |
-| Other GitHub API 4xx (401/403: insufficient permissions, rate limits) | 500      | Distinguish in logs as a configuration problem                                                                                      |
-| Any other thrown failure                                              | 500      | `internal-error` with `errorName` (§8). Fail closed; the class name keeps a configuration mistake distinguishable from a code bug   |
+| Situation                                                             | Response | Notes                                                                                                                                                       |
+| --------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A request outside `POST /webhook`                                     | 404      | `not-found`. Logged like every other outcome (§8), so a webhook URL pointing at the wrong path is greppable rather than silent                              |
+| Invalid signature / missing signature header                          | 401      | Do not process the body                                                                                                                                     |
+| Request body above GitHub's 25 MB payload cap                         | 413      | `payload-too-large`. Rejected on the declared `Content-Length` before the body is buffered, and on the byte count while it is (§4)                          |
+| Out-of-scope event / action                                           | 200      | Log the reason                                                                                                                                              |
+| Approval conditions unsatisfied                                       | 200      | Normal outcome. Log the reason                                                                                                                              |
+| Membership API returns 404 (the account is not an org member)         | 200      | Normal outcome, not an error: `author-not-trusted` for the PR author, `untrusted-commit` for a commit principal (§3.2)                                      |
+| Review POST returns 422 (PR closed / merged in the meantime)          | 200      | Normally prevented by the live PR check (§3.3); treated as a skip                                                                                           |
+| Body is not the modeled `pull_request` payload                        | 500      | `invalid-payload`. The evaluation could not be completed                                                                                                    |
+| Delivery carries no `installation.id`                                 | 500      | `missing-installation`. An App delivery always carries one, so its absence is a configuration problem, not an unsatisfied condition                         |
+| Transient GitHub API failure                                          | 500      | Fail closed. Retryable via redelivery                                                                                                                       |
+| Whole-delivery deadline exhausted (§4)                                | 500      | `github-api-error` with `status: 0`. Fail closed                                                                                                            |
+| Workers subrequest allowance exhausted (§4)                           | 500      | Fail closed. The reason follows how the runtime surfaces it — `github-api-error` if it reaches the client as a failure                                      |
+| Other GitHub API 4xx (401/403: insufficient permissions, rate limits) | 500      | Distinguish in logs as a configuration problem: `acceptedPermissions` names what a 403 wanted, `rateLimitRemaining` at 0 marks it a rate limit instead (§8) |
+| Any other thrown failure                                              | 500      | `internal-error` with `errorName` (§8). Fail closed; the class name keeps a configuration mistake distinguishable from a code bug                           |
 
 No automatic retries of transient GitHub API failures (5xx / network errors /
 timeouts) inside the Worker. What bounds a call that hangs is the whole-delivery
@@ -652,3 +689,7 @@ Rules:
   Workers runtime without the `nodejs_compat` compatibility flag
 - Testing: extract the decision logic (trusted principals, commit verification) as pure
   functions so it can be unit-tested without mocking the GitHub API
+- `errorMessage` is truncated where the log entry is built rather than where the error is
+  raised, so every path onto that field is bounded by one rule (§8). The diagnostic
+  headers come off the failed response, which is why they are absent whenever there was
+  no response at all

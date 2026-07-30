@@ -22,6 +22,7 @@ export const MEMBERSHIP_URL = `${BASE}/orgs/octo/memberships/someone`;
 export const FULL_PAGE = 100;
 export const ACCOUNT = { id: 7, login: "octo", type: "User" };
 export const HTTP_OK = 200;
+export const HTTP_FORBIDDEN = 403;
 export const HTTP_NOT_FOUND = 404;
 export const HTTP_INTERNAL_ERROR = 500;
 
