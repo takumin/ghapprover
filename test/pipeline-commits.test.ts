@@ -25,27 +25,20 @@ import { describe, expect, it } from "vitest";
 import { MAX_VERIFIABLE_COMMITS } from "../src/allowlist";
 
 describe("commit conditions", () => {
-	it("skips when the declared commit count is zero, with no api call", async () => {
-		expect.hasAssertions();
-		const session = installFetchMock([]);
-		const response = await postSigned(buildPayload({ commits: 0 }));
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "no-commits" },
-			status: HTTP_OK,
-		});
-		session.assertDone();
-	});
-
-	it("skips when the declared commit count exceeds the cap, with no api call", async () => {
-		expect.hasAssertions();
-		const session = installFetchMock([]);
-		const response = await postSigned(buildPayload({ commits: MAX_VERIFIABLE_COMMITS + 1 }));
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "too-many-commits" },
-			status: HTTP_OK,
-		});
-		session.assertDone();
-	});
+	/** What the declared count alone settles (SPEC.md §3.2), which is why neither row plans a route. */
+	it.each([
+		{ commits: 0, name: "is zero", reason: "no-commits" },
+		{ commits: MAX_VERIFIABLE_COMMITS + 1, name: "exceeds the cap", reason: "too-many-commits" },
+	])(
+		"skips when the declared commit count $name, with no api call",
+		async ({ commits, reason }) => {
+			expect.hasAssertions();
+			const session = installFetchMock([]);
+			const response = await postSigned(buildPayload({ commits }));
+			await expectReply(response, { body: { decision: "skipped", reason }, status: HTTP_OK });
+			session.assertDone();
+		},
+	);
 
 	it("skips on a commit count mismatch", async () => {
 		expect.hasAssertions();
@@ -63,31 +56,22 @@ describe("commit conditions", () => {
 });
 
 describe("commit verification", () => {
-	it("skips an unverified commit", async () => {
+	/** The two §3.2 halves one commit can fail on: the signature, and a principal's trust. */
+	it.each([
+		{ commit: { verified: false }, name: "an unverified commit", reason: "unverified-commit" },
+		{
+			commit: { author: STRANGER },
+			name: "a commit from an untrusted author",
+			reason: "untrusted-commit",
+		},
+	])("skips $name", async ({ commit, reason }) => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
-			commitsRouteFor("octo", [commitItem({ verified: false })]),
+			commitsRouteFor("octo", [commitItem(commit)]),
 		]);
 		const response = await postSigned(buildPayload());
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "unverified-commit" },
-			status: HTTP_OK,
-		});
-		session.assertDone();
-	});
-
-	it("skips a commit from an untrusted author", async () => {
-		expect.hasAssertions();
-		const session = installFetchMock([
-			installTokenRoute(),
-			commitsRouteFor("octo", [commitItem({ author: STRANGER })]),
-		]);
-		const response = await postSigned(buildPayload());
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "untrusted-commit" },
-			status: HTTP_OK,
-		});
+		await expectReply(response, { body: { decision: "skipped", reason }, status: HTTP_OK });
 		session.assertDone();
 	});
 
