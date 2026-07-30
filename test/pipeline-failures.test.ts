@@ -96,7 +96,7 @@ describe("github api failures", () => {
 				method: "GET",
 				payload: { message: "boom" },
 				status: HTTP_INTERNAL_ERROR,
-				url: pullsUrl("octo", COMMITS_SUFFIX),
+				url: pullsUrl(COMMITS_SUFFIX),
 			}),
 		]);
 		const response = await postSigned(buildPayload());
@@ -115,7 +115,7 @@ describe("github api failures", () => {
 				method: "GET",
 				payload: {},
 				status: 0,
-				url: pullsUrl("octo", COMMITS_SUFFIX),
+				url: pullsUrl(COMMITS_SUFFIX),
 			}),
 		]);
 		const response = await postSigned(buildPayload());
@@ -142,7 +142,7 @@ function commitsFailureRoute(
 		method: "GET",
 		payload,
 		status,
-		url: pullsUrl("octo", COMMITS_SUFFIX),
+		url: pullsUrl(COMMITS_SUFFIX),
 	});
 }
 /* SPEC.md §8 and §9: a github-api-error is greppable, but only these fields say which failure it

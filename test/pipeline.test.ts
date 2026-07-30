@@ -19,6 +19,7 @@ import {
 	COMMITS_SUFFIX,
 	DELIVERY_ID,
 	HEAD_SHA,
+	OWNER,
 	OWN_APPROVAL,
 	REPO_ID,
 	TOKEN_URL,
@@ -71,7 +72,7 @@ describe("owner approval flow", () => {
 		const session = installFetchMock(happyRoutes());
 		const response = await postSigned(buildPayload());
 		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
-		const posted = requestByUrl(session, pullsUrl("octo", "/reviews"));
+		const posted = requestByUrl(session, pullsUrl("/reviews"));
 		expect(posted.body).toBe('{"commit_id":"head-sha","event":"APPROVE"}');
 		session.assertDone();
 	});
@@ -82,10 +83,10 @@ describe("owner approval flow", () => {
 		await postSigned(buildPayload());
 		expect(requestByUrl(session, TOKEN_URL).headers["authorization"]).toMatch(JWT_PATTERN);
 		expect(requestByUrl(session, APP_URL).headers["authorization"]).toMatch(JWT_PATTERN);
-		expect(requestByUrl(session, pullsUrl("octo", COMMITS_SUFFIX)).headers["authorization"]).toBe(
+		expect(requestByUrl(session, pullsUrl(COMMITS_SUFFIX)).headers["authorization"]).toBe(
 			"token install-token",
 		);
-		expect(requestByUrl(session, pullsUrl("octo", "/reviews")).headers["authorization"]).toBe(
+		expect(requestByUrl(session, pullsUrl("/reviews")).headers["authorization"]).toBe(
 			"token install-token",
 		);
 	});
@@ -113,9 +114,9 @@ describe("author trust", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
-			membershipAdminRoute("octo"),
-			...pipelineRoutes({ commits: [commitItem()], owner: "acme", reviews: [] }),
-			reviewPostRouteFor("acme", HTTP_OK),
+			membershipAdminRoute(OWNER),
+			...pipelineRoutes({ commits: [commitItem()], owner: ORG, reviews: [] }),
+			reviewPostRouteFor(HTTP_OK, ORG),
 		]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
 		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
@@ -124,7 +125,7 @@ describe("author trust", () => {
 
 	it("skips when the membership lookup returns 404", async () => {
 		expect.hasAssertions();
-		const session = installFetchMock([installTokenRoute(), membershipMissingRoute("octo")]);
+		const session = installFetchMock([installTokenRoute(), membershipMissingRoute(OWNER)]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
 		await expectReply(response, {
 			body: { decision: "skipped", reason: "author-not-trusted" },
@@ -139,10 +140,9 @@ describe("author trust", () => {
 			installTokenRoute(),
 			...pipelineRoutes({
 				commits: [commitItem({ author: RENOVATE, committer: WEB_FLOW_USER })],
-				owner: "octo",
 				reviews: [],
 			}),
-			reviewPostRouteFor("octo", HTTP_OK),
+			reviewPostRouteFor(HTTP_OK),
 		]);
 		const response = await postSigned(buildPayload({ user: RENOVATE }));
 		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
@@ -163,10 +163,9 @@ describe("autofix.ci commits", () => {
 					commitItem({ author: RENOVATE, committer: WEB_FLOW_USER }),
 					commitItem({ author: AUTOFIX_CI, committer: WEB_FLOW_USER }),
 				],
-				owner: "octo",
 				reviews: [],
 			}),
-			reviewPostRouteFor("octo", HTTP_OK),
+			reviewPostRouteFor(HTTP_OK),
 		]);
 		const response = await postSigned(buildPayload({ commits: 2, user: RENOVATE }));
 		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
@@ -179,9 +178,9 @@ describe("duplicate approval check", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
-			commitsRouteFor("octo", [commitItem()]),
+			commitsRouteFor([commitItem()]),
 			appRoute(),
-			reviewsRouteFor("octo", [OWN_APPROVAL]),
+			reviewsRouteFor([OWN_APPROVAL]),
 		]);
 		const response = await postSigned(buildPayload());
 		await expectReply(response, {
@@ -200,7 +199,6 @@ describe("live state checks", () => {
 			...pipelineRoutes({
 				commits: [commitItem()],
 				liveSha: "moved-sha",
-				owner: "octo",
 				reviews: [],
 			}),
 		]);
@@ -216,8 +214,8 @@ describe("live state checks", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
-			...pipelineRoutes({ commits: [commitItem()], owner: "octo", reviews: [] }),
-			reviewPostRouteFor("octo", HTTP_UNPROCESSABLE_ENTITY),
+			...pipelineRoutes({ commits: [commitItem()], reviews: [] }),
+			reviewPostRouteFor(HTTP_UNPROCESSABLE_ENTITY),
 		]);
 		const response = await postSigned(buildPayload());
 		await expectReply(response, {

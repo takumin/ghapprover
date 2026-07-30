@@ -39,12 +39,17 @@ const APP_SLUG = "ghapprover";
 /** The repository every payload fixture is for; the routes below are the calls made against it. */
 const REPO_NAME = "hello";
 export const TOKEN_URL = tokenUrl(INSTALLATION_ID);
-export const membershipUrl = (login: string): string =>
-	`${BASE}/orgs/${ORG.login}/memberships/${login}`;
+/* Every route below is planned for the same account fixture the payload names, rather than for a
+ * login repeated beside it: the two are one choice per case, and a route spelled as its own literal
+ * is one that keeps passing after the fixture it was meant for was renamed — as the stub's
+ * "unplanned request", which reads as a routing bug rather than as a stale fixture. */
+export const membershipUrl = (member: GithubAccount): string =>
+	`${BASE}/orgs/${ORG.login}/memberships/${member.login}`;
 export const COMMITS_SUFFIX = "/commits?per_page=100";
 const REVIEWS_SUFFIX = "/reviews?per_page=100";
 
-const OWNER = OCTO;
+/** The owner of the repository every payload fixture is for, and of the pull request its routes serve. */
+export const OWNER = OCTO;
 export const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User" };
 export const OTHER_STRANGER: GithubAccount = { id: 998, login: "eve", type: "User" };
 export const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT };
@@ -118,8 +123,8 @@ export function commitItem(overrides: CommitOverrides = {}): Record<string, unkn
 	return { author, commit: { verification: { verified } }, committer, sha: HEAD_SHA };
 }
 
-export function pullsUrl(owner: string, suffix: string): string {
-	return `${BASE}/repos/${owner}/${REPO_NAME}/pulls/${PULL_NUMBER}${suffix}`;
+export function pullsUrl(suffix: string, owner: GithubAccount = OWNER): string {
+	return `${BASE}/repos/${owner.login}/${REPO_NAME}/pulls/${PULL_NUMBER}${suffix}`;
 }
 
 export function installTokenRoute(): PlannedRoute {
@@ -133,63 +138,63 @@ export function appRoute(): PlannedRoute {
 	return getRoute(APP_URL, { slug: APP_SLUG });
 }
 /** The two membership answers §3.1 turns on: an active admin, or the 404 that means "not a member". */
-export function membershipAdminRoute(login: string): PlannedRoute {
+export function membershipAdminRoute(member: GithubAccount): PlannedRoute {
 	return jsonRoute({
 		method: "GET",
 		payload: { role: "admin", state: "active" },
 		status: HTTP_OK,
-		url: membershipUrl(login),
+		url: membershipUrl(member),
 	});
 }
-export function membershipMissingRoute(login: string): PlannedRoute {
+export function membershipMissingRoute(member: GithubAccount): PlannedRoute {
 	return jsonRoute({
 		method: "GET",
 		payload: { message: "Not Found" },
 		status: HTTP_NOT_FOUND,
-		url: membershipUrl(login),
+		url: membershipUrl(member),
 	});
 }
-export function commitsRouteFor(owner: string, commits: unknown): PlannedRoute {
-	return getRoute(pullsUrl(owner, COMMITS_SUFFIX), commits);
+export function commitsRouteFor(commits: unknown, owner: GithubAccount = OWNER): PlannedRoute {
+	return getRoute(pullsUrl(COMMITS_SUFFIX, owner), commits);
 }
-export function reviewsRouteFor(owner: string, reviews: unknown): PlannedRoute {
-	return getRoute(pullsUrl(owner, REVIEWS_SUFFIX), reviews);
+export function reviewsRouteFor(reviews: unknown, owner: GithubAccount = OWNER): PlannedRoute {
+	return getRoute(pullsUrl(REVIEWS_SUFFIX, owner), reviews);
 }
-function liveRouteFor(owner: string, sha: string): PlannedRoute {
-	return getRoute(pullsUrl(owner, ""), { draft: false, head: { sha }, state: "open" });
+function liveRouteFor(sha: string, owner: GithubAccount): PlannedRoute {
+	return getRoute(pullsUrl("", owner), { draft: false, head: { sha }, state: "open" });
 }
-export function reviewPostRouteFor(owner: string, status: number): PlannedRoute {
+export function reviewPostRouteFor(status: number, owner: GithubAccount = OWNER): PlannedRoute {
 	return jsonRoute({
 		method: "POST",
 		payload: { id: 1 },
 		status,
-		url: pullsUrl(owner, "/reviews"),
+		url: pullsUrl("/reviews", owner),
 	});
 }
 
 interface PipelineRoutesOptions {
 	readonly commits: readonly unknown[];
 	readonly liveSha?: string;
-	readonly owner: string;
+	readonly owner?: GithubAccount;
 	readonly reviews: readonly unknown[];
 }
 
 /** The GET routes every full pipeline run consumes after token issuance. */
 export function pipelineRoutes(options: PipelineRoutesOptions): PlannedRoute[] {
-	const { commits, liveSha = HEAD_SHA, owner, reviews } = options;
+	const { commits, liveSha = HEAD_SHA, owner = OWNER, reviews } = options;
 	return [
-		commitsRouteFor(owner, commits),
+		commitsRouteFor(commits, owner),
 		appRoute(),
-		reviewsRouteFor(owner, reviews),
-		liveRouteFor(owner, liveSha),
+		reviewsRouteFor(reviews, owner),
+		liveRouteFor(liveSha, owner),
 	];
 }
 
 export function happyRoutes(): PlannedRoute[] {
 	return [
 		installTokenRoute(),
-		...pipelineRoutes({ commits: [commitItem()], owner: "octo", reviews: [] }),
-		reviewPostRouteFor("octo", HTTP_OK),
+		...pipelineRoutes({ commits: [commitItem()], reviews: [] }),
+		reviewPostRouteFor(HTTP_OK),
 	];
 }
 
