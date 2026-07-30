@@ -30,8 +30,8 @@ export interface RepoRef {
 	readonly repo: string;
 }
 
-/** What a shape violation is attributed to: the route that answered, and the status it answered with. */
-interface ResponseOrigin {
+/** One route and one status: what a shape violation is attributed to, and which failure a call below tolerates. */
+interface EndpointStatus {
 	readonly endpoint: string;
 	readonly status: number;
 }
@@ -46,7 +46,7 @@ interface ResponseOrigin {
 function parseContract<Schema extends GenericSchema>(
 	schema: Schema,
 	value: unknown,
-	origin: ResponseOrigin,
+	origin: EndpointStatus,
 ): InferOutput<Schema> {
 	const result = safeParse(schema, value);
 	if (!result.success) {
@@ -68,6 +68,28 @@ async function dispatched<Result>(endpoint: string, call: () => Promise<Result>)
 		return await call();
 	} catch (error) {
 		throw toApiError(endpoint, error);
+	}
+}
+/**
+ * A call whose one documented failure is an answer rather than an error (SPEC.md §9): a 404 from
+ * the membership lookup means "not a member", a 422 from the review POST means the pull request
+ * closed underneath it. Stated once, so the two read alike and neither can drift into swallowing
+ * more than the one status it is entitled to. Matched on the endpoint as well as the status
+ * (src/api-error.ts): the auth strategy issues its token request from inside these very calls, and
+ * absorbing its 404 here would turn a configuration failure into a routine skip.
+ */
+async function answering<Answer, Result>(
+	tolerated: EndpointStatus,
+	answer: Answer,
+	call: () => Promise<Result>,
+): Promise<Answer | Result> {
+	try {
+		return await call();
+	} catch (error) {
+		if (isFailureOn(error, tolerated.endpoint, tolerated.status)) {
+			return answer;
+		}
+		throw error;
 	}
 }
 /** A response and the schema that models it, through the frame above: the two halves every non-paginated call is made of. */
@@ -140,18 +162,13 @@ export async function fetchOrgMembership(
 	username: string,
 ): Promise<OrgMembership | null> {
 	const endpoint = "GET /orgs/{org}/memberships/{username}";
-	try {
-		return await contractCall(
+	return answering({ endpoint, status: HTTP_NOT_FOUND }, null, async () =>
+		contractCall(
 			endpoint,
 			async () => client.request(endpoint, { org, username }),
 			orgMembershipSchema,
-		);
-	} catch (error) {
-		if (isFailureOn(error, endpoint, HTTP_NOT_FOUND)) {
-			return null;
-		}
-		throw error;
-	}
+		),
+	);
 }
 
 /** All PR reviews via Link-header pagination (SPEC.md §3 cond. 5). */
@@ -203,21 +220,20 @@ export async function createApprovalReview(
 ): Promise<"created" | "rejected"> {
 	const { commitId, pullNumber, repo } = target;
 	const endpoint = "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews";
-	try {
-		await dispatched(endpoint, async () =>
-			client.request(endpoint, {
-				commit_id: commitId,
-				event: "APPROVE",
-				owner: repo.owner,
-				pull_number: pullNumber,
-				repo: repo.repo,
-			}),
-		);
-		return "created";
-	} catch (error) {
-		if (isFailureOn(error, endpoint, HTTP_UNPROCESSABLE_ENTITY)) {
-			return "rejected";
-		}
-		throw error;
-	}
+	return answering(
+		{ endpoint, status: HTTP_UNPROCESSABLE_ENTITY },
+		"rejected" as const,
+		async (): Promise<"created"> => {
+			await dispatched(endpoint, async () =>
+				client.request(endpoint, {
+					commit_id: commitId,
+					event: "APPROVE",
+					owner: repo.owner,
+					pull_number: pullNumber,
+					repo: repo.repo,
+				}),
+			);
+			return "created";
+		},
+	);
 }
