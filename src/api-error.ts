@@ -89,20 +89,13 @@ const TOKEN_ENDPOINT = "POST /app/installations/{installation_id}/access_tokens"
  */
 const TOKEN_PATH_PATTERN = /^\/app\/installations\/\d+\/access_tokens$/u;
 
-interface HttpFailure {
-	readonly diagnostics: ApiDiagnostics;
-	/**
-	 * Whether the auth strategy's internal token request is the one that failed,
-	 * rather than the call the caller asked for. The strategy issues it lazily
-	 * inside whichever call runs first, so its failure surfaces as that call's
-	 * exception; those two are the only requests a single call dispatches.
-	 */
-	readonly fromTokenRequest: boolean;
-	readonly hasResponse: boolean;
-	readonly status: number;
-}
-
-/** Whether the failed request is the auth strategy's token request, matched on its path alone; a URL that will not parse is not it. */
+/**
+ * Whether the failed request is the auth strategy's internal token request rather
+ * than the call the caller asked for — the strategy issues it lazily inside
+ * whichever call runs first, so its failure surfaces as that call's exception, and
+ * those two are the only requests a single call dispatches. Matched on the path
+ * alone; a URL that will not parse is not it.
+ */
 function isTokenRequest(url: string): boolean {
 	try {
 		return TOKEN_PATH_PATTERN.test(new URL(url).pathname);
@@ -131,36 +124,6 @@ function diagnosticsOf(error: RequestError): ApiDiagnostics {
 		rateLimitRemaining: headers["x-ratelimit-remaining"],
 		rateLimitReset: headers["x-ratelimit-reset"],
 		requestId: headers["x-github-request-id"],
-	};
-}
-
-/**
- * Narrows a thrown octokit failure: an aborted fetch (the delivery deadline
- * firing, src/client.ts), which @octokit/request rethrows as it is rather than
- * wrapping, so it is matched first and by name; or a RequestError, which carries
- * a response for an HTTP failure and none for a transport failure, and whose
- * status, request, and response the package types for us — which is what earns it
- * a line of its own in the §11 table. The request URL is resolved to
- * fromTokenRequest here rather than carried, so both consumers below read the one
- * answer instead of re-parsing the URL for it.
- */
-function toHttpFailure(error: unknown): HttpFailure | null {
-	if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
-		return {
-			diagnostics: withoutResponse(error.message),
-			fromTokenRequest: false,
-			hasResponse: false,
-			status: NETWORK_FAILURE_STATUS,
-		};
-	}
-	if (!(error instanceof RequestError)) {
-		return null;
-	}
-	return {
-		diagnostics: diagnosticsOf(error),
-		fromTokenRequest: isTokenRequest(error.request.url),
-		hasResponse: error.response !== undefined,
-		status: error.status,
 	};
 }
 
@@ -195,37 +158,45 @@ function attributedEndpoint(endpoint: string, fromTokenRequest: boolean): string
 	}
 	return endpoint;
 }
-/** HTTP failures keep their status, attributed to the endpoint above rather than to the call the caller asked for. */
-function httpFailureError(endpoint: string, failure: HttpFailure): GithubApiError {
-	const { diagnostics, fromTokenRequest, hasResponse, status } = failure;
-	if (!hasResponse) {
+/**
+ * A thrown RequestError — the one octokit failure whose status, request and response the package
+ * types for us, which is what earns it a line of its own in the §11 table. It carries a response
+ * for an HTTP failure, which keeps its status and is attributed to the endpoint above, and none for
+ * a transport failure.
+ */
+function requestFailureError(endpoint: string, error: RequestError): GithubApiError {
+	const diagnostics = diagnosticsOf(error);
+	if (error.response === undefined) {
 		return transportError(endpoint, diagnostics);
 	}
 	return new GithubApiError({
 		diagnostics,
-		endpoint: attributedEndpoint(endpoint, fromTokenRequest),
+		endpoint: attributedEndpoint(endpoint, isTokenRequest(error.request.url)),
 		reason: "unexpected response status",
-		status,
+		status: error.status,
 	});
 }
 
 /**
  * Maps a thrown octokit failure onto the frozen GithubApiError contract:
  * transport failures and timeouts become status 0, HTTP failures keep their
- * status via httpFailureError above, and anything unrecognized (e.g. an auth
- * configuration failure) is passed through for the handler's internal-error
- * path (SPEC.md §9).
+ * status, and anything unrecognized (e.g. an auth configuration failure) is
+ * passed through for the handler's internal-error path (SPEC.md §9).
  */
 export function toApiError(endpoint: string, error: unknown): Error {
 	if (error instanceof GithubApiError) {
 		return error;
 	}
-	const failure = toHttpFailure(error);
-	if (failure === null) {
-		if (error instanceof Error) {
-			return error;
-		}
-		return transportError(endpoint, NO_DIAGNOSTICS);
+	/* An aborted fetch (the delivery deadline firing, src/client.ts) is rethrown by
+	 * @octokit/request as it is rather than wrapped, so it is matched first and by name. */
+	if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
+		return transportError(endpoint, withoutResponse(error.message));
 	}
-	return httpFailureError(endpoint, failure);
+	if (error instanceof RequestError) {
+		return requestFailureError(endpoint, error);
+	}
+	if (error instanceof Error) {
+		return error;
+	}
+	return transportError(endpoint, NO_DIAGNOSTICS);
 }
