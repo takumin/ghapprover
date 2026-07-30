@@ -95,11 +95,7 @@ describe("signature verification", () => {
 		const signature = await sign(SECRET, buildPayload());
 		const request = new Request(WEBHOOK_URL, {
 			body: buildPayload({ action: "synchronize" }),
-			headers: {
-				"x-github-delivery": DELIVERY_ID,
-				"x-github-event": "pull_request",
-				"x-hub-signature-256": signature,
-			},
+			headers: deliveryHeaders(signature),
 			method: "POST",
 		});
 		await expectReply(await dispatch(request), {
