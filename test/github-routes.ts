@@ -24,8 +24,7 @@ import type { PlannedRoute } from "./fetch-stub";
 import { createGithubClient } from "../src/client";
 import { privateKeyPemOnce } from "./app-key";
 
-export const ACCOUNT = OCTO;
-export const REPO: RepoRef = { owner: ACCOUNT.login, repo: "hello" };
+export const REPO: RepoRef = { owner: OCTO.login, repo: "hello" };
 export const TOKEN = "installation-token";
 const INSTALLATION_ID = 12_345;
 export const TOKENS_URL = tokenUrl(INSTALLATION_ID);
@@ -56,7 +55,7 @@ export function appRoute(payload: unknown = APP_BODY): PlannedRoute {
 }
 
 export function commitBody(sha: string): Record<string, unknown> {
-	return { author: ACCOUNT, commit: { verification: { verified: true } }, committer: ACCOUNT, sha };
+	return { author: OCTO, commit: { verification: { verified: true } }, committer: OCTO, sha };
 }
 export function commitPage(count: number, offset: number): Record<string, unknown>[] {
 	return Array.from({ length: count }, (_, index) => commitBody(`sha-${offset + index}`));

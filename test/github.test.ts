@@ -6,7 +6,20 @@
  */
 
 import {
-	ACCOUNT,
+	APP_ENDPOINT,
+	COMMITS_ENDPOINT,
+	HTTP_FORBIDDEN,
+	HTTP_INTERNAL_ERROR,
+	HTTP_NOT_FOUND,
+	HTTP_OK,
+	HTTP_UNPROCESSABLE_ENTITY,
+	PULL_NUMBER,
+	REVIEW_POST_ENDPOINT,
+	installFetchMock,
+	jsonRoute,
+	requestByUrl,
+} from "./fetch-stub";
+import {
 	FULL_PAGE,
 	MEMBERSHIP_ORG,
 	MEMBERSHIP_USER,
@@ -27,20 +40,6 @@ import {
 	reviewsUrl,
 } from "./github-routes";
 import {
-	APP_ENDPOINT,
-	COMMITS_ENDPOINT,
-	HTTP_FORBIDDEN,
-	HTTP_INTERNAL_ERROR,
-	HTTP_NOT_FOUND,
-	HTTP_OK,
-	HTTP_UNPROCESSABLE_ENTITY,
-	PULL_NUMBER,
-	REVIEW_POST_ENDPOINT,
-	installFetchMock,
-	jsonRoute,
-	requestByUrl,
-} from "./fetch-stub";
-import {
 	createApprovalReview,
 	fetchAppBotLogin,
 	fetchOrgMembership,
@@ -50,11 +49,12 @@ import {
 } from "../src/github";
 import { describe, expect, it } from "vitest";
 import { GithubApiError } from "../src/api-error";
+import { OCTO } from "./accounts";
 
 const SECOND_PAGE_COUNT = 37;
 
 function reviewBody(commitId: string): Record<string, unknown> {
-	return { commit_id: commitId, state: "APPROVED", user: ACCOUNT };
+	return { commit_id: commitId, state: "APPROVED", user: OCTO };
 }
 
 describe("fetchAppBotLogin()", () => {
@@ -98,7 +98,7 @@ describe("listPullRequestCommits() mapping", () => {
 		const webCommit = {
 			author: null,
 			commit: { extra: true, verification: { reason: "valid", verified: true } },
-			committer: ACCOUNT,
+			committer: OCTO,
 			sha: "sha-web",
 		};
 		const mock = installFetchMock([
@@ -108,15 +108,15 @@ describe("listPullRequestCommits() mapping", () => {
 		const commits = await listPullRequestCommits(await makeClient(), REPO, PULL_NUMBER);
 		expect(commits).toStrictEqual([
 			{
-				author: ACCOUNT,
+				author: OCTO,
 				commit: { verification: { verified: true } },
-				committer: ACCOUNT,
+				committer: OCTO,
 				sha: "sha-a",
 			},
 			{
 				author: null,
 				commit: { verification: { verified: true } },
-				committer: ACCOUNT,
+				committer: OCTO,
 				sha: "sha-web",
 			},
 		]);
