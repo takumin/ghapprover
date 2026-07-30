@@ -7,11 +7,6 @@
 
 import {
 	DELIVERY_ID,
-	HTTP_INTERNAL_ERROR,
-	HTTP_NOT_FOUND,
-	HTTP_OK,
-	HTTP_PAYLOAD_TOO_LARGE,
-	HTTP_UNAUTHORIZED,
 	OVERSIZED_BODY_BYTES,
 	SECRET,
 	UNCHECKED_SIGNATURE,
@@ -24,8 +19,15 @@ import {
 	postSigned,
 	streamedDelivery,
 } from "./delivery";
+import {
+	HTTP_INTERNAL_ERROR,
+	HTTP_NOT_FOUND,
+	HTTP_OK,
+	HTTP_PAYLOAD_TOO_LARGE,
+	HTTP_UNAUTHORIZED,
+	installFetchMock,
+} from "./fetch-stub";
 import { describe, expect, it, vi } from "vitest";
-import { installFetchMock } from "./fetch-stub";
 import { sign } from "@octokit/webhooks-methods";
 
 describe("request routing", () => {

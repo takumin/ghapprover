@@ -9,9 +9,6 @@
 import {
 	APP_URL,
 	FULL_PAGE,
-	HTTP_FORBIDDEN,
-	HTTP_INTERNAL_ERROR,
-	HTTP_NOT_FOUND,
 	PULL_NUMBER,
 	REPO,
 	TOKEN,
@@ -25,7 +22,16 @@ import {
 	makeClient,
 	reviewsPostUrl,
 } from "./github-routes";
-import { JWT_PATTERN, installFetchMock, jsonRoute, requestByUrl } from "./fetch-stub";
+import {
+	HTTP_FORBIDDEN,
+	HTTP_INTERNAL_ERROR,
+	HTTP_NOT_FOUND,
+	JWT_PATTERN,
+	REFUSAL_HEADERS,
+	installFetchMock,
+	jsonRoute,
+	requestByUrl,
+} from "./fetch-stub";
 import {
 	createApprovalReview,
 	fetchAppBotLogin,
@@ -88,14 +94,6 @@ describe("transport failure mapping", () => {
 		});
 	});
 });
-
-/** The headers GitHub sends on a refused call, which SPEC.md §8 logs alongside the status. */
-const REFUSAL_HEADERS = {
-	"x-accepted-github-permissions": "pull_requests=write",
-	"x-github-request-id": "F1E2:3D4C",
-	"x-ratelimit-remaining": "0",
-	"x-ratelimit-reset": "1770000000",
-};
 
 /* SPEC.md §8: what turns a grep hit on github-api-error into a cause. The status alone does not
  * say whether a 403 was a missing permission or a rate limit, and the fixed message this Worker

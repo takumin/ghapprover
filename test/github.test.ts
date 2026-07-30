@@ -9,9 +9,6 @@ import {
 	ACCOUNT,
 	BASE,
 	FULL_PAGE,
-	HTTP_INTERNAL_ERROR,
-	HTTP_NOT_FOUND,
-	HTTP_OK,
 	PULL_NUMBER,
 	REPO,
 	TOKENS_URL,
@@ -28,6 +25,16 @@ import {
 	reviewsUrl,
 } from "./github-routes";
 import {
+	HTTP_FORBIDDEN,
+	HTTP_INTERNAL_ERROR,
+	HTTP_NOT_FOUND,
+	HTTP_OK,
+	HTTP_UNPROCESSABLE_ENTITY,
+	installFetchMock,
+	jsonRoute,
+	requestByUrl,
+} from "./fetch-stub";
+import {
 	createApprovalReview,
 	fetchAppBotLogin,
 	fetchOrgMembership,
@@ -36,12 +43,9 @@ import {
 	listPullRequestReviews,
 } from "../src/github";
 import { describe, expect, it } from "vitest";
-import { installFetchMock, jsonRoute, requestByUrl } from "./fetch-stub";
 import { GithubApiError } from "../src/client";
 
 const SECOND_PAGE_COUNT = 37;
-const HTTP_FORBIDDEN = 403;
-const HTTP_UNPROCESSABLE_ENTITY = 422;
 
 function reviewBody(commitId: string): Record<string, unknown> {
 	return { commit_id: commitId, state: "APPROVED", user: ACCOUNT };

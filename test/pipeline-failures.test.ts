@@ -11,9 +11,6 @@ import {
 	COMMITS_SUFFIX,
 	DELIVERY_ID,
 	HEAD_SHA,
-	HTTP_FORBIDDEN,
-	HTTP_INTERNAL_ERROR,
-	HTTP_NOT_FOUND,
 	ORG,
 	PULL_NUMBER,
 	SECRET,
@@ -24,8 +21,15 @@ import {
 	postSigned,
 	pullsUrl,
 } from "./delivery";
+import {
+	HTTP_FORBIDDEN,
+	HTTP_INTERNAL_ERROR,
+	HTTP_NOT_FOUND,
+	REFUSAL_HEADERS,
+	installFetchMock,
+	jsonRoute,
+} from "./fetch-stub";
 import { describe, expect, it, vi } from "vitest";
-import { installFetchMock, jsonRoute } from "./fetch-stub";
 import type { PlannedRoute } from "./fetch-stub";
 
 /** What the auth library says about that key, and what §8's errorMessage exists to carry into the entry. */
@@ -129,13 +133,6 @@ describe("github api failures", () => {
 });
 
 const COMMITS_ENDPOINT = "GET /repos/{owner}/{repo}/pulls/{pull_number}/commits";
-/** The headers GitHub sends on a refused call (SPEC.md §8), planted on the commits response. */
-const REFUSAL_HEADERS = {
-	"x-accepted-github-permissions": "pull_requests=write",
-	"x-github-request-id": "F1E2:3D4C",
-	"x-ratelimit-remaining": "0",
-	"x-ratelimit-reset": "1770000000",
-};
 /** SPEC.md §8: the truncation bound, and a message that runs past it. */
 const MESSAGE_LIMIT = 512;
 const OVERLONG_MESSAGE = "boom ".repeat(MESSAGE_LIMIT);

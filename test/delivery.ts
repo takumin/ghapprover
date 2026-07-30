@@ -6,8 +6,8 @@
  * is a route that can disagree with itself about what the pipeline actually calls.
  */
 
+import { HTTP_NOT_FOUND, HTTP_OK, jsonRoute, tokenRoute } from "./fetch-stub";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
-import { jsonRoute, tokenRoute } from "./fetch-stub";
 import type { GithubAccount } from "../src/types";
 import type { PlannedRoute } from "./fetch-stub";
 import { expect } from "vitest";
@@ -15,13 +15,6 @@ import { privateKeyPemOnce } from "./app-key";
 import { sign } from "@octokit/webhooks-methods";
 import worker from "../src/index";
 
-export const HTTP_OK = 200;
-export const HTTP_UNAUTHORIZED = 401;
-export const HTTP_FORBIDDEN = 403;
-export const HTTP_NOT_FOUND = 404;
-export const HTTP_PAYLOAD_TOO_LARGE = 413;
-export const HTTP_UNPROCESSABLE_ENTITY = 422;
-export const HTTP_INTERNAL_ERROR = 500;
 /** One byte past GitHub's 25 MB webhook payload cap. */
 export const OVERSIZED_BODY_BYTES = 26_214_401;
 

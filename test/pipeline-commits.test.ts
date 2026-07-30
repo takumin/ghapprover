@@ -6,8 +6,8 @@
  * membership lookup per principal (SPEC.md §3.1, §4).
  */
 
+import { HTTP_OK, installFetchMock } from "./fetch-stub";
 import {
-	HTTP_OK,
 	ORG,
 	OTHER_STRANGER,
 	STRANGER,
@@ -24,7 +24,6 @@ import {
 import { RENOVATE, RENOVATE_WRONG_ID, WEB_FLOW_USER } from "./accounts";
 import { describe, expect, it } from "vitest";
 import { MAX_VERIFIABLE_COMMITS } from "../src/allowlist";
-import { installFetchMock } from "./fetch-stub";
 
 describe("commit conditions", () => {
 	it("skips when the declared commit count is zero, with no api call", async () => {

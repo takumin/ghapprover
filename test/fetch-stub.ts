@@ -5,12 +5,38 @@
  * rejects anything unplanned (the disableNetConnect equivalent). Responses
  * carry a JSON content-type (octokit only parses JSON bodies with one) plus
  * any planned extra headers, e.g. the link header pagination follows.
+ *
+ * It is also where the response values every suite states — the statuses and the
+ * headers a refused call carries — are declared, this being the one module both
+ * route-helper families (delivery.ts, github-routes.ts) and every suite import.
  */
 import { vi } from "vitest";
 
+/* The statuses the suites plan routes with and assert responses against. Stated here, in the one
+ * module every suite and every route helper imports, so that a suite cannot pick up a different 403
+ * from whichever helper module it happened to import. */
+export const HTTP_OK = 200;
 const HTTP_CREATED = 201;
+export const HTTP_UNAUTHORIZED = 401;
+export const HTTP_FORBIDDEN = 403;
+export const HTTP_NOT_FOUND = 404;
+export const HTTP_PAYLOAD_TOO_LARGE = 413;
+export const HTTP_UNPROCESSABLE_ENTITY = 422;
+export const HTTP_INTERNAL_ERROR = 500;
 /** App JWT authorization: "bearer" plus three dot-separated base64url segments. */
 export const JWT_PATTERN = /^bearer eyJ[\w-]+\.[\w-]+\.[\w-]+$/u;
+/**
+ * The headers GitHub sends on a refused call, which SPEC.md §8 logs alongside the status. Shared by
+ * the suite that drives the mapping (client.test.ts) and the one that drives the log entry it ends
+ * up in (pipeline-failures.test.ts): the §8 diagnostics set stated twice is a set that can be
+ * extended in one suite and asserted in the other without either failing.
+ */
+export const REFUSAL_HEADERS = {
+	"x-accepted-github-permissions": "pull_requests=write",
+	"x-github-request-id": "F1E2:3D4C",
+	"x-ratelimit-remaining": "0",
+	"x-ratelimit-reset": "1770000000",
+};
 
 export interface PlannedRoute {
 	readonly body: string;

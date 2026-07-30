@@ -5,7 +5,7 @@
  * route and the same page shapes, so a route stated once here cannot drift between them.
  */
 
-import { jsonRoute, tokenRoute } from "./fetch-stub";
+import { HTTP_OK, jsonRoute, tokenRoute } from "./fetch-stub";
 import type { GithubClient } from "../src/client";
 import type { PlannedRoute } from "./fetch-stub";
 import { createGithubClient } from "../src/client";
@@ -21,10 +21,6 @@ export const APP_URL = `${BASE}/app`;
 export const MEMBERSHIP_URL = `${BASE}/orgs/octo/memberships/someone`;
 export const FULL_PAGE = 100;
 export const ACCOUNT = { id: 7, login: "octo", type: "User" };
-export const HTTP_OK = 200;
-export const HTTP_FORBIDDEN = 403;
-export const HTTP_NOT_FOUND = 404;
-export const HTTP_INTERNAL_ERROR = 500;
 
 export async function makeClient(): Promise<GithubClient> {
 	return createGithubClient(
