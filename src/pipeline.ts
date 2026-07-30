@@ -8,6 +8,7 @@
 
 import type { AppCredentials, GithubClient } from "./client";
 import type { ApprovalTarget, RepoRef } from "./github";
+import type { CommitProblem, TrustResolver } from "./commits";
 import type { EventPullRequest, GithubAccount, PullRequestEventPayload } from "./types";
 import { apiErrorOutcome, approvedOutcome, errorOutcome, skippedOutcome } from "./outcome";
 import { checkCommitCount, checkCommits, precheckCommitCount } from "./commits";
@@ -27,14 +28,10 @@ import {
 	listPullRequestCommits,
 	listPullRequestReviews,
 } from "./github";
-import type { CommitProblem } from "./commits";
 import { GithubApiError } from "./api-error";
 import type { Outcome } from "./outcome";
 import { accountKey } from "./account";
 import { createGithubClient } from "./client";
-
-/** Resolves one account's §3.1 trust, memoized per delivery; see createTrustResolver. */
-type TrustResolver = (user: GithubAccount) => Promise<boolean>;
 
 async function evaluateTrust(
 	client: GithubClient,

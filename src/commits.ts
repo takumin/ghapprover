@@ -71,6 +71,13 @@ export function checkCommitCount(
 	return null;
 }
 
+/**
+ * The injected §3.1 trust lookup the walks below run (SPEC.md §12): the pipeline supplies its
+ * per-delivery memoized resolver, a suite a plain function. Declared once here, where the
+ * contract is consumed, so the caller building one and the checks running it cannot drift apart.
+ */
+export type TrustResolver = (account: GithubAccount) => Promise<boolean>;
+
 /* SPEC.md §3.2 for one commit, in the order the checks must run: the signature, then the principals
  * the payload has to map at all, then their trust. Both directions of that order are load-bearing —
  * what a commit can be settled by without a lookup comes first, so no membership lookup is spent on
@@ -86,7 +93,7 @@ export function checkCommitCount(
  * limits. */
 export async function checkCommit(
 	entry: PullRequestCommit,
-	isTrusted: (account: GithubAccount) => Promise<boolean>,
+	isTrusted: TrustResolver,
 ): Promise<CommitProblem | null> {
 	const { author, commit, committer } = entry;
 	const { verification } = commit;
@@ -111,7 +118,7 @@ export async function checkCommit(
  * that argument is made once and the caller is left with the fetch it sequences around it. */
 export async function checkCommits(
 	commits: readonly PullRequestCommit[],
-	isTrusted: (account: GithubAccount) => Promise<boolean>,
+	isTrusted: TrustResolver,
 ): Promise<CommitProblem | null> {
 	for (const entry of commits) {
 		const problem = await checkCommit(entry, isTrusted);
