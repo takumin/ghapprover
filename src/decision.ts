@@ -63,14 +63,18 @@ export type TrustEvaluation =
 	| { readonly kind: "trusted" }
 	| { readonly kind: "untrusted" }
 	| { readonly kind: "org-membership"; readonly org: string; readonly login: string };
+/* The two identity exemptions as the keys they are compared against, derived once at module scope
+ * like TARGET_ACTIONS above: both lists are in-code constants (SPEC.md §5), and isWebFlow runs once
+ * per commit principal, so deriving them per call is work every delivery repeats for nothing. */
+const ALLOWED_BOT_KEYS: ReadonlySet<string> = new Set(ALLOWED_BOTS.map((bot) => accountKey(bot)));
+const WEB_FLOW_KEY = accountKey(WEB_FLOW);
 function isAllowedBot(user: GithubAccount): boolean {
-	const key = accountKey(user);
-	return ALLOWED_BOTS.some((bot) => accountKey(bot) === key);
+	return ALLOWED_BOT_KEYS.has(accountKey(user));
 }
 /* SPEC.md §3.2: matched on login and numeric id, like the §3.1 allowlist. Both are identity
  * exemptions that decide approval, so neither may turn on a login string alone. */
 function isWebFlow(account: GithubAccount): boolean {
-	return accountKey(account) === accountKey(WEB_FLOW);
+	return accountKey(account) === WEB_FLOW_KEY;
 }
 
 /* SPEC.md §3.1: bots are trusted solely via the allowlist (login and numeric id both matching)
