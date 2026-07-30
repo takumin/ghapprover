@@ -637,9 +637,13 @@ Rules:
 > endpoint methods and request logging this Worker does not need, and `octokit`
 > further bundles webhooks, OAuth, and retry / throttling plugins — automatic retries
 > of transient failures would even conflict with §9 (the auth library's bounded
-> auth-consistency retries are the accepted exception noted there). `@octokit/webhooks`
-> targets long-running Node servers; its verification primitive is published
-> standalone as `@octokit/webhooks-methods`.
+> auth-consistency retries are the accepted exception noted there). `@octokit/app` is
+> rejected on the same balance: it would collapse client construction into
+> `getInstallationOctokit`, but pulls in `@octokit/oauth-app` for an OAuth flow this App
+> has none of. `@octokit/webhooks` targets long-running Node servers; its verification
+> primitive is published standalone as `@octokit/webhooks-methods`, and its own
+> event-handler model (registered callbacks returning nothing) does not fit a delivery
+> that must reduce to exactly one outcome, one log entry, and one response (§4, §8).
 
 ## 12. Implementation Notes (Informative)
 
