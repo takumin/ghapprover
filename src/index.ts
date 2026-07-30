@@ -9,6 +9,7 @@
 import { errorOutcome, runPipeline, skippedOutcome } from "./pipeline";
 import { GithubApiError } from "./client";
 import type { Outcome } from "./pipeline";
+import type { PayloadValidation } from "./payload";
 import type { PullRequestEventPayload } from "./types";
 import { parsePullRequestEvent } from "./payload";
 import { verifyWebhookSignature } from "./webhook";
@@ -54,6 +55,7 @@ const OPTIONAL_LOG_FIELDS = [
 	"rateLimitRemaining",
 	"rateLimitReset",
 	"errorName",
+	"field",
 ] as const;
 /**
  * The one bound on the one §8 field that has none at its source: @octokit/request
@@ -97,19 +99,30 @@ function thrownErrorMessage(error: unknown): string | undefined {
 	}
 	return undefined;
 }
-function parseBody(body: string): PullRequestEventPayload | null {
+/* A body that is not JSON is not the modeled shape either, and names no field: there is no
+ * document to locate one in (SPEC.md §8). */
+function parseBody(body: string): PayloadValidation {
 	try {
 		const parsed: unknown = JSON.parse(body);
 		return parsePullRequestEvent(parsed);
 	} catch {
-		return null;
+		return { payload: null };
 	}
 }
-/** A body that cannot be modeled means the evaluation could not be completed (SPEC.md §9). */
+/**
+ * A body that cannot be modeled means the evaluation could not be completed (SPEC.md §9). The
+ * entry carries §8's `field` with it — the dot path of what failed and never the value there,
+ * which is webhook payload content structured logs do not carry (§8 warning).
+ */
 async function evaluateBody(body: string, env: Env, log: LogFields): Promise<Outcome> {
-	const payload = parseBody(body);
+	const { field, payload } = parseBody(body);
 	if (payload === null) {
-		return errorOutcome("invalid-payload");
+		return {
+			decision: "error",
+			field,
+			httpStatus: HTTP_INTERNAL_ERROR,
+			reason: "invalid-payload",
+		};
 	}
 	recordPayload(log, payload);
 	return runPipeline(payload, env);

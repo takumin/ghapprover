@@ -72,11 +72,13 @@ export type Reason =
  * endpoint, status (0 = network failure) and the three header-derived
  * diagnostics (the GithubApiError fields) are set for the github-api-error
  * outcome only; errorName (a thrown error's class name) for the internal-error
- * outcome only; and errorMessage — the originating error's message, truncated
- * where the entry is built (§12) — for either. The diagnostics are spelled
- * `| undefined` rather than merely optional because the failure paths set them
- * from a failure that may have carried no response at all, and §8 asks for them
- * to be absent from the entry rather than logged empty.
+ * outcome only; errorMessage — the originating error's message, truncated where
+ * the entry is built (§12) — for either; and field, the dot path of the payload
+ * field that failed validation, for the invalid-payload outcome only. The
+ * diagnostics are spelled `| undefined` rather than merely optional because the
+ * failure paths set them from a failure that may have carried no response — and,
+ * for field, no locatable field — at all, and §8 asks for them to be absent from
+ * the entry rather than logged empty.
  */
 export interface Outcome {
 	readonly acceptedPermissions?: string | undefined;
@@ -84,6 +86,7 @@ export interface Outcome {
 	readonly endpoint?: string;
 	readonly errorMessage?: string | undefined;
 	readonly errorName?: string;
+	readonly field?: string | undefined;
 	readonly httpStatus: number;
 	readonly rateLimitRemaining?: string | undefined;
 	readonly rateLimitReset?: string | undefined;

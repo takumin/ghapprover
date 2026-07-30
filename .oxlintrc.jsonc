@@ -51,8 +51,9 @@
 			{ "enforceConst": true, "ignore": [0, 1, -1], "ignoreArrayIndexes": true },
 		],
 		// `undefined` is how absence is spelled throughout: the SPEC §8 diagnostics
-		// an outcome does not carry (src/pipeline.ts). `null` cannot stand in for
-		// it -- `null` is a value the GitHub payloads really carry.
+		// an outcome does not carry (src/pipeline.ts), and the validation result
+		// with no field to name (src/payload.ts). `null` cannot stand in for it --
+		// `null` is a value the GitHub payloads really carry.
 		"eslint/no-undefined": "off",
 		// Nursery rules worth having. No enabled category carries them, so each is
 		// named individually.

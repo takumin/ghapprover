@@ -484,8 +484,6 @@ the information needed for evaluation comes from the following.
 
 Emit at least the following to structured logs (Workers Logs):
 
-Emit at least the following to structured logs (Workers Logs):
-
 - `deliveryId` (X-GitHub-Delivery), `repo`, `prNumber`, `action`, `headSha`
 - `decision` (approved / skipped / error) and `reason`
 - the diagnostic fields the outcome carries (table below)
@@ -540,6 +538,7 @@ are not a vocabulary an operator greps for — they are what turns a grep hit in
 | `rateLimitReset`      | `github-api-error` (403)             | `x-ratelimit-reset`                                                    |
 | `errorName`           | `internal-error`                     | The thrown value's class name, never its message                       |
 | `errorMessage`        | `github-api-error`, `internal-error` | The originating error's message, truncated to 512 characters           |
+| `field`               | `invalid-payload`                    | Dot path of the first field that failed validation, never its value    |
 
 - The three response headers are what make §9's "distinguish a configuration problem in
   logs" actionable: a 403 is a missing permission or a rate limit, and `status` alone does
@@ -550,6 +549,8 @@ are not a vocabulary an operator greps for — they are what turns a grep hit in
   fields do not already say. It is truncated because it is not bounded at the source —
   `@octokit/request` builds it from the response body, and takes the **whole** body when
   that body is not JSON (an HTML error page from GitHub or an upstream proxy)
+- `field` is the path alone. A validation failure also carries the offending value, which
+  is payload content and stays out (§11)
 
 > [!WARNING]
 > The response body carries `decision` and `reason` and nothing else. GitHub displays it
@@ -564,7 +565,7 @@ are not a vocabulary an operator greps for — they are what turns a grep hit in
 > a Tail Worker forwards these logs to an external destination and voids that premise** —
 > treat the destination as part of the trust boundary before enabling either. The bounded
 > fields stay bounded either way: `endpoint` is a route template, `errorName` a class
-> name, and `errorMessage` is truncated.
+> name, `field` a path, and `errorMessage` is truncated.
 
 ## 9. Error Handling
 
@@ -681,7 +682,7 @@ Rules:
 > `valibot` is the one non-Octokit runtime dependency. What it replaces is field-by-field
 > narrowing of every untrusted value — the webhook body and every REST response alike —
 > which was more code than the package and, having no vocabulary for _where_ a body
-> diverged, could only report that it did.
+> diverged, could only report that it did. §8's `field` is what a schema makes possible.
 > It has no dependencies of its own, is tree-shakable so only the primitives actually used
 > are bundled, and runs on the default Workers runtime like the rest of the table.
 > Schemas are the single source of truth for the contract types of §3: those types are

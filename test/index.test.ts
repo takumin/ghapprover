@@ -132,25 +132,35 @@ describe("event scoping", () => {
 	});
 });
 
-describe("payload validation", () => {
-	it("errors on a non-JSON pull_request body", async () => {
-		expect.hasAssertions();
-		installFetchMock([]);
-		const response = await postSigned("{not json");
-		await expectReply(response, {
-			body: { decision: "error", reason: "invalid-payload" },
-			status: HTTP_INTERNAL_ERROR,
-		});
-	});
+/* SPEC.md §8's `field` turns a greppable invalid-payload into a locatable one, and is the path
+ * alone: the value that failed is payload content structured logs never carry (§8 warning), so
+ * each row states the entry whole. A body that is not JSON locates no field, and names none. */
+const INVALID_ENTRY = { decision: "error", deliveryId: DELIVERY_ID, reason: "invalid-payload" };
+function namingField(field: string): Record<string, string> {
+	const entry: Record<string, string> = { field };
+	return Object.assign(entry, INVALID_ENTRY);
+}
+const INVALID_PAYLOADS = [
+	{ body: "{not json", entry: INVALID_ENTRY, name: "a body that is not JSON" },
+	{ body: '{"action":"opened"}', entry: namingField("pull_request"), name: "no pull_request" },
+	{
+		body: buildPayload({ headSha: { secret: "not-a-sha" } }),
+		entry: namingField("pull_request.head.sha"),
+		name: "a head sha of the wrong shape",
+	},
+];
 
-	it("errors on a payload missing pull_request fields", async () => {
+describe("payload validation", () => {
+	it.each(INVALID_PAYLOADS)("errors on $name", async ({ body, entry }) => {
 		expect.hasAssertions();
+		const logSpy = vi.spyOn(console, "log");
 		installFetchMock([]);
-		const response = await postSigned('{"action":"opened"}');
-		await expectReply(response, {
+		await expectReply(await postSigned(body), {
 			body: { decision: "error", reason: "invalid-payload" },
 			status: HTTP_INTERNAL_ERROR,
 		});
+		expect(logSpy).toHaveBeenCalledWith(entry);
+		logSpy.mockRestore();
 	});
 
 	it("errors when the installation is absent", async () => {

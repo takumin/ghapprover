@@ -63,6 +63,8 @@ interface PayloadOverrides {
 	readonly commits?: number;
 	readonly draft?: boolean;
 	readonly headRepo?: { readonly id: number } | null;
+	/** Deliberately untyped: the suites also build bodies the payload schema must refuse. */
+	readonly headSha?: unknown;
 	readonly installation?: { readonly id: number } | null;
 	readonly repoOwner?: GithubAccount;
 	readonly state?: string;
@@ -75,6 +77,7 @@ export function buildPayload(overrides: PayloadOverrides = {}): string {
 		commits = 1,
 		draft = false,
 		headRepo = { id: REPO_ID },
+		headSha = HEAD_SHA,
 		installation = { id: INSTALLATION_ID },
 		repoOwner = OWNER,
 		state = "open",
@@ -86,7 +89,7 @@ export function buildPayload(overrides: PayloadOverrides = {}): string {
 		pull_request: {
 			commits,
 			draft,
-			head: { repo: headRepo, sha: HEAD_SHA },
+			head: { repo: headRepo, sha: headSha },
 			number: PULL_NUMBER,
 			state,
 			user,
