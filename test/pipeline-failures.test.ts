@@ -8,11 +8,21 @@
  */
 
 import {
+	COMMITS_ENDPOINT,
+	HTTP_FORBIDDEN,
+	HTTP_INTERNAL_ERROR,
+	HTTP_NOT_FOUND,
+	PULL_NUMBER,
+	REFUSAL_HEADERS,
+	TOKEN_ENDPOINT,
+	installFetchMock,
+	jsonRoute,
+} from "./fetch-stub";
+import {
 	COMMITS_SUFFIX,
 	DELIVERY_ID,
 	HEAD_SHA,
 	ORG,
-	PULL_NUMBER,
 	SECRET,
 	TOKEN_URL,
 	buildPayload,
@@ -21,14 +31,6 @@ import {
 	postSigned,
 	pullsUrl,
 } from "./delivery";
-import {
-	HTTP_FORBIDDEN,
-	HTTP_INTERNAL_ERROR,
-	HTTP_NOT_FOUND,
-	REFUSAL_HEADERS,
-	installFetchMock,
-	jsonRoute,
-} from "./fetch-stub";
 import { describe, expect, it, vi } from "vitest";
 import type { PlannedRoute } from "./fetch-stub";
 
@@ -82,10 +84,7 @@ describe("auth configuration failures", () => {
 			status: HTTP_INTERNAL_ERROR,
 		});
 		expect(logSpy).toHaveBeenCalledWith(
-			expect.objectContaining({
-				endpoint: "POST /app/installations/{installation_id}/access_tokens",
-				status: HTTP_NOT_FOUND,
-			}),
+			expect.objectContaining({ endpoint: TOKEN_ENDPOINT, status: HTTP_NOT_FOUND }),
 		);
 		logSpy.mockRestore();
 		session.assertDone();
@@ -132,7 +131,6 @@ describe("github api failures", () => {
 	});
 });
 
-const COMMITS_ENDPOINT = "GET /repos/{owner}/{repo}/pulls/{pull_number}/commits";
 /** SPEC.md §8: the truncation bound, and a message that runs past it. */
 const MESSAGE_LIMIT = 512;
 const OVERLONG_MESSAGE = "boom ".repeat(MESSAGE_LIMIT);

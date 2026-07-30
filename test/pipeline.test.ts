@@ -12,7 +12,6 @@ import {
 	HEAD_SHA,
 	ORG,
 	OWN_APPROVAL,
-	PULL_NUMBER,
 	REPO_ID,
 	TOKEN_URL,
 	appRoute,
@@ -35,6 +34,7 @@ import {
 	HTTP_OK,
 	HTTP_UNPROCESSABLE_ENTITY,
 	JWT_PATTERN,
+	PULL_NUMBER,
 	installFetchMock,
 	requestByUrl,
 } from "./fetch-stub";

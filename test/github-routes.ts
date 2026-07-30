@@ -5,16 +5,14 @@
  * route and the same page shapes, so a route stated once here cannot drift between them.
  */
 
-import { HTTP_OK, jsonRoute, tokenRoute } from "./fetch-stub";
+import { BASE, HTTP_OK, PULL_NUMBER, jsonRoute, tokenRoute } from "./fetch-stub";
 import type { GithubClient } from "../src/client";
 import type { PlannedRoute } from "./fetch-stub";
 import { createGithubClient } from "../src/client";
 import { privateKeyPemOnce } from "./app-key";
 
-export const BASE = "https://api.github.com";
 export const REPO = { owner: "octo", repo: "hello" };
 export const TOKEN = "installation-token";
-export const PULL_NUMBER = 5;
 const INSTALLATION_ID = 12_345;
 export const TOKENS_URL = `${BASE}/app/installations/${INSTALLATION_ID}/access_tokens`;
 export const APP_URL = `${BASE}/app`;

@@ -9,7 +9,6 @@
 import {
 	APP_URL,
 	FULL_PAGE,
-	PULL_NUMBER,
 	REPO,
 	TOKEN,
 	TOKENS_URL,
@@ -27,7 +26,10 @@ import {
 	HTTP_INTERNAL_ERROR,
 	HTTP_NOT_FOUND,
 	JWT_PATTERN,
+	PULL_NUMBER,
 	REFUSAL_HEADERS,
+	REVIEW_POST_ENDPOINT,
+	TOKEN_ENDPOINT,
 	installFetchMock,
 	jsonRoute,
 	requestByUrl,
@@ -41,8 +43,6 @@ import {
 import { describe, expect, it } from "vitest";
 import { GithubApiError } from "../src/client";
 import type { RecordedRequest } from "./fetch-stub";
-
-const TOKEN_ENDPOINT = "POST /app/installations/{installation_id}/access_tokens";
 
 describe("client authentication", () => {
 	it("authenticates the app endpoints with the app jwt and pins the api version", async () => {
@@ -175,7 +175,7 @@ describe("token request attribution", () => {
 			repo,
 		});
 		await expect(promise).rejects.toMatchObject({
-			endpoint: "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+			endpoint: REVIEW_POST_ENDPOINT,
 			status: HTTP_INTERNAL_ERROR,
 		});
 	});

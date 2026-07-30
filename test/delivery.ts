@@ -6,7 +6,7 @@
  * is a route that can disagree with itself about what the pipeline actually calls.
  */
 
-import { HTTP_NOT_FOUND, HTTP_OK, jsonRoute, tokenRoute } from "./fetch-stub";
+import { BASE, HTTP_NOT_FOUND, HTTP_OK, PULL_NUMBER, jsonRoute, tokenRoute } from "./fetch-stub";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { APP_BOT } from "./accounts";
 import type { GithubAccount } from "../src/types";
@@ -23,11 +23,9 @@ export const WEBHOOK_URL = "http://example.com/webhook";
 export const SECRET = "test-secret";
 export const DELIVERY_ID = "delivery-42";
 export const HEAD_SHA = "head-sha";
-export const PULL_NUMBER = 5;
 const INSTALLATION_ID = 67_890;
 const INSTALL_TOKEN = "install-token";
 const APP_SLUG = "ghapprover";
-const BASE = "https://api.github.com";
 export const TOKEN_URL = `${BASE}/app/installations/${INSTALLATION_ID}/access_tokens`;
 export const APP_URL = `${BASE}/app`;
 export const membershipUrl = (login: string): string => `${BASE}/orgs/acme/memberships/${login}`;

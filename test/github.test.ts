@@ -7,9 +7,7 @@
 
 import {
 	ACCOUNT,
-	BASE,
 	FULL_PAGE,
-	PULL_NUMBER,
 	REPO,
 	TOKENS_URL,
 	appRoute,
@@ -25,11 +23,15 @@ import {
 	reviewsUrl,
 } from "./github-routes";
 import {
+	BASE,
+	COMMITS_ENDPOINT,
 	HTTP_FORBIDDEN,
 	HTTP_INTERNAL_ERROR,
 	HTTP_NOT_FOUND,
 	HTTP_OK,
 	HTTP_UNPROCESSABLE_ENTITY,
+	PULL_NUMBER,
+	REVIEW_POST_ENDPOINT,
 	installFetchMock,
 	jsonRoute,
 	requestByUrl,
@@ -128,10 +130,7 @@ describe("listPullRequestCommits() mapping", () => {
 		]);
 		const promise = listPullRequestCommits(await makeClient(), REPO, PULL_NUMBER);
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
-		await expect(promise).rejects.toMatchObject({
-			endpoint: "GET /repos/{owner}/{repo}/pulls/{pull_number}/commits",
-			status: HTTP_OK,
-		});
+		await expect(promise).rejects.toMatchObject({ endpoint: COMMITS_ENDPOINT, status: HTTP_OK });
 	});
 });
 
@@ -262,7 +261,7 @@ describe("createApprovalReview()", () => {
 		});
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({
-			endpoint: "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+			endpoint: REVIEW_POST_ENDPOINT,
 			status: HTTP_INTERNAL_ERROR,
 		});
 	});

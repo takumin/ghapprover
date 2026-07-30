@@ -6,9 +6,10 @@
  * carry a JSON content-type (octokit only parses JSON bodies with one) plus
  * any planned extra headers, e.g. the link header pagination follows.
  *
- * It is also where the response values every suite states — the statuses and the
- * headers a refused call carries — are declared, this being the one module both
- * route-helper families (delivery.ts, github-routes.ts) and every suite import.
+ * It is also where the values every suite states about a call — the statuses and
+ * headers a response carries, and the origin, pull request and route templates the
+ * requests are built and asserted against — are declared, this being the one module
+ * both route-helper families (delivery.ts, github-routes.ts) and every suite import.
  */
 import { vi } from "vitest";
 
@@ -25,6 +26,19 @@ export const HTTP_UNPROCESSABLE_ENTITY = 422;
 export const HTTP_INTERNAL_ERROR = 500;
 /** App JWT authorization: "bearer" plus three dot-separated base64url segments. */
 export const JWT_PATTERN = /^bearer eyJ[\w-]+\.[\w-]+\.[\w-]+$/u;
+/* The API origin and the pull request number both route-helper families build their URLs from.
+ * Stated here for the same reason as the statuses: the two families build the same
+ * /repos/{owner}/{repo}/pulls/{n} routes from their own fixture values, and a URL they disagree
+ * about is an unplanned request in whichever suite was not updated. */
+export const BASE = "https://api.github.com";
+export const PULL_NUMBER = 5;
+/* The route templates SPEC.md §8's `endpoint` names, which is the vocabulary an operator greps: one
+ * suite drives the call that raises them (github.test.ts, client.test.ts) and another the log entry
+ * they end up in (pipeline-failures.test.ts), so a template stated per suite is one that can be
+ * corrected in the one that fails and left wrong in the one that still passes. */
+export const TOKEN_ENDPOINT = "POST /app/installations/{installation_id}/access_tokens";
+export const COMMITS_ENDPOINT = "GET /repos/{owner}/{repo}/pulls/{pull_number}/commits";
+export const REVIEW_POST_ENDPOINT = "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews";
 /**
  * The headers GitHub sends on a refused call, which SPEC.md §8 logs alongside the status. Shared by
  * the suite that drives the mapping (client.test.ts) and the one that drives the log entry it ends
