@@ -44,11 +44,17 @@ export function commitBody(sha: string): Record<string, unknown> {
 export function commitPage(count: number, offset: number): Record<string, unknown>[] {
 	return Array.from({ length: count }, (_, index) => commitBody(`sha-${offset + index}`));
 }
+/* Every per-PR route the endpoint suites plan, built from the REPO and PULL_NUMBER the calls
+ * themselves are made with: a URL assembled from its own literals can disagree with those, and
+ * surfaces as the stub's "unplanned request" rather than as an assertion about the wrong route. */
+export function pullUrl(suffix = ""): string {
+	return `${BASE}/repos/${REPO.owner}/${REPO.repo}/pulls/${PULL_NUMBER}${suffix}`;
+}
 export function commitsUrl(query: string): string {
-	return `${BASE}/repos/octo/hello/pulls/5/commits${query}`;
+	return pullUrl(`/commits${query}`);
 }
 export function reviewsUrl(query: string): string {
-	return `${BASE}/repos/octo/hello/pulls/5/reviews${query}`;
+	return pullUrl(`/reviews${query}`);
 }
 /** The link header pagination follows; absent on the last page, which is how it stops. */
 function linkHeaders(next: string | undefined): Record<string, string> | undefined {
@@ -76,6 +82,7 @@ export function membershipRoute(payload: unknown, status: number): PlannedRoute 
 	return jsonRoute({ method: "GET", payload, status, url: MEMBERSHIP_URL });
 }
 
+/** The review-POST URL; only the case about a repository named like the token path varies the repository. */
 export function reviewsPostUrl(repo: string = REPO.repo): string {
 	return `${BASE}/repos/${REPO.owner}/${repo}/pulls/${PULL_NUMBER}/reviews`;
 }

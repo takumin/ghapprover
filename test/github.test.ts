@@ -19,13 +19,13 @@ import {
 	linkedRoute,
 	makeClient,
 	membershipRoute,
+	pullUrl,
 	reviewPostRoute,
 	reviewsPostUrl,
 	reviewsUrl,
 } from "./github-routes";
 import {
 	APP_ENDPOINT,
-	BASE,
 	COMMITS_ENDPOINT,
 	HTTP_FORBIDDEN,
 	HTTP_INTERNAL_ERROR,
@@ -207,7 +207,7 @@ describe("fetchPullRequest()", () => {
 				method: "GET",
 				payload: { draft: false, head: { label: "octo:main", sha: "live-sha" }, state: "open" },
 				status: HTTP_OK,
-				url: `${BASE}/repos/octo/hello/pulls/5`,
+				url: pullUrl(),
 			}),
 		]);
 		await expect(fetchPullRequest(await makeClient(), REPO, PULL_NUMBER)).resolves.toStrictEqual({
