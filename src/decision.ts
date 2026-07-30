@@ -52,10 +52,13 @@ export function checkPullRequestState(
 	return null;
 }
 
+/* The verdict, or the one lookup that resolves it: the org whose membership decides this account.
+ * The account itself is not restated here — the caller passed it in and still holds it, and a copy
+ * of its login is a second place the lookup could be made about somebody else. */
 export type TrustEvaluation =
 	| { readonly kind: "trusted" }
 	| { readonly kind: "untrusted" }
-	| { readonly kind: "org-membership"; readonly org: string; readonly login: string };
+	| { readonly kind: "org-membership"; readonly org: string };
 
 /* SPEC.md §3.1: bots are trusted solely via the allowlist (login and numeric id both matching)
  * and never fall through to the owner/org checks; users on org repositories resolve through the
@@ -71,7 +74,7 @@ export function classifyPrincipal(user: GithubAccount, repoOwner: GithubAccount)
 		return { kind: "untrusted" };
 	}
 	if (repoOwner.type === "Organization") {
-		return { kind: "org-membership", login: user.login, org: repoOwner.login };
+		return { kind: "org-membership", org: repoOwner.login };
 	}
 	if (isSameAccount(user, repoOwner)) {
 		return { kind: "trusted" };

@@ -10,7 +10,6 @@ import {
 	COMMITS_SUFFIX,
 	JWT_PATTERN,
 	NEXT_PAGE,
-	PULL_NUMBER,
 	REPO,
 	TOKEN,
 	TOKEN_URL,
@@ -25,6 +24,7 @@ import {
 import { PAGE_SIZE, fetchAppBotLogin, listPullRequestCommits } from "../src/github";
 import { describe, expect, it } from "vitest";
 import { installFetchMock, requestByUrl } from "./fetch-stub";
+import { PULL_NUMBER } from "./fixtures";
 import type { RecordedRequest } from "./fetch-stub";
 
 describe("client authentication", () => {

@@ -7,12 +7,10 @@
  * never rides along with the path (§8 warning).
  */
 
-import { HUMAN, OWNER, REPOSITORY } from "./accounts";
+import { HEAD_SHA, HUMAN, OWNER, REPOSITORY } from "./fixtures";
 import { describe, expect, it } from "vitest";
 import type { PullRequestEventPayload } from "../src/types";
 import { parsePullRequestEvent } from "../src/payload";
-
-const HEAD_SHA = "head-sha";
 
 function expectedPayload(): PullRequestEventPayload {
 	return {

@@ -5,15 +5,12 @@
  * delivery budget, and failure attribution — is driven by client.test.ts.
  */
 
-import { APP_BOT, OWNER } from "./accounts";
+import { APP_BOT, HUMAN, ORG, OWNER, PULL_NUMBER } from "./fixtures";
 import {
 	APP_ENDPOINT,
 	COMMITS_ENDPOINT,
 	COMMITS_SUFFIX,
-	MEMBERSHIP_ORG,
-	MEMBERSHIP_USER,
 	NEXT_PAGE,
-	PULL_NUMBER,
 	REPO,
 	REVIEWS_SUFFIX,
 	REVIEW_POST_ENDPOINT,
@@ -150,10 +147,14 @@ describe("fetchOrgMembership()", () => {
 		expect.hasAssertions();
 		const mock = installFetchMock([
 			installTokenRoute(),
-			membershipRoute({ organization_url: "ignored", role: "admin", state: "active" }, HTTP_OK),
+			membershipRoute(
+				HUMAN,
+				{ organization_url: "ignored", role: "admin", state: "active" },
+				HTTP_OK,
+			),
 		]);
 		await expect(
-			fetchOrgMembership(await makeClient(), MEMBERSHIP_ORG, MEMBERSHIP_USER),
+			fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login),
 		).resolves.toStrictEqual({
 			role: "admin",
 			state: "active",
@@ -163,16 +164,22 @@ describe("fetchOrgMembership()", () => {
 
 	it("returns null on 404", async () => {
 		expect.hasAssertions();
-		installFetchMock([installTokenRoute(), membershipRoute({ message: "no" }, HTTP_NOT_FOUND)]);
+		installFetchMock([
+			installTokenRoute(),
+			membershipRoute(HUMAN, { message: "no" }, HTTP_NOT_FOUND),
+		]);
 		await expect(
-			fetchOrgMembership(await makeClient(), MEMBERSHIP_ORG, MEMBERSHIP_USER),
+			fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login),
 		).resolves.toBeNull();
 	});
 
 	it("throws with the status on 403", async () => {
 		expect.hasAssertions();
-		installFetchMock([installTokenRoute(), membershipRoute({ message: "no" }, HTTP_FORBIDDEN)]);
-		const promise = fetchOrgMembership(await makeClient(), MEMBERSHIP_ORG, MEMBERSHIP_USER);
+		installFetchMock([
+			installTokenRoute(),
+			membershipRoute(HUMAN, { message: "no" }, HTTP_FORBIDDEN),
+		]);
+		const promise = fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login);
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({ status: HTTP_FORBIDDEN });
 	});

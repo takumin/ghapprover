@@ -13,7 +13,7 @@ import {
 	commitPrincipals,
 	precheckCommitCount,
 } from "../src/commits";
-import { WEB_FLOW_LOOKALIKE, WEB_FLOW_USER } from "./accounts";
+import { WEB_FLOW_LOOKALIKE, WEB_FLOW_USER } from "./fixtures";
 import { describe, expect, it } from "vitest";
 import { accountKey } from "../src/account";
 

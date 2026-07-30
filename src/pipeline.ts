@@ -27,6 +27,7 @@ import {
 	listPullRequestCommits,
 	listPullRequestReviews,
 } from "./github";
+import type { CommitProblem } from "./commits";
 import { GithubApiError } from "./api-error";
 import type { Outcome } from "./outcome";
 import { accountKey } from "./account";
@@ -47,7 +48,7 @@ async function evaluateTrust(
 	if (evaluation.kind === "untrusted") {
 		return false;
 	}
-	return isOwnerMembership(await fetchOrgMembership(client, evaluation.org, evaluation.login));
+	return isOwnerMembership(await fetchOrgMembership(client, evaluation.org, user.login));
 }
 /* Memoizes per delivery so each distinct account is looked up at most once (SPEC.md §3.1).
  * The key is the accountKey pair, not the login: evaluateTrust decides on the id as well
@@ -67,26 +68,27 @@ function createTrustResolver(client: GithubClient, repoOwner: GithubAccount): Tr
 	};
 }
 
-/** SPEC.md §4 step 5 (§3.2): the declared count, then every fetched commit verified. */
+/**
+ * SPEC.md §4 step 5 (§3.2): the declared count, then every fetched commit verified. Answers with
+ * the §3.2 problem it found, like every other §3 check, rather than with the outcome that problem
+ * becomes — the mapping of a problem onto a skip is the caller's, stated once for all of §3.
+ */
 async function checkCommitCondition(
 	pullRequest: EventPullRequest,
 	call: { readonly client: GithubClient; readonly repo: RepoRef; readonly trust: TrustResolver },
-): Promise<Outcome | null> {
+): Promise<CommitProblem | null> {
 	const { client, repo, trust } = call;
 	/* Ahead of the fetch: what the declared count alone settles costs no subrequest to decide. */
 	const declaredProblem = precheckCommitCount(pullRequest.commits);
 	if (declaredProblem !== null) {
-		return skippedOutcome(declaredProblem);
+		return declaredProblem;
 	}
 	const commits = await listPullRequestCommits(client, repo, pullRequest.number);
 	/* A list that does not match the declared count settles the condition on its own, so the
 	 * per-commit walk (and the membership lookups it spends) only runs once the list is whole. */
-	const problem =
-		checkCommitCount(commits.length, pullRequest.commits) ?? (await checkCommits(commits, trust));
-	if (problem !== null) {
-		return skippedOutcome(problem);
-	}
-	return null;
+	return (
+		checkCommitCount(commits.length, pullRequest.commits) ?? (await checkCommits(commits, trust))
+	);
 }
 
 /** SPEC.md §4 steps 7-8: the live TOCTOU check (§3.3), then the review POST. */
@@ -135,9 +137,9 @@ async function approveWhenConditionsHold(
 	if (!(await trust(pullRequest.user))) {
 		return skippedOutcome("author-not-trusted");
 	}
-	const commitOutcome = await checkCommitCondition(pullRequest, { client, repo, trust });
-	if (commitOutcome !== null) {
-		return commitOutcome;
+	const commitProblem = await checkCommitCondition(pullRequest, { client, repo, trust });
+	if (commitProblem !== null) {
+		return skippedOutcome(commitProblem);
 	}
 	return approvePullRequest(client, {
 		commitId: pullRequest.head.sha,

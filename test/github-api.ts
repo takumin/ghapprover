@@ -9,9 +9,9 @@
  * test/delivery.ts; the stub that serves them is test/fetch-stub.ts.
  */
 
-import { APP_SLUG, HUMAN, ORG, OWNER, REPOSITORY } from "./accounts";
+import { APP_SLUG, HEAD_SHA, ORG, OWNER, PULL_NUMBER, REPOSITORY } from "./fixtures";
 import type { ApprovalTarget, RepoRef } from "../src/github";
-import { HTTP_CREATED, HTTP_OK, jsonRoute } from "./fetch-stub";
+import { HTTP_CREATED, HTTP_NOT_FOUND, HTTP_OK, jsonRoute } from "./fetch-stub";
 import type { GithubAccount } from "../src/types";
 import type { GithubClient } from "../src/client";
 import { PAGE_SIZE } from "../src/github";
@@ -81,18 +81,15 @@ export function installTokenRoute(): PlannedRoute {
 		url: TOKEN_URL,
 	});
 }
-/** The slug GET /app answers with, which the App's own bot login is derived from (test/accounts.ts). */
+/** The slug GET /app answers with, which the App's own bot login is derived from (test/fixtures.ts). */
 const APP_BODY = { slug: APP_SLUG };
 /** GET /app; the payload is overridden only where the case is about a malformed response. */
 export function appRoute(payload: unknown = APP_BODY): PlannedRoute {
 	return getRoute(APP_URL, payload);
 }
 
-/** The repository every fixture is for (test/accounts.ts), as the GitHub API addresses it. */
+/** The repository every fixture is for (test/fixtures.ts), as the GitHub API addresses it. */
 export const REPO: RepoRef = { owner: REPOSITORY.owner.login, repo: REPOSITORY.name };
-/** The pull request every payload fixture describes and every per-PR route below serves. */
-export const PULL_NUMBER = 5;
-export const HEAD_SHA = "head-sha";
 /** The query the paginated routes are planned on, from the page size the calls themselves ask for. */
 export const COMMITS_SUFFIX = `/commits?per_page=${PAGE_SIZE}`;
 export const REVIEWS_SUFFIX = `/reviews?per_page=${PAGE_SIZE}`;
@@ -109,16 +106,27 @@ export function approvalTarget(repo: RepoRef = REPO): ApprovalTarget {
 	return { commitId: HEAD_SHA, pullNumber: PULL_NUMBER, repo };
 }
 
-/* The org and member the endpoint suites look up, stated with the URL they are planned on rather
- * than beside it: the call itself is made with these, so a URL built from its own literals would
- * surface as an unplanned request instead of as an assertion about the wrong lookup. */
-export const MEMBERSHIP_ORG = ORG.login;
-export const MEMBERSHIP_USER = HUMAN.login;
-export function membershipUrl(org: string, username: string): string {
-	return `${BASE}/orgs/${org}/memberships/${username}`;
+/* The §3.1 membership lookup, for one account in the fixture organization: the URL, and the two
+ * answers §3.1 turns on. Every route is planned for the account fixture the case names rather than
+ * for a login repeated beside it — the two are one choice per case, and a URL built from its own
+ * literals surfaces as the stub's "unplanned request" instead of as an assertion about the wrong
+ * lookup. One set here rather than one per suite family: the endpoint suites and the delivery
+ * suites look the same account up at the same URL. */
+export function membershipUrl(member: GithubAccount): string {
+	return `${BASE}/orgs/${ORG.login}/memberships/${member.login}`;
 }
-export function membershipRoute(payload: unknown, status: number): PlannedRoute {
-	return getJsonRoute(membershipUrl(MEMBERSHIP_ORG, MEMBERSHIP_USER), payload, status);
+export function membershipRoute(
+	member: GithubAccount,
+	payload: unknown,
+	status: number,
+): PlannedRoute {
+	return getJsonRoute(membershipUrl(member), payload, status);
+}
+export function membershipAdminRoute(member: GithubAccount): PlannedRoute {
+	return membershipRoute(member, { role: "admin", state: "active" }, HTTP_OK);
+}
+export function membershipMissingRoute(member: GithubAccount): PlannedRoute {
+	return membershipRoute(member, { message: "Not Found" }, HTTP_NOT_FOUND);
 }
 
 interface CommitOverrides {

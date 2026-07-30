@@ -7,22 +7,19 @@
  * stated twice is a route that can disagree with itself about what the pipeline actually calls.
  */
 
-import { APP_BOT, ORG, OWNER, REPOSITORY, repositoryOwnedBy } from "./accounts";
+import { APP_BOT, HEAD_SHA, OWNER, PULL_NUMBER, REPOSITORY, repositoryOwnedBy } from "./fixtures";
 import {
 	APP_ID,
 	COMMITS_SUFFIX,
-	HEAD_SHA,
 	INSTALLATION_ID,
-	PULL_NUMBER,
 	REVIEWS_SUFFIX,
 	appRoute,
 	commitItem,
 	getRoute,
 	installTokenRoute,
-	membershipUrl,
 	pullUrl,
 } from "./github-api";
-import { HTTP_NOT_FOUND, HTTP_OK, jsonRoute } from "./fetch-stub";
+import { HTTP_OK, jsonRoute } from "./fetch-stub";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { expect, onTestFinished, vi } from "vitest";
 import worker, { MAX_BODY_BYTES } from "../src/index";
@@ -38,12 +35,6 @@ export const OVERSIZED_BODY_BYTES = MAX_BODY_BYTES + 1;
 export const WEBHOOK_URL = "http://example.com/webhook";
 export const SECRET = "test-secret";
 export const DELIVERY_ID = "delivery-42";
-/* Every route is planned for the account fixture the payload names, rather than for a login repeated
- * beside it: the two are one choice per case, and a route spelled as its own literal is one that
- * keeps passing after the fixture it was meant for was renamed. */
-export function memberUrl(member: GithubAccount): string {
-	return membershipUrl(ORG.login, member.login);
-}
 
 export const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT };
 
@@ -98,18 +89,6 @@ export function buildPayload(overrides: PayloadOverrides = {}): string {
 	});
 }
 
-/** The two membership answers §3.1 turns on: an active admin, or the 404 that means "not a member". */
-export function membershipAdminRoute(member: GithubAccount): PlannedRoute {
-	return getRoute(memberUrl(member), { role: "admin", state: "active" });
-}
-export function membershipMissingRoute(member: GithubAccount): PlannedRoute {
-	return jsonRoute({
-		method: "GET",
-		payload: { message: "Not Found" },
-		status: HTTP_NOT_FOUND,
-		url: memberUrl(member),
-	});
-}
 export function commitsRouteFor(commits: unknown, owner: GithubAccount = OWNER): PlannedRoute {
 	return getRoute(pullUrl(COMMITS_SUFFIX, owner.login), commits);
 }

@@ -6,7 +6,7 @@
  * commits.test.ts.
  */
 
-import { APP_BOT, HUMAN, OWNER, REPOSITORY } from "./accounts";
+import { APP_BOT, HEAD_SHA, HUMAN, OWNER, REPOSITORY } from "./fixtures";
 import type {
 	EventPullRequest,
 	GithubAccount,
@@ -21,7 +21,6 @@ import {
 } from "../src/decision";
 import { describe, expect, it } from "vitest";
 
-const HEAD_SHA = "head-sha";
 const BOT_LOGIN = APP_BOT.login;
 
 interface PrStateOverrides {

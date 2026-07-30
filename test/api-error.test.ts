@@ -10,8 +10,6 @@
 import {
 	APP_ENDPOINT,
 	APP_URL,
-	MEMBERSHIP_ORG,
-	MEMBERSHIP_USER,
 	REFUSAL_HEADERS,
 	REPO,
 	REVIEW_POST_ENDPOINT,
@@ -30,6 +28,7 @@ import {
 	installFetchMock,
 	jsonRoute,
 } from "./fetch-stub";
+import { HUMAN, ORG } from "./fixtures";
 import { createApprovalReview, fetchAppBotLogin, fetchOrgMembership } from "../src/github";
 import { describe, expect, it } from "vitest";
 import { GithubApiError } from "../src/api-error";
@@ -116,7 +115,7 @@ describe("token request attribution", () => {
 				url: TOKEN_URL,
 			}),
 		]);
-		const promise = fetchOrgMembership(await makeClient(), MEMBERSHIP_ORG, MEMBERSHIP_USER);
+		const promise = fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login);
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({
 			endpoint: TOKEN_ENDPOINT,
