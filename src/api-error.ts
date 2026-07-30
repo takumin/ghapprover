@@ -71,12 +71,23 @@ export class GithubApiError extends Error {
 	}
 }
 
-export function shapeError(endpoint: string, status: number): GithubApiError {
+/**
+ * One route and one status: the pair a failure is identified by. Declared with the error contract
+ * that carries both fields, and shared with src/github.ts, where it names what a shape violation
+ * is attributed to and which failure a call tolerates — so the identity a failure is raised under
+ * and the one it is matched on cannot be spelled differently.
+ */
+export interface EndpointStatus {
+	readonly endpoint: string;
+	readonly status: number;
+}
+
+export function shapeError(origin: EndpointStatus): GithubApiError {
 	return new GithubApiError({
 		diagnostics: NO_DIAGNOSTICS,
-		endpoint,
+		endpoint: origin.endpoint,
 		reason: "unexpected response shape",
-		status,
+		status: origin.status,
 	});
 }
 
@@ -135,11 +146,11 @@ function diagnosticsOf(error: RequestError): ApiDiagnostics {
  * skip instead of the loud configuration failure §9 requires. A transport failure (status 0) and a
  * failure this module passed through unmapped are neither, so both answer false.
  */
-export function isFailureOn(error: unknown, endpoint: string, status: number): boolean {
+export function isFailureOn(error: unknown, on: EndpointStatus): boolean {
 	if (!(error instanceof GithubApiError)) {
 		return false;
 	}
-	return error.endpoint === endpoint && error.status === status;
+	return error.endpoint === on.endpoint && error.status === on.status;
 }
 
 /** Status 0: a call that never received a response — a transport failure, or the §4 deadline firing. */
