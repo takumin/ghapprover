@@ -38,6 +38,9 @@ import {
 } from "./github";
 
 const HTTP_OK = 200;
+const HTTP_UNAUTHORIZED = 401;
+const HTTP_NOT_FOUND = 404;
+const HTTP_PAYLOAD_TOO_LARGE = 413;
 const HTTP_INTERNAL_ERROR = 500;
 
 /**
@@ -92,6 +95,8 @@ export interface Outcome extends Partial<ApiDiagnostics> {
 	readonly reason?: Reason;
 	readonly status?: number;
 }
+/** The §8 fields an error outcome carries beyond its reason; see Outcome for which outcome sets which. */
+type ErrorDetail = Omit<Outcome, "decision" | "httpStatus" | "reason">;
 
 /** Resolves one account's §3.1 trust, memoized per delivery; see createTrustResolver. */
 type TrustResolver = (user: GithubAccount) => Promise<boolean>;
@@ -99,33 +104,39 @@ type TrustResolver = (user: GithubAccount) => Promise<boolean>;
 export function skippedOutcome(reason: Reason): Outcome {
 	return { decision: "skipped", httpStatus: HTTP_OK, reason };
 }
-/* A non-2xx marks an evaluation that could not be completed: loud in Recent Deliveries and
- * redeliverable (SPEC.md §9). 5xx is the default because that is what §9 maps every failure to
- * except the three the request itself settles (404, 401, 413). */
-export function errorOutcome(reason: Reason, httpStatus: number = HTTP_INTERNAL_ERROR): Outcome {
-	return { decision: "error", httpStatus, reason };
+/**
+ * SPEC.md §9's status table for the failures, as data rather than as an argument each construction
+ * site passes: the three the request itself settles, and 5xx below for everything else. A non-2xx
+ * is what marks an evaluation that could not be completed — loud in Recent Deliveries and
+ * redeliverable — so a reason added to the vocabulary with no entry here answers 500 by the rule
+ * §9 states, rather than by whichever caller remembered to pass a status.
+ */
+const ERROR_STATUS: Partial<Record<Reason, number>> = {
+	"invalid-signature": HTTP_UNAUTHORIZED,
+	"not-found": HTTP_NOT_FOUND,
+	"payload-too-large": HTTP_PAYLOAD_TOO_LARGE,
+};
+/* The one way an error outcome is built, whichever §8 fields it carries: the reason decides the
+ * status, and the detail is merged onto it with Object.assign rather than spread (the spread
+ * properties are lint-banned), so what every failure has in common is stated once. */
+export function errorOutcome(reason: Reason, detail: ErrorDetail = {}): Outcome {
+	const failure: Outcome = {
+		decision: "error",
+		httpStatus: ERROR_STATUS[reason] ?? HTTP_INTERNAL_ERROR,
+		reason,
+	};
+	return Object.assign(failure, detail);
 }
 /* SPEC.md §9: keep status and endpoint so 401/403 configuration problems are distinguishable in
  * logs, and the §8 diagnostics with them — status alone does not say whether a 403 was a missing
  * permission or a rate limit, which is the distinction §9 asks for. They are absent when the
- * failure carried no response to read them from. Mapped here, beside the outcome vocabulary and in
- * the module whose calls raise the error, so the §8 diagnostics are named in one place rather than
- * restated by whoever catches them. */
+ * failure carried no response to read them from. Carried as the whole diagnostics group rather
+ * than field by field, so a diagnostic added to it reaches the outcome here. Mapped in the module
+ * whose calls raise the error, so the §8 diagnostics are named in one place rather than restated by
+ * whoever catches them. */
 function apiErrorOutcome(error: GithubApiError): Outcome {
-	const { acceptedPermissions, errorMessage, rateLimitRemaining, rateLimitReset, requestId } =
-		error.diagnostics;
-	return {
-		acceptedPermissions,
-		decision: "error",
-		endpoint: error.endpoint,
-		errorMessage,
-		httpStatus: HTTP_INTERNAL_ERROR,
-		rateLimitRemaining,
-		rateLimitReset,
-		reason: "github-api-error",
-		requestId,
-		status: error.status,
-	};
+	const origin = { endpoint: error.endpoint, status: error.status };
+	return errorOutcome("github-api-error", Object.assign(origin, error.diagnostics));
 }
 
 function repoRef(payload: PullRequestEventPayload): RepoRef {

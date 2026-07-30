@@ -13,11 +13,6 @@ import type { PullRequestEventPayload } from "./types";
 import { parsePullRequestEvent } from "./payload";
 import { verifyWebhookSignature } from "./webhook";
 
-const HTTP_UNAUTHORIZED = 401;
-const HTTP_NOT_FOUND = 404;
-const HTTP_PAYLOAD_TOO_LARGE = 413;
-const HTTP_INTERNAL_ERROR = 500;
-
 /**
  * GitHub caps webhook payloads at 25 MB, so anything larger is not a delivery
  * this Worker could act on. The HMAC covers the raw body, so the body must be
@@ -130,12 +125,7 @@ function parseBody(body: string): PayloadValidation {
 async function evaluateBody(body: string, env: Env, log: LogFields): Promise<Outcome> {
 	const { field, payload } = parseBody(body);
 	if (payload === null) {
-		return {
-			decision: "error",
-			field,
-			httpStatus: HTTP_INTERNAL_ERROR,
-			reason: "invalid-payload",
-		};
+		return errorOutcome("invalid-payload", { field });
 	}
 	recordPayload(log, payload);
 	return runPipeline(payload, env);
@@ -190,7 +180,7 @@ async function readBoundedBody(request: Request): Promise<string | null> {
 async function evaluateDelivery(request: Request, env: Env, log: LogFields): Promise<Outcome> {
 	const body = await readBoundedBody(request);
 	if (body === null) {
-		return errorOutcome("payload-too-large", HTTP_PAYLOAD_TOO_LARGE);
+		return errorOutcome("payload-too-large");
 	}
 	const verified = await verifyWebhookSignature(
 		env.GITHUB_WEBHOOK_SECRET,
@@ -198,7 +188,7 @@ async function evaluateDelivery(request: Request, env: Env, log: LogFields): Pro
 		request.headers.get("x-hub-signature-256"),
 	);
 	if (!verified) {
-		return errorOutcome("invalid-signature", HTTP_UNAUTHORIZED);
+		return errorOutcome("invalid-signature");
 	}
 	if (request.headers.get("x-github-event") !== "pull_request") {
 		return skippedOutcome("event-out-of-scope");
@@ -216,7 +206,7 @@ function isMisrouted(request: Request): boolean {
  * unknown. */
 async function evaluateRequest(request: Request, env: Env, log: LogFields): Promise<Outcome> {
 	if (isMisrouted(request)) {
-		return errorOutcome("not-found", HTTP_NOT_FOUND);
+		return errorOutcome("not-found");
 	}
 	return evaluateDelivery(request, env, log);
 }
@@ -234,14 +224,7 @@ async function evaluateOrFail(request: Request, env: Env, log: LogFields): Promi
 		 * errorMessage is what says which mistake it was — the class alone is `Error` for both. A
 		 * failed GitHub call is not one of these: runPipeline maps its own GithubApiError onto the
 		 * github-api-error outcome, with the §8 diagnostics that error carries. */
-		const { errorMessage, errorName } = thrownFailure(error);
-		return {
-			decision: "error",
-			errorMessage,
-			errorName,
-			httpStatus: HTTP_INTERNAL_ERROR,
-			reason: "internal-error",
-		};
+		return errorOutcome("internal-error", thrownFailure(error));
 	}
 }
 /* SPEC.md §8: X-GitHub-Delivery is the only identifier GitHub's Recent Deliveries shows for a
