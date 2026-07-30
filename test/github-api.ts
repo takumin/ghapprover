@@ -24,7 +24,7 @@ import { privateKeyPemOnce } from "./app-key";
  * does not state them: the 201 of a freshly issued installation token, and the 403 a refused call
  * comes back with. Stated with the routes they are planned on rather than with the stub that serves
  * them — a stub serves whatever status it is handed, and it is GitHub that decides these two. */
-export const HTTP_CREATED = 201;
+const HTTP_CREATED = 201;
 export const HTTP_FORBIDDEN = 403;
 
 /** The API origin every route below is built on; the calls themselves reach nothing else. */
