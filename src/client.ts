@@ -266,11 +266,11 @@ function httpFailureError(endpoint: string, failure: HttpFailure): GithubApiErro
 	if (!hasResponse) {
 		return transportError(endpoint, diagnostics);
 	}
-	const reason = "unexpected response status";
+	const failed = { diagnostics, endpoint, reason: "unexpected response status", status };
 	if (fromTokenRequest) {
-		return new GithubApiError({ diagnostics, endpoint: TOKEN_ENDPOINT, reason, status });
+		failed.endpoint = TOKEN_ENDPOINT;
 	}
-	return new GithubApiError({ diagnostics, endpoint, reason, status });
+	return new GithubApiError(failed);
 }
 
 /**
