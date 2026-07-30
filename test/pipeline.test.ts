@@ -42,8 +42,9 @@ import {
 	pipelineRoutes,
 	postSigned,
 } from "./delivery";
-import { HTTP_OK, HTTP_UNPROCESSABLE_ENTITY, installFetchMock, requestByUrl } from "./fetch-stub";
+import { HTTP_OK, HTTP_UNPROCESSABLE_ENTITY } from "../src/http-status";
 import { describe, expect, it } from "vitest";
+import { installFetchMock, requestByUrl } from "./fetch-stub";
 
 /* SPEC.md §4 step 2: the state conditions are decided on the payload alone, so each of them
  * settles the delivery before the client is built — which is what the request count asserts. */

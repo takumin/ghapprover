@@ -10,6 +10,7 @@
 import {
 	APP_ENDPOINT,
 	APP_URL,
+	HTTP_FORBIDDEN,
 	REFUSAL_HEADERS,
 	REPO,
 	REVIEW_POST_ENDPOINT,
@@ -21,16 +22,11 @@ import {
 	makeClient,
 	pullUrl,
 } from "./github-api";
-import {
-	HTTP_FORBIDDEN,
-	HTTP_INTERNAL_ERROR,
-	HTTP_NOT_FOUND,
-	installFetchMock,
-	jsonRoute,
-} from "./fetch-stub";
+import { HTTP_INTERNAL_ERROR, HTTP_NOT_FOUND } from "../src/http-status";
 import { HUMAN, ORG } from "./fixtures";
 import { createApprovalReview, fetchAppBotLogin, fetchOrgMembership } from "../src/github";
 import { describe, expect, it } from "vitest";
+import { installFetchMock, jsonRoute } from "./fetch-stub";
 import { GithubApiError } from "../src/api-error";
 
 /* A failure with no response has no §8 headers to report, so its own message is the whole of what

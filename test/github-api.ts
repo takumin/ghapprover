@@ -11,13 +11,21 @@
 
 import { APP_SLUG, HEAD_SHA, ORG, OWNER, PULL_NUMBER, REPOSITORY } from "./fixtures";
 import type { ApprovalTarget, RepoRef } from "../src/github";
-import { HTTP_CREATED, HTTP_NOT_FOUND, HTTP_OK, jsonRoute } from "./fetch-stub";
+import { HTTP_NOT_FOUND, HTTP_OK } from "../src/http-status";
 import type { GithubAccount } from "../src/types";
 import type { GithubClient } from "../src/client";
 import { PAGE_SIZE } from "../src/github";
 import type { PlannedRoute } from "./fetch-stub";
 import { createGithubClient } from "../src/client";
+import { jsonRoute } from "./fetch-stub";
 import { privateKeyPemOnce } from "./app-key";
+
+/* The two statuses GitHub answers with that the Worker never names itself, so src/http-status.ts
+ * does not state them: the 201 of a freshly issued installation token, and the 403 a refused call
+ * comes back with. Stated with the routes they are planned on rather than with the stub that serves
+ * them — a stub serves whatever status it is handed, and it is GitHub that decides these two. */
+export const HTTP_CREATED = 201;
+export const HTTP_FORBIDDEN = 403;
 
 /** The API origin every route below is built on; the calls themselves reach nothing else. */
 const BASE = "https://api.github.com";

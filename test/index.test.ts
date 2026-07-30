@@ -30,9 +30,9 @@ import {
 	HTTP_NOT_FOUND,
 	HTTP_PAYLOAD_TOO_LARGE,
 	HTTP_UNAUTHORIZED,
-	installFetchMock,
-} from "./fetch-stub";
+} from "../src/http-status";
 import { describe, expect, it } from "vitest";
+import { installFetchMock } from "./fetch-stub";
 import { sign } from "@octokit/webhooks-methods";
 
 describe("request routing", () => {

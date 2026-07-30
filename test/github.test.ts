@@ -10,6 +10,7 @@ import {
 	APP_ENDPOINT,
 	COMMITS_ENDPOINT,
 	COMMITS_SUFFIX,
+	HTTP_FORBIDDEN,
 	NEXT_PAGE,
 	REPO,
 	REVIEWS_SUFFIX,
@@ -28,14 +29,11 @@ import {
 	reviewPostRoute,
 } from "./github-api";
 import {
-	HTTP_FORBIDDEN,
 	HTTP_INTERNAL_ERROR,
 	HTTP_NOT_FOUND,
 	HTTP_OK,
 	HTTP_UNPROCESSABLE_ENTITY,
-	installFetchMock,
-	requestByUrl,
-} from "./fetch-stub";
+} from "../src/http-status";
 import {
 	PAGE_SIZE,
 	createApprovalReview,
@@ -46,6 +44,7 @@ import {
 	listPullRequestReviews,
 } from "../src/github";
 import { describe, expect, it } from "vitest";
+import { installFetchMock, requestByUrl } from "./fetch-stub";
 import { GithubApiError } from "../src/api-error";
 
 const SECOND_PAGE_COUNT = 37;
