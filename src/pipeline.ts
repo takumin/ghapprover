@@ -10,17 +10,15 @@ import type { ApprovalTarget, RepoRef } from "./github";
 import type { GithubAccount, PullRequestEventPayload } from "./types";
 import {
 	accountKey,
-	checkCommitCount,
-	checkCommits,
 	checkPullRequestState,
 	classifyPrincipal,
 	hasOwnApproval,
 	isLiveStateCurrent,
 	isOwnerMembership,
 	isTargetAction,
-	precheckCommitCount,
 } from "./decision";
 import { apiErrorOutcome, approvedOutcome, errorOutcome, skippedOutcome } from "./outcome";
+import { checkCommitCount, checkCommits, precheckCommitCount } from "./commits";
 import {
 	createApprovalReview,
 	fetchAppBotLogin,

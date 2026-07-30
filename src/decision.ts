@@ -1,20 +1,22 @@
 /**
- * Decision logic for the approval pipeline (SPEC.md §3, §4): deterministic and free of I/O of its
- * own, so the approval conditions are unit-testable without mocking the GitHub API (SPEC.md §12).
- * The one condition that needs a lookup takes it as an injected predicate rather than reaching for
- * a client, so a test supplies a plain function instead of a stubbed API.
+ * The §3 approval conditions a single value settles (SPEC.md §3, §4): the event's action and the
+ * pull request's state, the identity every trust decision is made against, and the review and live
+ * state checks that bracket the approval. Deterministic and free of I/O of its own, so the
+ * conditions are unit-testable without mocking the GitHub API (SPEC.md §12); the one condition that
+ * needs a lookup states which query resolves it and leaves the running of it to the caller. The
+ * commit condition (§3.2) walks a list rather than settling a value and lives in src/commits.ts,
+ * built on the identity key defined here.
  */
 
-import { ALLOWED_BOTS, MAX_VERIFIABLE_COMMITS, WEB_FLOW } from "./allowlist";
 import type {
 	EventPullRequest,
 	EventRepository,
 	GithubAccount,
 	LivePullRequest,
 	OrgMembership,
-	PullRequestCommit,
 	PullRequestReview,
 } from "./types";
+import { ALLOWED_BOTS } from "./allowlist";
 import type { AccountRef } from "./allowlist";
 
 /** Actions evaluated for approval (SPEC.md §3 condition 1). */
@@ -52,9 +54,10 @@ export function checkPullRequestState(
 }
 
 /* The identity every §3 trust decision is made against: the (id, login) pair, never the login
- * alone. Every identity comparison below goes through it, and callers that cache or compare
- * principals must key on it too — an account reusing a trusted login would otherwise inherit that
- * trust and defeat the id pinning. Injective, because a numeric id cannot contain the separator. */
+ * alone. Every identity comparison below goes through it, as do the §3.2 checks in src/commits.ts,
+ * and callers that cache or compare principals must key on it too — an account reusing a trusted
+ * login would otherwise inherit that trust and defeat the id pinning. Injective, because a numeric
+ * id cannot contain the separator. */
 export function accountKey(account: AccountRef): string {
 	return `${account.id}:${account.login}`;
 }
@@ -63,18 +66,12 @@ export type TrustEvaluation =
 	| { readonly kind: "trusted" }
 	| { readonly kind: "untrusted" }
 	| { readonly kind: "org-membership"; readonly org: string; readonly login: string };
-/* The two identity exemptions as the keys they are compared against, derived once at module scope
- * like TARGET_ACTIONS above: both lists are in-code constants (SPEC.md §5), and isWebFlow runs once
- * per commit principal, so deriving them per call is work every delivery repeats for nothing. */
+/* The §3.1 allowlist as the keys it is compared against, derived once at module scope like
+ * TARGET_ACTIONS above: the list is an in-code constant (SPEC.md §5), so deriving it per call is
+ * work every delivery repeats for nothing. */
 const ALLOWED_BOT_KEYS: ReadonlySet<string> = new Set(ALLOWED_BOTS.map((bot) => accountKey(bot)));
-const WEB_FLOW_KEY = accountKey(WEB_FLOW);
 function isAllowedBot(user: GithubAccount): boolean {
 	return ALLOWED_BOT_KEYS.has(accountKey(user));
-}
-/* SPEC.md §3.2: matched on login and numeric id, like the §3.1 allowlist. Both are identity
- * exemptions that decide approval, so neither may turn on a login string alone. */
-function isWebFlow(account: GithubAccount): boolean {
-	return accountKey(account) === WEB_FLOW_KEY;
 }
 
 /* SPEC.md §3.1: bots are trusted solely via the allowlist (login and numeric id both matching)
@@ -105,125 +102,6 @@ export function isOwnerMembership(membership: OrgMembership | null): boolean {
 		return false;
 	}
 	return membership.state === "active" && membership.role === "admin";
-}
-
-/* The accounts whose trust one commit's §3.2 check needs: the author, and the committer unless
- * it is web-flow (exempt as committer only) or repeats the author. The caller resolves them in
- * commit order, memoized per delivery (§3.1), so a failing commit stops the remaining
- * membership lookups instead of querying every principal of every commit up front. */
-export function commitPrincipals(entry: PullRequestCommit): readonly GithubAccount[] {
-	const { author, committer } = entry;
-	const principals: GithubAccount[] = [];
-	if (author !== null) {
-		principals.push(author);
-	}
-	if (
-		committer !== null &&
-		!isWebFlow(committer) &&
-		(author === null || accountKey(committer) !== accountKey(author))
-	) {
-		principals.push(committer);
-	}
-	return principals;
-}
-
-export type CommitCountProblem = "no-commits" | "too-many-commits";
-/** SPEC.md §3.2: zero commits, or more than the commits API can return, fail closed. */
-export function precheckCommitCount(declaredCount: number): CommitCountProblem | null {
-	if (declaredCount === 0) {
-		return "no-commits";
-	}
-	if (declaredCount > MAX_VERIFIABLE_COMMITS) {
-		return "too-many-commits";
-	}
-	return null;
-}
-
-export type CommitListProblem = "commit-count-mismatch";
-/* SPEC.md §3.2: the fetched list must match the count the payload declared. The declared count
- * itself is settled by precheckCommitCount, which the caller runs before it spends the fetch. */
-export function checkCommitCount(
-	fetchedCount: number,
-	declaredCount: number,
-): CommitListProblem | null {
-	if (fetchedCount !== declaredCount) {
-		return "commit-count-mismatch";
-	}
-	return null;
-}
-
-/* What §3.2 can settle about one commit, as opposed to about the list (the count problems above).
- * Each check below is typed by what it can actually return, so narrowing one is a local change. */
-export type CommitProblem = "untrusted-commit" | "unverified-commit";
-/* The half of the §3.2 per-commit check that does not depend on trust: the signature
- * verification, then the principals the payload has to map at all. Split out so the caller can
- * settle a commit on these before spending a membership lookup on it — and it must run before
- * checkCommitTrust, because the web-flow committer exemption that half applies rests on genuine
- * web-flow commits being GitHub-signed, which is what the verification check here enforces. */
-function checkCommitStructure(entry: PullRequestCommit): CommitProblem | null {
-	const { author, commit, committer } = entry;
-	const { verification } = commit;
-	if (verification === null || !verification.verified) {
-		return "unverified-commit";
-	}
-	if (author === null || committer === null) {
-		return "untrusted-commit";
-	}
-	return null;
-}
-/* The trust half of §3.2: every principal the commit needs must be trusted. The caller derives
- * them once with commitPrincipals — the single source of which those are, the web-flow committer
- * exemption included — and supplies the lookup as isTrusted, which the loop below both runs and
- * decides on, so the accounts looked up and the accounts checked cannot diverge. It stops at the
- * first untrusted principal: a further lookup could not change this commit's outcome, and a
- * delivery that ends in a skip must not burst one lookup per principal against the Worker
- * subrequest allowance or GitHub's secondary rate limits. Meaningful only for a commit that has
- * passed checkCommitStructure: commitPrincipals drops unmapped principals rather than failing,
- * which is why checkCommit below owns the order rather than leaving it to each caller. */
-async function checkCommitTrust(
-	principals: readonly GithubAccount[],
-	isTrusted: (account: GithubAccount) => Promise<boolean>,
-): Promise<"untrusted-commit" | null> {
-	for (const account of principals) {
-		if (!(await isTrusted(account))) {
-			return "untrusted-commit";
-		}
-	}
-	return null;
-}
-
-/* SPEC.md §3.2 for one commit: the whole per-commit check, with the order its two halves must run
- * in made structural rather than left to the caller. Both directions of that order are load-bearing
- * — the trust-independent half settles a commit before any membership lookup is spent on it, and
- * the web-flow committer exemption commitPrincipals applies is only safe once the signature check
- * has run — so a caller composing the halves itself is a caller that can get it wrong. */
-export async function checkCommit(
-	entry: PullRequestCommit,
-	isTrusted: (account: GithubAccount) => Promise<boolean>,
-): Promise<CommitProblem | null> {
-	const structural = checkCommitStructure(entry);
-	if (structural !== null) {
-		return structural;
-	}
-	return checkCommitTrust(commitPrincipals(entry), isTrusted);
-}
-/* SPEC.md §3.2 for the whole list, in commit order: checkCommit settles one commit (spending a
- * lookup only on what it cannot settle without one), and the first failing commit ends the loop for
- * the same reason checkCommitTrust stops at the first untrusted principal — a delivery that ends in
- * a skip must not burst a lookup per principal of every commit against the Worker subrequest
- * allowance or GitHub's secondary rate limits. The walk lives here with the check it repeats, so
- * that argument is made once and the caller is left with the fetch it sequences around it. */
-export async function checkCommits(
-	commits: readonly PullRequestCommit[],
-	isTrusted: (account: GithubAccount) => Promise<boolean>,
-): Promise<CommitProblem | null> {
-	for (const entry of commits) {
-		const problem = await checkCommit(entry, isTrusted);
-		if (problem !== null) {
-			return problem;
-		}
-	}
-	return null;
 }
 
 /* SPEC.md §3 condition 5: only an APPROVED review by the App's own bot user for the current head

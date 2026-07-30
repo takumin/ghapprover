@@ -8,12 +8,8 @@
  */
 
 import type { ApiDiagnostics, GithubApiError } from "./api-error";
-import type {
-	CommitCountProblem,
-	CommitListProblem,
-	CommitProblem,
-	PrStateProblem,
-} from "./decision";
+import type { CommitCountProblem, CommitListProblem, CommitProblem } from "./commits";
+import type { PrStateProblem } from "./decision";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;

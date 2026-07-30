@@ -8,14 +8,14 @@
 import type { GithubAccount, PullRequestCommit } from "../src/types";
 import { WEB_FLOW_LOOKALIKE, WEB_FLOW_USER } from "./accounts";
 import {
-	accountKey,
 	checkCommit,
 	checkCommitCount,
 	commitPrincipals,
 	precheckCommitCount,
-} from "../src/decision";
+} from "../src/commits";
 import { describe, expect, it } from "vitest";
 import { MAX_VERIFIABLE_COMMITS } from "../src/allowlist";
+import { accountKey } from "../src/decision";
 
 const ALICE: GithubAccount = { id: 101, login: "alice", type: "User" };
 const BOB: GithubAccount = { id: 102, login: "bob", type: "User" };
