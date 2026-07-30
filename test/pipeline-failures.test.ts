@@ -9,30 +9,33 @@
 
 import {
 	COMMITS_ENDPOINT,
-	HTTP_FORBIDDEN,
-	HTTP_INTERNAL_ERROR,
-	HTTP_NOT_FOUND,
+	COMMITS_SUFFIX,
+	HEAD_SHA,
 	PULL_NUMBER,
 	REFUSAL_HEADERS,
 	TOKEN_ENDPOINT,
-	installFetchMock,
-	jsonRoute,
-} from "./fetch-stub";
-import {
-	COMMITS_SUFFIX,
-	DELIVERY_ID,
-	HEAD_SHA,
 	TOKEN_URL,
+	installTokenRoute,
+	pullUrl,
+} from "./github-api";
+import {
+	DELIVERY_ID,
 	buildPayload,
 	captureLog,
 	expectReply,
-	installTokenRoute,
 	makeEnv,
 	postSigned,
-	pullsUrl,
 } from "./delivery";
+import {
+	HTTP_FORBIDDEN,
+	HTTP_INTERNAL_ERROR,
+	HTTP_NOT_FOUND,
+	installFetchMock,
+	jsonRoute,
+} from "./fetch-stub";
+import { ORG, REPOSITORY } from "./accounts";
 import { describe, expect, it } from "vitest";
-import { ORG } from "./accounts";
+import { MAX_ERROR_MESSAGE_CHARS } from "../src/log";
 import type { PlannedRoute } from "./fetch-stub";
 
 /** What the auth library says about that key, and what §8's errorMessage exists to carry into the entry. */
@@ -96,7 +99,7 @@ describe("github api failures", () => {
 				method: "GET",
 				payload: { message: "boom" },
 				status: HTTP_INTERNAL_ERROR,
-				url: pullsUrl(COMMITS_SUFFIX),
+				url: pullUrl(COMMITS_SUFFIX),
 			}),
 		]);
 		const response = await postSigned(buildPayload());
@@ -115,7 +118,7 @@ describe("github api failures", () => {
 				method: "GET",
 				payload: {},
 				status: 0,
-				url: pullsUrl(COMMITS_SUFFIX),
+				url: pullUrl(COMMITS_SUFFIX),
 			}),
 		]);
 		const response = await postSigned(buildPayload());
@@ -127,9 +130,8 @@ describe("github api failures", () => {
 	});
 });
 
-/** SPEC.md §8: the truncation bound, and a message that runs past it. */
-const MESSAGE_LIMIT = 512;
-const OVERLONG_MESSAGE = "boom ".repeat(MESSAGE_LIMIT);
+/** SPEC.md §8: a message that runs past the bound the log entry applies to it. */
+const OVERLONG_MESSAGE = "boom ".repeat(MAX_ERROR_MESSAGE_CHARS);
 
 /** The commits request is where these cases plant the failure: every full run reaches it. */
 function commitsFailureRoute(
@@ -142,7 +144,7 @@ function commitsFailureRoute(
 		method: "GET",
 		payload,
 		status,
-		url: pullsUrl(COMMITS_SUFFIX),
+		url: pullUrl(COMMITS_SUFFIX),
 	});
 }
 /* SPEC.md §8 and §9: a github-api-error is greppable, but only these fields say which failure it
@@ -188,7 +190,7 @@ describe("api failure diagnostics", () => {
 			headSha: HEAD_SHA,
 			prNumber: PULL_NUMBER,
 			reason: "github-api-error",
-			repo: "octo/hello",
+			repo: REPOSITORY.full_name,
 			status: 0,
 		});
 		session.assertDone();
@@ -208,7 +210,7 @@ describe("error message bounds", () => {
 		]);
 		await postSigned(buildPayload());
 		expect(logSpy).toHaveBeenCalledWith(
-			expect.objectContaining({ errorMessage: OVERLONG_MESSAGE.slice(0, MESSAGE_LIMIT) }),
+			expect.objectContaining({ errorMessage: OVERLONG_MESSAGE.slice(0, MAX_ERROR_MESSAGE_CHARS) }),
 		);
 		session.assertDone();
 	});

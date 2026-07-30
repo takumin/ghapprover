@@ -10,25 +10,26 @@
 import {
 	APP_ENDPOINT,
 	APP_URL,
-	HTTP_FORBIDDEN,
-	HTTP_INTERNAL_ERROR,
-	HTTP_NOT_FOUND,
-	REFUSAL_HEADERS,
-	REVIEW_POST_ENDPOINT,
-	TOKEN_ENDPOINT,
-	installFetchMock,
-	jsonRoute,
-} from "./fetch-stub";
-import {
 	MEMBERSHIP_ORG,
 	MEMBERSHIP_USER,
-	TOKENS_URL,
+	REFUSAL_HEADERS,
+	REPO,
+	REVIEW_POST_ENDPOINT,
+	TOKEN_ENDPOINT,
+	TOKEN_URL,
 	appRoute,
 	approvalTarget,
 	installTokenRoute,
 	makeClient,
-	reviewsPostUrl,
-} from "./github-routes";
+	pullUrl,
+} from "./github-api";
+import {
+	HTTP_FORBIDDEN,
+	HTTP_INTERNAL_ERROR,
+	HTTP_NOT_FOUND,
+	installFetchMock,
+	jsonRoute,
+} from "./fetch-stub";
 import { createApprovalReview, fetchAppBotLogin, fetchOrgMembership } from "../src/github";
 import { describe, expect, it } from "vitest";
 import { GithubApiError } from "../src/api-error";
@@ -112,7 +113,7 @@ describe("token request attribution", () => {
 				method: "POST",
 				payload: { message: "Not Found" },
 				status: HTTP_NOT_FOUND,
-				url: TOKENS_URL,
+				url: TOKEN_URL,
 			}),
 		]);
 		const promise = fetchOrgMembership(await makeClient(), MEMBERSHIP_ORG, MEMBERSHIP_USER);
@@ -125,14 +126,14 @@ describe("token request attribution", () => {
 
 	it("does not attribute a repository named like the token path to token issuance", async () => {
 		expect.hasAssertions();
-		const repo = { owner: "octo", repo: "access_tokens" };
+		const repo = { owner: REPO.owner, repo: "access_tokens" };
 		installFetchMock([
 			installTokenRoute(),
 			jsonRoute({
 				method: "POST",
 				payload: { message: "boom" },
 				status: HTTP_INTERNAL_ERROR,
-				url: reviewsPostUrl(repo.repo),
+				url: pullUrl("/reviews", repo.owner, repo.repo),
 			}),
 		]);
 		const promise = createApprovalReview(await makeClient(), approvalTarget(repo));

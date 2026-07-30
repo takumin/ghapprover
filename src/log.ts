@@ -66,9 +66,10 @@ export type AllOutcomeFieldsLogged = NoneOf<
  * that body is not JSON (an HTML error page from GitHub or a proxy in front of
  * it). Truncating here, where the entry is built, is what makes it one rule for
  * every path onto the field rather than one per place an error is raised
- * (SPEC.md §12).
+ * (SPEC.md §12). Exported for the suite that drives the truncation, which builds
+ * a message past the bound out of the bound itself.
  */
-const MAX_ERROR_MESSAGE_CHARS = 512;
+export const MAX_ERROR_MESSAGE_CHARS = 512;
 /** Exactly one structured log entry per handled webhook delivery (SPEC.md §8). */
 export function logOutcome(log: LogFields, outcome: Outcome): void {
 	log["decision"] = outcome.decision;

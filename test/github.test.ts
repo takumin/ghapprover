@@ -5,41 +5,41 @@
  * delivery budget, and failure attribution — is driven by client.test.ts.
  */
 
+import { APP_BOT, OWNER } from "./accounts";
 import {
 	APP_ENDPOINT,
 	COMMITS_ENDPOINT,
-	HTTP_FORBIDDEN,
-	HTTP_INTERNAL_ERROR,
-	HTTP_NOT_FOUND,
-	HTTP_OK,
-	HTTP_UNPROCESSABLE_ENTITY,
-	PULL_NUMBER,
-	REVIEW_POST_ENDPOINT,
-	installFetchMock,
-	jsonRoute,
-	requestByUrl,
-} from "./fetch-stub";
-import {
-	FULL_PAGE,
+	COMMITS_SUFFIX,
 	MEMBERSHIP_ORG,
 	MEMBERSHIP_USER,
+	NEXT_PAGE,
+	PULL_NUMBER,
 	REPO,
-	TOKENS_URL,
+	REVIEWS_SUFFIX,
+	REVIEW_POST_ENDPOINT,
+	TOKEN_URL,
 	appRoute,
 	approvalTarget,
-	commitBody,
+	commitItem,
 	commitPage,
-	commitsUrl,
 	installTokenRoute,
 	linkedRoute,
 	makeClient,
 	membershipRoute,
 	pullUrl,
-	reviewPostRoute,
-	reviewsPostUrl,
-	reviewsUrl,
-} from "./github-routes";
+} from "./github-api";
 import {
+	HTTP_FORBIDDEN,
+	HTTP_INTERNAL_ERROR,
+	HTTP_NOT_FOUND,
+	HTTP_OK,
+	HTTP_UNPROCESSABLE_ENTITY,
+	installFetchMock,
+	jsonRoute,
+	requestByUrl,
+} from "./fetch-stub";
+import {
+	PAGE_SIZE,
 	createApprovalReview,
 	fetchAppBotLogin,
 	fetchOrgMembership,
@@ -49,19 +49,23 @@ import {
 } from "../src/github";
 import { describe, expect, it } from "vitest";
 import { GithubApiError } from "../src/api-error";
-import { OCTO } from "./accounts";
+import type { PlannedRoute } from "./fetch-stub";
 
 const SECOND_PAGE_COUNT = 37;
+/** The review-POST route, which is the one call planned on a POST rather than a GET. */
+function reviewPostRoute(payload: unknown, status: number): PlannedRoute {
+	return jsonRoute({ method: "POST", payload, status, url: pullUrl("/reviews") });
+}
 
 function reviewBody(commitId: string): Record<string, unknown> {
-	return { commit_id: commitId, state: "APPROVED", user: OCTO };
+	return { commit_id: commitId, state: "APPROVED", user: OWNER };
 }
 
 describe("fetchAppBotLogin()", () => {
 	it("returns the bot login for the slug without issuing an installation token", async () => {
 		expect.hasAssertions();
 		const mock = installFetchMock([appRoute()]);
-		await expect(fetchAppBotLogin(await makeClient())).resolves.toBe("my-app[bot]");
+		await expect(fetchAppBotLogin(await makeClient())).resolves.toBe(APP_BOT.login);
 		mock.assertDone();
 	});
 
@@ -77,17 +81,17 @@ describe("fetchAppBotLogin()", () => {
 describe("listPullRequestCommits() pagination", () => {
 	it("follows the link header across two pages", async () => {
 		expect.hasAssertions();
-		const firstUrl = commitsUrl();
-		const secondUrl = commitsUrl("&page=2");
+		const firstUrl = pullUrl(COMMITS_SUFFIX);
+		const secondUrl = pullUrl(`${COMMITS_SUFFIX}${NEXT_PAGE}`);
 		const mock = installFetchMock([
 			installTokenRoute(),
-			linkedRoute({ next: secondUrl, payload: commitPage(FULL_PAGE, 0), url: firstUrl }),
-			linkedRoute({ payload: commitPage(SECOND_PAGE_COUNT, FULL_PAGE), url: secondUrl }),
+			linkedRoute({ next: secondUrl, payload: commitPage(PAGE_SIZE, 0), url: firstUrl }),
+			linkedRoute({ payload: commitPage(SECOND_PAGE_COUNT, PAGE_SIZE), url: secondUrl }),
 		]);
 		const commits = await listPullRequestCommits(await makeClient(), REPO, PULL_NUMBER);
-		expect(commits).toHaveLength(FULL_PAGE + SECOND_PAGE_COUNT);
+		expect(commits).toHaveLength(PAGE_SIZE + SECOND_PAGE_COUNT);
 		expect(commits.at(-1)).toMatchObject({ sha: "sha-136" });
-		expect(mock.requests.map((seen) => seen.url)).toStrictEqual([TOKENS_URL, firstUrl, secondUrl]);
+		expect(mock.requests.map((seen) => seen.url)).toStrictEqual([TOKEN_URL, firstUrl, secondUrl]);
 		mock.assertDone();
 	});
 });
@@ -98,25 +102,28 @@ describe("listPullRequestCommits() mapping", () => {
 		const webCommit = {
 			author: null,
 			commit: { extra: true, verification: { reason: "valid", verified: true } },
-			committer: OCTO,
+			committer: OWNER,
 			sha: "sha-web",
 		};
 		const mock = installFetchMock([
 			installTokenRoute(),
-			linkedRoute({ payload: [commitBody("sha-a"), webCommit], url: commitsUrl() }),
+			linkedRoute({
+				payload: [commitItem({ sha: "sha-a" }), webCommit],
+				url: pullUrl(COMMITS_SUFFIX),
+			}),
 		]);
 		const commits = await listPullRequestCommits(await makeClient(), REPO, PULL_NUMBER);
 		expect(commits).toStrictEqual([
 			{
-				author: OCTO,
+				author: OWNER,
 				commit: { verification: { verified: true } },
-				committer: OCTO,
+				committer: OWNER,
 				sha: "sha-a",
 			},
 			{
 				author: null,
 				commit: { verification: { verified: true } },
-				committer: OCTO,
+				committer: OWNER,
 				sha: "sha-web",
 			},
 		]);
@@ -129,7 +136,7 @@ describe("listPullRequestCommits() mapping", () => {
 			installTokenRoute(),
 			linkedRoute({
 				payload: [{ commit: { verification: { verified: true } } }],
-				url: commitsUrl(),
+				url: pullUrl(COMMITS_SUFFIX),
 			}),
 		]);
 		const promise = listPullRequestCommits(await makeClient(), REPO, PULL_NUMBER);
@@ -174,20 +181,20 @@ describe("fetchOrgMembership()", () => {
 describe("listPullRequestReviews()", () => {
 	it("follows the link header until the last page", async () => {
 		expect.hasAssertions();
-		const firstUrl = reviewsUrl();
-		const secondUrl = reviewsUrl("&page=2");
+		const firstUrl = pullUrl(REVIEWS_SUFFIX);
+		const secondUrl = pullUrl(`${REVIEWS_SUFFIX}${NEXT_PAGE}`);
 		const mock = installFetchMock([
 			installTokenRoute(),
 			linkedRoute({
 				next: secondUrl,
-				payload: Array.from({ length: FULL_PAGE }, (_, index) => reviewBody(`rev-${index}`)),
+				payload: Array.from({ length: PAGE_SIZE }, (_, index) => reviewBody(`rev-${index}`)),
 				url: firstUrl,
 			}),
 			linkedRoute({ payload: [reviewBody("rev-tail")], url: secondUrl }),
 		]);
 		const reviews = await listPullRequestReviews(await makeClient(), REPO, PULL_NUMBER);
-		expect(reviews).toHaveLength(FULL_PAGE + 1);
-		expect(mock.requests.map((seen) => seen.url)).toStrictEqual([TOKENS_URL, firstUrl, secondUrl]);
+		expect(reviews).toHaveLength(PAGE_SIZE + 1);
+		expect(mock.requests.map((seen) => seen.url)).toStrictEqual([TOKEN_URL, firstUrl, secondUrl]);
 	});
 
 	it("maps null user and null commit_id", async () => {
@@ -195,7 +202,7 @@ describe("listPullRequestReviews()", () => {
 		const dismissed = { commit_id: null, state: "DISMISSED", submitted_at: "ignored", user: null };
 		const mock = installFetchMock([
 			installTokenRoute(),
-			linkedRoute({ payload: [dismissed], url: reviewsUrl() }),
+			linkedRoute({ payload: [dismissed], url: pullUrl(REVIEWS_SUFFIX) }),
 		]);
 		await expect(
 			listPullRequestReviews(await makeClient(), REPO, PULL_NUMBER),
@@ -232,7 +239,7 @@ describe("createApprovalReview()", () => {
 		await expect(createApprovalReview(await makeClient(), approvalTarget())).resolves.toBe(
 			"created",
 		);
-		const posted = requestByUrl(mock, reviewsPostUrl());
+		const posted = requestByUrl(mock, pullUrl("/reviews"));
 		expect(posted).toMatchObject({ body: '{"commit_id":"head-sha","event":"APPROVE"}' });
 		expect(posted.headers["content-type"]).toMatch(/application\/json/u);
 	});

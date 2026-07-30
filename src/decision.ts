@@ -1,11 +1,11 @@
 /**
  * The §3 approval conditions a single value settles (SPEC.md §3, §4): the event's action and the
- * pull request's state, the identity every trust decision is made against, and the review and live
- * state checks that bracket the approval. Deterministic and free of I/O of its own, so the
- * conditions are unit-testable without mocking the GitHub API (SPEC.md §12); the one condition that
- * needs a lookup states which query resolves it and leaves the running of it to the caller. The
- * commit condition (§3.2) walks a list rather than settling a value and lives in src/commits.ts,
- * built on the identity key defined here.
+ * pull request's state, whether one principal is trusted, and the review and live state checks that
+ * bracket the approval. Deterministic and free of I/O of its own, so the conditions are
+ * unit-testable without mocking the GitHub API (SPEC.md §12); the one condition that needs a lookup
+ * states which query resolves it and leaves the running of it to the caller. The identity every
+ * trust decision is made against lives in src/account.ts, and the commit condition (§3.2), which
+ * walks a list rather than settling a value, in src/commits.ts.
  */
 
 import type {
@@ -16,8 +16,7 @@ import type {
 	OrgMembership,
 	PullRequestReview,
 } from "./types";
-import { ALLOWED_BOTS } from "./allowlist";
-import type { AccountRef } from "./allowlist";
+import { isAllowedBot, isSameAccount } from "./account";
 
 /** Actions evaluated for approval (SPEC.md §3 condition 1). */
 const TARGET_ACTIONS: ReadonlySet<string> = new Set([
@@ -53,26 +52,10 @@ export function checkPullRequestState(
 	return null;
 }
 
-/* The identity every §3 trust decision is made against: the (id, login) pair, never the login
- * alone. Every identity comparison below goes through it, as do the §3.2 checks in src/commits.ts,
- * and callers that cache or compare principals must key on it too — an account reusing a trusted
- * login would otherwise inherit that trust and defeat the id pinning. Injective, because a numeric
- * id cannot contain the separator. */
-export function accountKey(account: AccountRef): string {
-	return `${account.id}:${account.login}`;
-}
-
 export type TrustEvaluation =
 	| { readonly kind: "trusted" }
 	| { readonly kind: "untrusted" }
 	| { readonly kind: "org-membership"; readonly org: string; readonly login: string };
-/* The §3.1 allowlist as the keys it is compared against, derived once at module scope like
- * TARGET_ACTIONS above: the list is an in-code constant (SPEC.md §5), so deriving it per call is
- * work every delivery repeats for nothing. */
-const ALLOWED_BOT_KEYS: ReadonlySet<string> = new Set(ALLOWED_BOTS.map((bot) => accountKey(bot)));
-function isAllowedBot(user: GithubAccount): boolean {
-	return ALLOWED_BOT_KEYS.has(accountKey(user));
-}
 
 /* SPEC.md §3.1: bots are trusted solely via the allowlist (login and numeric id both matching)
  * and never fall through to the owner/org checks; users on org repositories resolve through the
@@ -90,7 +73,7 @@ export function classifyPrincipal(user: GithubAccount, repoOwner: GithubAccount)
 	if (repoOwner.type === "Organization") {
 		return { kind: "org-membership", login: user.login, org: repoOwner.login };
 	}
-	if (accountKey(user) === accountKey(repoOwner)) {
+	if (isSameAccount(user, repoOwner)) {
 		return { kind: "trusted" };
 	}
 	return { kind: "untrusted" };

@@ -1,6 +1,6 @@
 /**
  * Account fixtures shared across the suites, and the repository fixture built around one of them.
- * The allowlisted accounts are built from the in-code allowlist itself (src/allowlist.ts) so every
+ * The allowlisted accounts are built from the in-code allowlist itself (src/account.ts) so every
  * suite derives them the same way: an entry whose id
  * or login changes must not silently turn a trusted fixture into an ordinary account — that would
  * reduce every §3.1 case to an author-not-trusted skip while the assertions still pass. The
@@ -9,7 +9,7 @@
  * are here only because more than one suite builds a payload around them.
  */
 
-import { ALLOWED_BOTS, WEB_FLOW } from "../src/allowlist";
+import { ALLOWED_BOTS, WEB_FLOW } from "../src/account";
 import type { EventRepository, GithubAccount } from "../src/types";
 
 interface AccountOverrides {
@@ -47,37 +47,36 @@ export const WEB_FLOW_USER: GithubAccount = {
 /** Same login, different account: the committer exemption must not fire on the login alone. */
 export const WEB_FLOW_LOOKALIKE: GithubAccount = { id: 999, login: WEB_FLOW.login, type: "User" };
 
-/** The slug GET /app serves for this App, which the delivery route fixtures answer with. */
+/** The slug GET /app answers with (test/github-api.ts), and the App's own bot login below. */
 export const APP_SLUG = "ghapprover";
 /**
- * The App's own bot user (SPEC.md §3 cond. 5), its login derived from that slug by the same
- * `<slug>[bot]` rule src/github.ts applies rather than spelled again — a login stated on its own
- * would go stale when the slug the routes serve changes, and the already-approved case would
- * silently stop matching. Stated once because both the unit suite that drives hasOwnApproval and
- * the delivery suites that serve its own approval as a review have to mean the same account by it.
+ * The App's own bot user (SPEC.md §3 cond. 5): the login GET /app derives from the slug above,
+ * derived here the same way rather than spelled out, so the account the suites match reviews
+ * against cannot disagree with the response the route serves. Stated once because both the unit
+ * suite that drives hasOwnApproval and the delivery suites that serve its own approval as a review
+ * have to mean the same account by it.
  */
 export const APP_BOT: GithubAccount = { id: 201, login: `${APP_SLUG}[bot]`, type: "Bot" };
 
-/** The repository owner the payload fixtures are built around. */
-export const OCTOCAT: GithubAccount = { id: 77, login: "octocat", type: "User" };
 /**
- * The repository those fixtures are for, stated with its owner rather than beside it: the suite
- * that drives the payload schema (payload.test.ts) and the one that drives the §3 conditions
- * evaluated against it (decision.test.ts) both build it, so a field the schema gains has to reach
- * both — two declarations can disagree about the modeled repository and both still pass.
+ * The owner of the fixture repository below: the delivery suites approve its pull request, the
+ * endpoint suites serve it as a commit and review author, and the §3.1 cases decide on it as the
+ * personal-repository owner, so all of them must mean one account by it.
  */
-export const WIDGETS_REPO: EventRepository = {
-	full_name: `${OCTOCAT.login}/widgets`,
-	id: 555,
-	name: "widgets",
-	owner: OCTOCAT,
-};
+export const OWNER: GithubAccount = { id: 7, login: "octo", type: "User" };
+const REPO_NAME = "hello";
 /**
- * The owner of the `octo/hello` fixture repository both route-helper families build their calls
- * against (delivery.ts, github-routes.ts): the delivery suites approve its pull request and the
- * endpoint suites serve it as a commit and review author, so the two must mean one account by it.
+ * The one repository every suite is about, as an event payload carries it, stated with its owner
+ * rather than beside it — under the owner a case gives it, because a repository owned by an
+ * organization is what sends §3.1 through the membership API. The suite that drives the payload
+ * schema (payload.test.ts), the one that drives the §3 conditions evaluated against it
+ * (decision.test.ts) and the delivery suites that serve its API calls (test/github-api.ts) all build
+ * it here: a second declaration can disagree about the modeled repository and both still pass.
  */
-export const OCTO: GithubAccount = { id: 7, login: "octo", type: "User" };
+export function repositoryOwnedBy(owner: GithubAccount = OWNER): EventRepository {
+	return { full_name: `${owner.login}/${REPO_NAME}`, id: 555, name: REPO_NAME, owner };
+}
+export const REPOSITORY: EventRepository = repositoryOwnedBy();
 /**
  * The organization every §3.1 org-branch case is owned by: the unit suite that drives
  * classifyPrincipal and the delivery suites that serve the membership lookup it defers to have to

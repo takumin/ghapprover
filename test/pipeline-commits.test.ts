@@ -7,19 +7,17 @@
  */
 
 import { HTTP_OK, installFetchMock } from "./fetch-stub";
-import { ORG, RENOVATE, RENOVATE_WRONG_ID, WEB_FLOW_USER } from "./accounts";
+import { ORG, OWNER, RENOVATE, RENOVATE_WRONG_ID, WEB_FLOW_USER } from "./accounts";
 import {
-	OWNER,
 	buildPayload,
-	commitItem,
 	commitsRouteFor,
 	expectReply,
-	installTokenRoute,
+	memberUrl,
 	membershipAdminRoute,
 	membershipMissingRoute,
-	membershipUrl,
 	postSigned,
 } from "./delivery";
+import { commitItem, installTokenRoute } from "./github-api";
 import { describe, expect, it } from "vitest";
 import type { GithubAccount } from "../src/types";
 import { MAX_VERIFIABLE_COMMITS } from "../src/commits";
@@ -129,7 +127,7 @@ describe("principal trust resolution", () => {
 			body: { decision: "skipped", reason: "untrusted-commit" },
 			status: HTTP_OK,
 		});
-		expect(session.requests.map((entry) => entry.url)).not.toContain(membershipUrl(OTHER_STRANGER));
+		expect(session.requests.map((entry) => entry.url)).not.toContain(memberUrl(OTHER_STRANGER));
 		session.assertDone();
 	});
 });

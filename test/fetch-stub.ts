@@ -6,75 +6,21 @@
  * carry a JSON content-type (octokit only parses JSON bodies with one) plus
  * any planned extra headers, e.g. the link header pagination follows.
  *
- * It is also where the values every suite states about a call — the statuses and
- * headers a response carries, and the origin, pull request and route templates the
- * requests are built and asserted against — are declared, this being the one module
- * both route-helper families (delivery.ts, github-routes.ts) and every suite import.
+ * The statuses a route is planned with and a response asserted against are stated here too, this
+ * being the one module every suite imports: a suite must not pick up a different 403 from whichever
+ * helper module it happened to import. What the routes themselves are — the API origin, the fixture
+ * repository, and the route templates — is stated in test/github-api.ts.
  */
 import { vi } from "vitest";
 
-/* The statuses the suites plan routes with and assert responses against. Stated here, in the one
- * module every suite and every route helper imports, so that a suite cannot pick up a different 403
- * from whichever helper module it happened to import. */
 export const HTTP_OK = 200;
-const HTTP_CREATED = 201;
+export const HTTP_CREATED = 201;
 export const HTTP_UNAUTHORIZED = 401;
 export const HTTP_FORBIDDEN = 403;
 export const HTTP_NOT_FOUND = 404;
 export const HTTP_PAYLOAD_TOO_LARGE = 413;
 export const HTTP_UNPROCESSABLE_ENTITY = 422;
 export const HTTP_INTERNAL_ERROR = 500;
-/** App JWT authorization: "bearer" plus three dot-separated base64url segments. */
-export const JWT_PATTERN = /^bearer eyJ[\w-]+\.[\w-]+\.[\w-]+$/u;
-/* The API origin and the pull request number both route-helper families build their URLs from.
- * Stated here for the same reason as the statuses: the two families build the same
- * /repos/{owner}/{repo}/pulls/{n} routes from their own fixture values, and a URL they disagree
- * about is an unplanned request in whichever suite was not updated. */
-export const BASE = "https://api.github.com";
-export const PULL_NUMBER = 5;
-/* GET /app takes no parameter, so its URL is the same one for every fixture repository and
- * installation — which is why it is stated here rather than once per route-helper family. */
-export const APP_URL = `${BASE}/app`;
-/** The installation-token route, whose path the §8 attribution of a token failure is matched on. */
-export function tokenUrl(installationId: number): string {
-	return `${BASE}/app/installations/${installationId}/access_tokens`;
-}
-/* The per-PR route template, stated here for the same reason: both families plan their routes on
- * `/repos/{owner}/{repo}/pulls/{n}`, so a template stated per family is one they can disagree
- * about — and the disagreement surfaces as an unplanned request in whichever suite was not
- * updated, which reads as a routing bug rather than as a stale route helper. */
-export function pullRequestUrl(target: {
-	readonly owner: string;
-	readonly repo: string;
-	readonly suffix?: string;
-}): string {
-	return `${BASE}/repos/${target.owner}/${target.repo}/pulls/${PULL_NUMBER}${target.suffix ?? ""}`;
-}
-/* The page size src/github.ts asks the two paginated list endpoints for: the query every list route
- * carries, and the length of a page that is full — which is what makes pagination follow the link
- * header — so the two are one value rather than a query string and a count that can disagree. */
-export const PAGE_SIZE = 100;
-export const PAGE_QUERY = `?per_page=${PAGE_SIZE}`;
-/* The route templates SPEC.md §8's `endpoint` names, which is the vocabulary an operator greps: one
- * suite drives the call that raises them (github.test.ts, client.test.ts) and another the log entry
- * they end up in (pipeline-failures.test.ts), so a template stated per suite is one that can be
- * corrected in the one that fails and left wrong in the one that still passes. */
-export const APP_ENDPOINT = "GET /app";
-export const TOKEN_ENDPOINT = "POST /app/installations/{installation_id}/access_tokens";
-export const COMMITS_ENDPOINT = "GET /repos/{owner}/{repo}/pulls/{pull_number}/commits";
-export const REVIEW_POST_ENDPOINT = "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews";
-/**
- * The headers GitHub sends on a refused call, which SPEC.md §8 logs alongside the status. Shared by
- * the suite that drives the mapping (client.test.ts) and the one that drives the log entry it ends
- * up in (pipeline-failures.test.ts): the §8 diagnostics set stated twice is a set that can be
- * extended in one suite and asserted in the other without either failing.
- */
-export const REFUSAL_HEADERS = {
-	"x-accepted-github-permissions": "pull_requests=write",
-	"x-github-request-id": "F1E2:3D4C",
-	"x-ratelimit-remaining": "0",
-	"x-ratelimit-reset": "1770000000",
-};
 
 export interface PlannedRoute {
 	readonly body: string;
@@ -179,25 +125,6 @@ export function jsonRoute(route: {
 		status: route.status,
 		url: route.url,
 	};
-}
-
-/** A 200 GET route, which is what every route the suites plan for a read is. */
-export function getRoute(url: string, payload: unknown): PlannedRoute {
-	return jsonRoute({ method: "GET", payload, status: HTTP_OK, url });
-}
-
-/**
- * The installation token the auth strategy issues lazily inside whichever
- * installation-authed call runs first. The expiry is far enough out that the
- * strategy never treats the stub token as stale.
- */
-export function tokenRoute(route: { readonly token: string; readonly url: string }): PlannedRoute {
-	return jsonRoute({
-		method: "POST",
-		payload: { expires_at: "2126-01-01T00:00:00Z", token: route.token },
-		status: HTTP_CREATED,
-		url: route.url,
-	});
 }
 
 /** The recorded request for a planned URL; absence is a test-setup failure, not an assertion. */

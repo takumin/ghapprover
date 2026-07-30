@@ -5,22 +5,26 @@
  * call that fails becomes is asserted in test/api-error.test.ts.
  */
 
-import { APP_URL, JWT_PATTERN, PULL_NUMBER, installFetchMock, requestByUrl } from "./fetch-stub";
 import {
-	FULL_PAGE,
+	APP_URL,
+	COMMITS_SUFFIX,
+	JWT_PATTERN,
+	NEXT_PAGE,
+	PULL_NUMBER,
 	REPO,
 	TOKEN,
-	TOKENS_URL,
+	TOKEN_URL,
 	appRoute,
-	commitBody,
+	commitItem,
 	commitPage,
-	commitsUrl,
 	installTokenRoute,
 	linkedRoute,
 	makeClient,
-} from "./github-routes";
+	pullUrl,
+} from "./github-api";
+import { PAGE_SIZE, fetchAppBotLogin, listPullRequestCommits } from "../src/github";
 import { describe, expect, it } from "vitest";
-import { fetchAppBotLogin, listPullRequestCommits } from "../src/github";
+import { installFetchMock, requestByUrl } from "./fetch-stub";
 import type { RecordedRequest } from "./fetch-stub";
 
 describe("client authentication", () => {
@@ -36,10 +40,10 @@ describe("client authentication", () => {
 
 	it("authenticates everything else with the installation token", async () => {
 		expect.hasAssertions();
-		const firstUrl = commitsUrl();
+		const firstUrl = pullUrl(COMMITS_SUFFIX);
 		const mock = installFetchMock([
 			installTokenRoute(),
-			linkedRoute({ payload: [commitBody("sha-a")], url: firstUrl }),
+			linkedRoute({ payload: [commitItem({ sha: "sha-a" })], url: firstUrl }),
 		]);
 		await listPullRequestCommits(await makeClient(), REPO, PULL_NUMBER);
 		expect(requestByUrl(mock, firstUrl).headers["authorization"]).toBe(`token ${TOKEN}`);
@@ -62,15 +66,15 @@ describe("delivery deadline", () => {
 	 * pagination follow-up page, which carries no per-call request options. */
 	it("puts the one delivery signal on the token request, the call, and each follow-up page", async () => {
 		expect.hasAssertions();
-		const firstUrl = commitsUrl();
-		const secondUrl = commitsUrl("&page=2");
+		const firstUrl = pullUrl(COMMITS_SUFFIX);
+		const secondUrl = pullUrl(`${COMMITS_SUFFIX}${NEXT_PAGE}`);
 		const mock = installFetchMock([
 			installTokenRoute(),
-			linkedRoute({ next: secondUrl, payload: commitPage(FULL_PAGE, 0), url: firstUrl }),
-			linkedRoute({ payload: [commitBody("sha-tail")], url: secondUrl }),
+			linkedRoute({ next: secondUrl, payload: commitPage(PAGE_SIZE, 0), url: firstUrl }),
+			linkedRoute({ payload: [commitItem({ sha: "sha-tail" })], url: secondUrl }),
 		]);
 		await listPullRequestCommits(await makeClient(), REPO, PULL_NUMBER);
-		expect(mock.requests.map((seen) => seen.url)).toStrictEqual([TOKENS_URL, firstUrl, secondUrl]);
+		expect(mock.requests.map((seen) => seen.url)).toStrictEqual([TOKEN_URL, firstUrl, secondUrl]);
 		const signals = mock.requests.map((seen) => dispatchedSignal(seen));
 		expect(new Set(signals).size).toBe(1);
 	});

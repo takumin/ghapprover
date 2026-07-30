@@ -21,7 +21,9 @@ import { isFailureOn, shapeError, toApiError } from "./api-error";
 import type { GithubClient } from "./client";
 import { safeParse } from "valibot";
 
-const PAGE_SIZE = 100;
+/* The page size every list call asks for. Exported for the suites, which plan their routes on the
+ * query it produces rather than on a page size of their own. */
+export const PAGE_SIZE = 100;
 
 export interface RepoRef {
 	readonly owner: string;

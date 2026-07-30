@@ -1,71 +1,61 @@
 /**
  * One webhook delivery, end to end: the signed request the Worker is handed, the env it runs
- * against, and the planned fetch routes a full run consumes (SPEC.md §4). Shared by the suite that
- * drives the entry point (index.test.ts) and the ones that drive the pipeline behind it
- * (pipeline*.test.ts), so a delivery is built the same way in all of them — a route stated twice
- * is a route that can disagree with itself about what the pipeline actually calls.
+ * against, and the planned routes a full run consumes (SPEC.md §4). Shared by the suite that drives
+ * the entry point (index.test.ts) and the ones that drive the pipeline behind it
+ * (pipeline*.test.ts), so a delivery is built the same way in all of them. The routes themselves are
+ * built from the fixtures in test/github-api.ts, which is what the calls are made against — a route
+ * stated twice is a route that can disagree with itself about what the pipeline actually calls.
  */
 
-import { APP_BOT, APP_SLUG, OCTO, ORG } from "./accounts";
+import { APP_BOT, ORG, OWNER, REPOSITORY, repositoryOwnedBy } from "./accounts";
 import {
-	APP_URL,
-	BASE,
-	HTTP_NOT_FOUND,
-	HTTP_OK,
-	PAGE_QUERY,
+	APP_ID,
+	COMMITS_SUFFIX,
+	HEAD_SHA,
+	INSTALLATION_ID,
 	PULL_NUMBER,
+	REVIEWS_SUFFIX,
+	appRoute,
+	commitItem,
 	getRoute,
-	jsonRoute,
-	pullRequestUrl,
-	tokenRoute,
-	tokenUrl,
-} from "./fetch-stub";
+	installTokenRoute,
+	membershipUrl,
+	pullUrl,
+} from "./github-api";
+import { HTTP_NOT_FOUND, HTTP_OK, jsonRoute } from "./fetch-stub";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { expect, onTestFinished, vi } from "vitest";
+import worker, { MAX_BODY_BYTES } from "../src/index";
 import type { GithubAccount } from "../src/types";
 import type { MockInstance } from "vitest";
 import type { PlannedRoute } from "./fetch-stub";
 import { privateKeyPemOnce } from "./app-key";
 import { sign } from "@octokit/webhooks-methods";
-import worker from "../src/index";
 
-/** One byte past GitHub's 25 MB webhook payload cap. */
-export const OVERSIZED_BODY_BYTES = 26_214_401;
+/** One byte past the cap the Worker enforces, taken from the cap itself (SPEC.md §9). */
+export const OVERSIZED_BODY_BYTES = MAX_BODY_BYTES + 1;
 
 export const WEBHOOK_URL = "http://example.com/webhook";
 export const SECRET = "test-secret";
 export const DELIVERY_ID = "delivery-42";
-export const HEAD_SHA = "head-sha";
-const INSTALLATION_ID = 67_890;
-const INSTALL_TOKEN = "install-token";
-/** The repository every payload fixture is for; the routes below are the calls made against it. */
-const REPO_NAME = "hello";
-export const TOKEN_URL = tokenUrl(INSTALLATION_ID);
-/* Every route below is planned for the same account fixture the payload names, rather than for a
- * login repeated beside it: the two are one choice per case, and a route spelled as its own literal
- * is one that keeps passing after the fixture it was meant for was renamed — as the stub's
- * "unplanned request", which reads as a routing bug rather than as a stale fixture. */
-export const membershipUrl = (member: GithubAccount): string =>
-	`${BASE}/orgs/${ORG.login}/memberships/${member.login}`;
-export const COMMITS_SUFFIX = `/commits${PAGE_QUERY}`;
-const REVIEWS_SUFFIX = `/reviews${PAGE_QUERY}`;
+/* Every route is planned for the account fixture the payload names, rather than for a login repeated
+ * beside it: the two are one choice per case, and a route spelled as its own literal is one that
+ * keeps passing after the fixture it was meant for was renamed. */
+export function memberUrl(member: GithubAccount): string {
+	return membershipUrl(ORG.login, member.login);
+}
 
-/** The owner of the repository every payload fixture is for, and of the pull request its routes serve. */
-export const OWNER = OCTO;
 export const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT };
 
 /** The env a delivery runs against; a case about the configuration itself overrides the one secret it is about. */
 export async function makeEnv(overrides: Partial<Env> = {}): Promise<Env> {
 	const env: Env = {
-		GITHUB_APP_ID: "12345",
+		GITHUB_APP_ID: APP_ID,
 		GITHUB_APP_PRIVATE_KEY: await privateKeyPemOnce(),
 		GITHUB_WEBHOOK_SECRET: SECRET,
 	};
 	return Object.assign(env, overrides);
 }
-
-/** The base repository id; the head repo defaults to the same one, so PRs are not forks. */
-export const REPO_ID = 555;
 
 interface PayloadOverrides {
 	readonly action?: string;
@@ -85,7 +75,8 @@ export function buildPayload(overrides: PayloadOverrides = {}): string {
 		action = "opened",
 		commits = 1,
 		draft = false,
-		headRepo = { id: REPO_ID },
+		/** The head repo defaults to the fixture repository itself, so a PR is not a fork. */
+		headRepo = { id: REPOSITORY.id },
 		headSha = HEAD_SHA,
 		installation = { id: INSTALLATION_ID },
 		repoOwner = OWNER,
@@ -103,68 +94,37 @@ export function buildPayload(overrides: PayloadOverrides = {}): string {
 			state,
 			user,
 		},
-		repository: {
-			full_name: `${repoOwner.login}/${REPO_NAME}`,
-			id: REPO_ID,
-			name: REPO_NAME,
-			owner: repoOwner,
-		},
+		repository: repositoryOwnedBy(repoOwner),
 	});
 }
 
-interface CommitOverrides {
-	readonly author?: GithubAccount;
-	readonly committer?: GithubAccount;
-	readonly verified?: boolean;
-}
-
-export function commitItem(overrides: CommitOverrides = {}): Record<string, unknown> {
-	const { author = OWNER, committer = OWNER, verified = true } = overrides;
-	return { author, commit: { verification: { verified } }, committer, sha: HEAD_SHA };
-}
-
-export function pullsUrl(suffix: string, owner: GithubAccount = OWNER): string {
-	return pullRequestUrl({ owner: owner.login, repo: REPO_NAME, suffix });
-}
-
-export function installTokenRoute(): PlannedRoute {
-	return tokenRoute({ token: INSTALL_TOKEN, url: TOKEN_URL });
-}
-export function appRoute(): PlannedRoute {
-	return getRoute(APP_URL, { slug: APP_SLUG });
-}
 /** The two membership answers §3.1 turns on: an active admin, or the 404 that means "not a member". */
 export function membershipAdminRoute(member: GithubAccount): PlannedRoute {
-	return jsonRoute({
-		method: "GET",
-		payload: { role: "admin", state: "active" },
-		status: HTTP_OK,
-		url: membershipUrl(member),
-	});
+	return getRoute(memberUrl(member), { role: "admin", state: "active" });
 }
 export function membershipMissingRoute(member: GithubAccount): PlannedRoute {
 	return jsonRoute({
 		method: "GET",
 		payload: { message: "Not Found" },
 		status: HTTP_NOT_FOUND,
-		url: membershipUrl(member),
+		url: memberUrl(member),
 	});
 }
 export function commitsRouteFor(commits: unknown, owner: GithubAccount = OWNER): PlannedRoute {
-	return getRoute(pullsUrl(COMMITS_SUFFIX, owner), commits);
+	return getRoute(pullUrl(COMMITS_SUFFIX, owner.login), commits);
 }
 export function reviewsRouteFor(reviews: unknown, owner: GithubAccount = OWNER): PlannedRoute {
-	return getRoute(pullsUrl(REVIEWS_SUFFIX, owner), reviews);
+	return getRoute(pullUrl(REVIEWS_SUFFIX, owner.login), reviews);
 }
 function liveRouteFor(sha: string, owner: GithubAccount): PlannedRoute {
-	return getRoute(pullsUrl("", owner), { draft: false, head: { sha }, state: "open" });
+	return getRoute(pullUrl("", owner.login), { draft: false, head: { sha }, state: "open" });
 }
 export function reviewPostRouteFor(status: number, owner: GithubAccount = OWNER): PlannedRoute {
 	return jsonRoute({
 		method: "POST",
 		payload: { id: 1 },
 		status,
-		url: pullsUrl("/reviews", owner),
+		url: pullUrl("/reviews", owner.login),
 	});
 }
 
