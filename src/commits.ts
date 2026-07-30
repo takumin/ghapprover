@@ -72,32 +72,18 @@ export function checkCommitCount(
 /* What §3.2 can settle about one commit, as opposed to about the list (the count problems above).
  * Each check below is typed by what it can actually return, so narrowing one is a local change. */
 export type CommitProblem = "untrusted-commit" | "unverified-commit";
-/* The trust half of §3.2: every principal the commit needs must be trusted. The caller derives
- * them once with commitPrincipals — the single source of which those are, the web-flow committer
- * exemption included — and supplies the lookup as isTrusted, which the loop below both runs and
- * decides on, so the accounts looked up and the accounts checked cannot diverge. It stops at the
- * first untrusted principal: a further lookup could not change this commit's outcome, and a
- * delivery that ends in a skip must not burst one lookup per principal against the Worker
- * subrequest allowance or GitHub's secondary rate limits. */
-async function checkCommitTrust(
-	principals: readonly GithubAccount[],
-	isTrusted: (account: GithubAccount) => Promise<boolean>,
-): Promise<"untrusted-commit" | null> {
-	for (const account of principals) {
-		if (!(await isTrusted(account))) {
-			return "untrusted-commit";
-		}
-	}
-	return null;
-}
-
 /* SPEC.md §3.2 for one commit, in the order the checks must run: the signature, then the principals
  * the payload has to map at all, then their trust. Both directions of that order are load-bearing —
  * what a commit can be settled by without a lookup comes first, so no membership lookup is spent on
  * a commit that fails either, and the web-flow committer exemption commitPrincipals applies is only
  * safe once the signature check has run, genuine web-flow commits being GitHub-signed. Stated in
  * this one frame, so a caller cannot compose the checks in an order that gets it wrong — and the
- * two guards are what let commitPrincipals take its principals as mapped accounts. */
+ * two guards are what let commitPrincipals take its principals as mapped accounts.
+ * The trust walk runs the injected lookup and decides on it in the same loop, so the accounts looked
+ * up and the accounts checked cannot diverge, and it stops at the first untrusted principal: a
+ * further lookup could not change this commit's outcome, and a delivery that ends in a skip must not
+ * burst one lookup per principal against the Worker subrequest allowance or GitHub's secondary rate
+ * limits. */
 export async function checkCommit(
 	entry: PullRequestCommit,
 	isTrusted: (account: GithubAccount) => Promise<boolean>,
@@ -110,7 +96,12 @@ export async function checkCommit(
 	if (author === null || committer === null) {
 		return "untrusted-commit";
 	}
-	return checkCommitTrust(commitPrincipals(author, committer), isTrusted);
+	for (const account of commitPrincipals(author, committer)) {
+		if (!(await isTrusted(account))) {
+			return "untrusted-commit";
+		}
+	}
+	return null;
 }
 /* SPEC.md §3.2 for the whole list, in commit order: checkCommit settles one commit (spending a
  * lookup only on what it cannot settle without one), and the first failing commit ends the loop for
