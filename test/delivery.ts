@@ -149,7 +149,7 @@ export function reviewsRouteFor(owner: string, reviews: unknown): PlannedRoute {
 function liveRouteFor(owner: string, sha: string): PlannedRoute {
 	return getRoute(pullsUrl(owner, ""), { draft: false, head: { sha }, state: "open" });
 }
-export function reviewPostRoute(owner: string, status: number): PlannedRoute {
+export function reviewPostRouteFor(owner: string, status: number): PlannedRoute {
 	return jsonRoute({
 		method: "POST",
 		payload: { id: 1 },
@@ -180,7 +180,7 @@ export function happyRoutes(): PlannedRoute[] {
 	return [
 		installTokenRoute(),
 		...pipelineRoutes({ commits: [commitItem()], owner: "octo", reviews: [] }),
-		reviewPostRoute("octo", HTTP_OK),
+		reviewPostRouteFor("octo", HTTP_OK),
 	];
 }
 

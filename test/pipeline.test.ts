@@ -25,7 +25,7 @@ import {
 	pipelineRoutes,
 	postSigned,
 	pullsUrl,
-	reviewPostRoute,
+	reviewPostRouteFor,
 	reviewsRouteFor,
 } from "./delivery";
 import { AUTOFIX_CI, ORG, RENOVATE, WEB_FLOW_USER } from "./accounts";
@@ -115,7 +115,7 @@ describe("author trust", () => {
 			installTokenRoute(),
 			membershipAdminRoute("octo"),
 			...pipelineRoutes({ commits: [commitItem()], owner: "acme", reviews: [] }),
-			reviewPostRoute("acme", HTTP_OK),
+			reviewPostRouteFor("acme", HTTP_OK),
 		]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
 		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
@@ -142,7 +142,7 @@ describe("author trust", () => {
 				owner: "octo",
 				reviews: [],
 			}),
-			reviewPostRoute("octo", HTTP_OK),
+			reviewPostRouteFor("octo", HTTP_OK),
 		]);
 		const response = await postSigned(buildPayload({ user: RENOVATE }));
 		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
@@ -166,7 +166,7 @@ describe("autofix.ci commits", () => {
 				owner: "octo",
 				reviews: [],
 			}),
-			reviewPostRoute("octo", HTTP_OK),
+			reviewPostRouteFor("octo", HTTP_OK),
 		]);
 		const response = await postSigned(buildPayload({ commits: 2, user: RENOVATE }));
 		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
@@ -217,7 +217,7 @@ describe("live state checks", () => {
 		const session = installFetchMock([
 			installTokenRoute(),
 			...pipelineRoutes({ commits: [commitItem()], owner: "octo", reviews: [] }),
-			reviewPostRoute("octo", HTTP_UNPROCESSABLE_ENTITY),
+			reviewPostRouteFor("octo", HTTP_UNPROCESSABLE_ENTITY),
 		]);
 		const response = await postSigned(buildPayload());
 		await expectReply(response, {
