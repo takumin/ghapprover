@@ -9,9 +9,7 @@
 import { HTTP_OK, installFetchMock } from "./fetch-stub";
 import { ORG, RENOVATE, RENOVATE_WRONG_ID, WEB_FLOW_USER } from "./accounts";
 import {
-	OTHER_STRANGER,
 	OWNER,
-	STRANGER,
 	buildPayload,
 	commitItem,
 	commitsRouteFor,
@@ -23,7 +21,15 @@ import {
 	postSigned,
 } from "./delivery";
 import { describe, expect, it } from "vitest";
+import type { GithubAccount } from "../src/types";
 import { MAX_VERIFIABLE_COMMITS } from "../src/commits";
+
+/* Two ordinary untrusted commit principals, stated here rather than with the shared account
+ * fixtures: this is the only suite that needs them, and what it needs of them is that they are two
+ * distinct accounts neither trusted nor each other — which is a fact about these cases, not a
+ * standing any other suite reasons about. */
+const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User" };
+const OTHER_STRANGER: GithubAccount = { id: 998, login: "eve", type: "User" };
 
 describe("commit conditions", () => {
 	/** What the declared count alone settles (SPEC.md §3.2), which is why neither row plans a route. */
