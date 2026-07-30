@@ -8,6 +8,7 @@
  */
 
 import type { GenericSchema, InferOutput } from "valibot";
+import { HTTP_NOT_FOUND, HTTP_OK, HTTP_UNPROCESSABLE_ENTITY } from "./http-status";
 import type { LivePullRequest, OrgMembership, PullRequestCommit, PullRequestReview } from "./types";
 import {
 	appSchema,
@@ -21,10 +22,6 @@ import type { GithubClient } from "./client";
 import { safeParse } from "valibot";
 
 const PAGE_SIZE = 100;
-/** Item shape errors surface after a successful page, so they carry 200. */
-const HTTP_OK = 200;
-const HTTP_NOT_FOUND = 404;
-const HTTP_UNPROCESSABLE_ENTITY = 422;
 
 export interface RepoRef {
 	readonly owner: string;
@@ -97,6 +94,7 @@ async function listPullRequestItems<Schema extends GenericSchema>(
 			pull_number: pullNumber,
 			repo: repo.repo,
 		});
+		/* Item shape errors surface after a successful page, so they carry 200. */
 		return items.map((item) => parseContract(itemSchema, item, { endpoint, status: HTTP_OK }));
 	} catch (error) {
 		throw toApiError(endpoint, error);

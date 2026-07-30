@@ -9,13 +9,14 @@
 
 import type { ApiDiagnostics, GithubApiError } from "./api-error";
 import type { CommitCountProblem, CommitListProblem, CommitProblem } from "./commits";
+import {
+	HTTP_INTERNAL_ERROR,
+	HTTP_NOT_FOUND,
+	HTTP_OK,
+	HTTP_PAYLOAD_TOO_LARGE,
+	HTTP_UNAUTHORIZED,
+} from "./http-status";
 import type { PrStateProblem } from "./decision";
-
-const HTTP_OK = 200;
-const HTTP_UNAUTHORIZED = 401;
-const HTTP_NOT_FOUND = 404;
-const HTTP_PAYLOAD_TOO_LARGE = 413;
-const HTTP_INTERNAL_ERROR = 500;
 
 /**
  * SPEC.md §8's reason vocabulary, closed rather than illustrative because it is
