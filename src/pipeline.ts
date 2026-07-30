@@ -6,6 +6,7 @@
  * that decide what an outcome can say.
  */
 
+import type { ApprovalTarget, RepoRef } from "./github";
 import type {
 	CommitCountProblem,
 	CommitListProblem,
@@ -34,7 +35,6 @@ import {
 	listPullRequestReviews,
 } from "./github";
 import type { GithubClient } from "./client";
-import type { RepoRef } from "./github";
 import { createGithubClient } from "./client";
 
 const HTTP_OK = 200;
@@ -97,12 +97,6 @@ export interface Outcome {
 
 /** Resolves one account's §3.1 trust, memoized per delivery; see createTrustResolver. */
 type TrustResolver = (user: GithubAccount) => Promise<boolean>;
-
-interface ReviewTarget {
-	readonly headSha: string;
-	readonly pullNumber: number;
-	readonly repo: RepoRef;
-}
 
 export function skippedOutcome(reason: Reason): Outcome {
 	return { decision: "skipped", httpStatus: HTTP_OK, reason };
@@ -186,13 +180,13 @@ async function evaluateConditions(
 }
 
 /** SPEC.md §4 steps 7-8: the live TOCTOU check (§3.3), then the review POST. */
-async function submitApproval(client: GithubClient, target: ReviewTarget): Promise<Outcome> {
-	const { headSha, pullNumber, repo } = target;
+async function submitApproval(client: GithubClient, target: ApprovalTarget): Promise<Outcome> {
+	const { commitId, pullNumber, repo } = target;
 	const live = await fetchPullRequest(client, repo, pullNumber);
-	if (!isLiveStateCurrent(live, headSha)) {
+	if (!isLiveStateCurrent(live, commitId)) {
 		return skippedOutcome("head-moved");
 	}
-	const posted = await createApprovalReview(client, { commitId: headSha, pullNumber, repo });
+	const posted = await createApprovalReview(client, target);
 	if (posted === "rejected") {
 		return skippedOutcome("review-rejected");
 	}
@@ -203,8 +197,8 @@ async function approvePullRequest(
 	payload: PullRequestEventPayload,
 	client: GithubClient,
 ): Promise<Outcome> {
-	const target: ReviewTarget = {
-		headSha: payload.pull_request.head.sha,
+	const target: ApprovalTarget = {
+		commitId: payload.pull_request.head.sha,
 		pullNumber: payload.pull_request.number,
 		repo: repoRef(payload),
 	};
@@ -216,7 +210,7 @@ async function approvePullRequest(
 		fetchAppBotLogin(client),
 		listPullRequestReviews(client, target.repo, target.pullNumber),
 	]);
-	if (hasOwnApproval(reviews, botLogin, target.headSha)) {
+	if (hasOwnApproval(reviews, botLogin, target.commitId)) {
 		return skippedOutcome("already-approved");
 	}
 	return submitApproval(client, target);

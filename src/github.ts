@@ -168,7 +168,7 @@ export async function fetchPullRequest(
 	}
 }
 
-/** The pull request and head commit one approval review is anchored to. */
+/** The pull request and head commit one approval review is anchored to, and the caller's §3.3 live check compares against. */
 export interface ApprovalTarget {
 	readonly commitId: string;
 	readonly pullNumber: number;
