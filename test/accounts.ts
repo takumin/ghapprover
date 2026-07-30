@@ -58,26 +58,25 @@ export const APP_SLUG = "ghapprover";
  */
 export const APP_BOT: GithubAccount = { id: 201, login: `${APP_SLUG}[bot]`, type: "Bot" };
 
-/** The repository owner the payload fixtures are built around. */
-export const OCTOCAT: GithubAccount = { id: 77, login: "octocat", type: "User" };
 /**
- * The repository those fixtures are for, stated with its owner rather than beside it: the suite
- * that drives the payload schema (payload.test.ts) and the one that drives the §3 conditions
- * evaluated against it (decision.test.ts) both build it, so a field the schema gains has to reach
- * both — two declarations can disagree about the modeled repository and both still pass.
- */
-export const WIDGETS_REPO: EventRepository = {
-	full_name: `${OCTOCAT.login}/widgets`,
-	id: 555,
-	name: "widgets",
-	owner: OCTOCAT,
-};
-/**
- * The owner of the fixture repository every GitHub call is made against (test/github-api.ts): the
- * delivery suites approve its pull request and the endpoint suites serve it as a commit and review
- * author, so all of them must mean one account by it.
+ * The owner of the fixture repository below: the delivery suites approve its pull request, the
+ * endpoint suites serve it as a commit and review author, and the §3.1 cases decide on it as the
+ * personal-repository owner, so all of them must mean one account by it.
  */
 export const OWNER: GithubAccount = { id: 7, login: "octo", type: "User" };
+export const REPO_NAME = "hello";
+/**
+ * The one repository every suite is about, as an event payload carries it, stated with its owner
+ * rather than beside it — under the owner a case gives it, because a repository owned by an
+ * organization is what sends §3.1 through the membership API. The suite that drives the payload
+ * schema (payload.test.ts), the one that drives the §3 conditions evaluated against it
+ * (decision.test.ts) and the delivery suites that serve its API calls (test/github-api.ts) all build
+ * it here: a second declaration can disagree about the modeled repository and both still pass.
+ */
+export function repositoryOwnedBy(owner: GithubAccount = OWNER): EventRepository {
+	return { full_name: `${owner.login}/${REPO_NAME}`, id: 555, name: REPO_NAME, owner };
+}
+export const REPOSITORY: EventRepository = repositoryOwnedBy();
 /**
  * The organization every §3.1 org-branch case is owned by: the unit suite that drives
  * classifyPrincipal and the delivery suites that serve the membership lookup it defers to have to

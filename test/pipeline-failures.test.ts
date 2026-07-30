@@ -33,8 +33,8 @@ import {
 	installFetchMock,
 	jsonRoute,
 } from "./fetch-stub";
+import { ORG, REPOSITORY } from "./accounts";
 import { describe, expect, it } from "vitest";
-import { ORG } from "./accounts";
 import type { PlannedRoute } from "./fetch-stub";
 
 /** What the auth library says about that key, and what §8's errorMessage exists to carry into the entry. */
@@ -190,7 +190,7 @@ describe("api failure diagnostics", () => {
 			headSha: HEAD_SHA,
 			prNumber: PULL_NUMBER,
 			reason: "github-api-error",
-			repo: "octo/hello",
+			repo: REPOSITORY.full_name,
 			status: 0,
 		});
 		session.assertDone();

@@ -7,7 +7,7 @@
  * never rides along with the path (§8 warning).
  */
 
-import { HUMAN, OCTOCAT, WIDGETS_REPO } from "./accounts";
+import { HUMAN, OWNER, REPOSITORY } from "./accounts";
 import { describe, expect, it } from "vitest";
 import type { PullRequestEventPayload } from "../src/types";
 import { parsePullRequestEvent } from "../src/payload";
@@ -21,12 +21,12 @@ function expectedPayload(): PullRequestEventPayload {
 		pull_request: {
 			commits: 3,
 			draft: false,
-			head: { repo: { id: WIDGETS_REPO.id }, sha: HEAD_SHA },
+			head: { repo: { id: REPOSITORY.id }, sha: HEAD_SHA },
 			number: 42,
 			state: "open",
-			user: OCTOCAT,
+			user: OWNER,
 		},
-		repository: WIDGETS_REPO,
+		repository: REPOSITORY,
 	};
 }
 
@@ -116,7 +116,7 @@ const MALFORMED_PAYLOADS = [
 	{
 		field: "pull_request.head.sha",
 		name: "head sha missing",
-		payload: pr({ head: { repo: { id: 555 } } }),
+		payload: pr({ head: { repo: { id: REPOSITORY.id } } }),
 	},
 	{
 		field: "pull_request.head.repo",
@@ -133,25 +133,25 @@ const MALFORMED_PAYLOADS = [
 		name: "repository missing",
 		payload: { action: "opened", pull_request: expectedPayload().pull_request },
 	},
+	/* The repository rows break the fixture repository rather than restating one of their own, so
+	 * each states only the field it is about. */
 	{
 		field: "repository.owner.id",
 		name: "repository owner id missing",
 		payload: merged(expectedPayload(), {
-			repository: { full_name: "o/w", id: 555, name: "w", owner: { login: "o", type: "User" } },
+			repository: merged(REPOSITORY, { owner: { login: OWNER.login, type: OWNER.type } }),
 		}),
 	},
 	{
 		field: "repository.full_name",
 		name: "full_name not a string",
-		payload: merged(expectedPayload(), {
-			repository: { full_name: 7, id: 555, name: "w", owner: OCTOCAT },
-		}),
+		payload: merged(expectedPayload(), { repository: merged(REPOSITORY, { full_name: 7 }) }),
 	},
 	{
 		field: "repository.id",
 		name: "repository id missing",
 		payload: merged(expectedPayload(), {
-			repository: { full_name: "o/w", name: "w", owner: OCTOCAT },
+			repository: { full_name: REPOSITORY.full_name, name: REPOSITORY.name, owner: OWNER },
 		}),
 	},
 ];

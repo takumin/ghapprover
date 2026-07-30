@@ -7,14 +7,13 @@
  * stated twice is a route that can disagree with itself about what the pipeline actually calls.
  */
 
-import { APP_BOT, ORG, OWNER } from "./accounts";
+import { APP_BOT, ORG, OWNER, REPOSITORY, repositoryOwnedBy } from "./accounts";
 import {
 	APP_ID,
 	COMMITS_SUFFIX,
 	HEAD_SHA,
 	INSTALLATION_ID,
 	PULL_NUMBER,
-	REPO_NAME,
 	REVIEWS_SUFFIX,
 	appRoute,
 	commitItem,
@@ -60,9 +59,6 @@ export async function makeEnv(overrides: Partial<Env> = {}): Promise<Env> {
 	return Object.assign(env, overrides);
 }
 
-/** The base repository id; the head repo defaults to the same one, so PRs are not forks. */
-export const REPO_ID = 555;
-
 interface PayloadOverrides {
 	readonly action?: string;
 	readonly commits?: number;
@@ -81,7 +77,8 @@ export function buildPayload(overrides: PayloadOverrides = {}): string {
 		action = "opened",
 		commits = 1,
 		draft = false,
-		headRepo = { id: REPO_ID },
+		/** The head repo defaults to the fixture repository itself, so a PR is not a fork. */
+		headRepo = { id: REPOSITORY.id },
 		headSha = HEAD_SHA,
 		installation = { id: INSTALLATION_ID },
 		repoOwner = OWNER,
@@ -99,12 +96,7 @@ export function buildPayload(overrides: PayloadOverrides = {}): string {
 			state,
 			user,
 		},
-		repository: {
-			full_name: `${repoOwner.login}/${REPO_NAME}`,
-			id: REPO_ID,
-			name: REPO_NAME,
-			owner: repoOwner,
-		},
+		repository: repositoryOwnedBy(repoOwner),
 	});
 }
 

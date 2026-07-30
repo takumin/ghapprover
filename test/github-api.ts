@@ -9,7 +9,7 @@
  * test/delivery.ts; the stub that serves them is test/fetch-stub.ts.
  */
 
-import { APP_SLUG, HUMAN, ORG, OWNER } from "./accounts";
+import { APP_SLUG, HUMAN, ORG, OWNER, REPOSITORY } from "./accounts";
 import type { ApprovalTarget, RepoRef } from "../src/github";
 import { HTTP_CREATED, HTTP_OK, jsonRoute } from "./fetch-stub";
 import type { GithubAccount } from "../src/types";
@@ -86,9 +86,8 @@ export function appRoute(payload: unknown = APP_BODY): PlannedRoute {
 	return getRoute(APP_URL, payload);
 }
 
-/** The repository every fixture is for, as the GitHub API addresses it. */
-export const REPO_NAME = "hello";
-export const REPO: RepoRef = { owner: OWNER.login, repo: REPO_NAME };
+/** The repository every fixture is for (test/accounts.ts), as the GitHub API addresses it. */
+export const REPO: RepoRef = { owner: REPOSITORY.owner.login, repo: REPOSITORY.name };
 /** The pull request every payload fixture describes and every per-PR route below serves. */
 export const PULL_NUMBER = 5;
 export const HEAD_SHA = "head-sha";

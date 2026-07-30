@@ -18,11 +18,10 @@ import {
 	installTokenRoute,
 	pullUrl,
 } from "./github-api";
-import { AUTOFIX_CI, ORG, OWNER, RENOVATE, WEB_FLOW_USER } from "./accounts";
+import { AUTOFIX_CI, ORG, OWNER, RENOVATE, REPOSITORY, WEB_FLOW_USER } from "./accounts";
 import {
 	DELIVERY_ID,
 	OWN_APPROVAL,
-	REPO_ID,
 	buildPayload,
 	captureLog,
 	commitsRouteFor,
@@ -51,7 +50,7 @@ describe("pull request state", () => {
 		},
 		{
 			name: "a fork pull request",
-			overrides: { headRepo: { id: REPO_ID + 1 } },
+			overrides: { headRepo: { id: REPOSITORY.id + 1 } },
 			reason: "head-repo-forked",
 		},
 	])("skips $name without dispatching a single call", async ({ overrides, reason }) => {
@@ -100,7 +99,7 @@ describe("owner approval flow", () => {
 				deliveryId: DELIVERY_ID,
 				headSha: HEAD_SHA,
 				prNumber: PULL_NUMBER,
-				repo: "octo/hello",
+				repo: REPOSITORY.full_name,
 			}),
 		);
 	});
