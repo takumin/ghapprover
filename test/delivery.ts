@@ -6,7 +6,7 @@
  * is a route that can disagree with itself about what the pipeline actually calls.
  */
 
-import { APP_BOT, OCTO, ORG } from "./accounts";
+import { APP_BOT, APP_SLUG, OCTO, ORG } from "./accounts";
 import {
 	APP_URL,
 	BASE,
@@ -38,7 +38,6 @@ export const DELIVERY_ID = "delivery-42";
 export const HEAD_SHA = "head-sha";
 const INSTALLATION_ID = 67_890;
 const INSTALL_TOKEN = "install-token";
-const APP_SLUG = "ghapprover";
 /** The repository every payload fixture is for; the routes below are the calls made against it. */
 const REPO_NAME = "hello";
 export const TOKEN_URL = tokenUrl(INSTALLATION_ID);

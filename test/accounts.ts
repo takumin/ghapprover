@@ -47,13 +47,16 @@ export const WEB_FLOW_USER: GithubAccount = {
 /** Same login, different account: the committer exemption must not fire on the login alone. */
 export const WEB_FLOW_LOOKALIKE: GithubAccount = { id: 999, login: WEB_FLOW.login, type: "User" };
 
+/** The slug GET /app serves for this App, which the delivery route fixtures answer with. */
+export const APP_SLUG = "ghapprover";
 /**
- * The App's own bot user (SPEC.md §3 cond. 5): the login GET /app derives from the "ghapprover"
- * slug the route fixtures serve. Stated once because both the unit suite that drives
- * hasOwnApproval and the delivery suites that serve its own approval as a review have to mean the
- * same account by it — two declarations could disagree and both still pass.
+ * The App's own bot user (SPEC.md §3 cond. 5), its login derived from that slug by the same
+ * `<slug>[bot]` rule src/github.ts applies rather than spelled again — a login stated on its own
+ * would go stale when the slug the routes serve changes, and the already-approved case would
+ * silently stop matching. Stated once because both the unit suite that drives hasOwnApproval and
+ * the delivery suites that serve its own approval as a review have to mean the same account by it.
  */
-export const APP_BOT: GithubAccount = { id: 201, login: "ghapprover[bot]", type: "Bot" };
+export const APP_BOT: GithubAccount = { id: 201, login: `${APP_SLUG}[bot]`, type: "Bot" };
 
 /** The repository owner the payload fixtures are built around. */
 export const OCTOCAT: GithubAccount = { id: 77, login: "octocat", type: "User" };
