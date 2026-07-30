@@ -121,51 +121,44 @@ const COMMIT_COUNT_CASES: readonly CommitCountCase[] = [
 	{ declared: 2, expected: null, fetched: 2 },
 ];
 
+/* The principals are derived from mapped accounts: an unmapped author or committer is settled by
+ * checkCommit as untrusted-commit before this runs, so there is no null case to state here. */
 describe("commit principal collection", () => {
 	it.each([
 		{
-			entry: commit({ author: ALICE, committer: BOB }),
+			author: ALICE,
+			committer: BOB,
 			expected: [ALICE, BOB],
 			name: "a distinct author and committer",
 		},
 		{
-			entry: commit({ author: BOB, committer: BOB }),
+			author: BOB,
+			committer: BOB,
 			expected: [BOB],
 			name: "the author once when the committer repeats it",
 		},
+		{ author: ALICE, committer: WEB_FLOW_USER, expected: [ALICE], name: "no web-flow committer" },
 		{
-			entry: commit({ author: null, committer: null }),
-			expected: [],
-			name: "nothing from unmapped author and committer",
-		},
-		{
-			entry: commit({ author: null, committer: BOB }),
-			expected: [BOB],
-			name: "the committer alone when the author is unmapped",
-		},
-		{
-			entry: commit({ author: ALICE, committer: WEB_FLOW_USER }),
-			expected: [ALICE],
-			name: "no web-flow committer",
-		},
-		{
-			entry: commit({ author: ALICE, committer: WEB_FLOW_LOOKALIKE }),
+			author: ALICE,
+			committer: WEB_FLOW_LOOKALIKE,
 			expected: [ALICE, WEB_FLOW_LOOKALIKE],
 			name: "a web-flow lookalike committer, which must be resolved like any other",
 		},
 		{
-			entry: commit({ author: WEB_FLOW_USER, committer: BOB }),
+			author: WEB_FLOW_USER,
+			committer: BOB,
 			expected: [WEB_FLOW_USER, BOB],
 			name: "web-flow when it is the author",
 		},
 		{
-			entry: commit({ author: ALICE, committer: ALICE_LOOKALIKE }),
+			author: ALICE,
+			committer: ALICE_LOOKALIKE,
 			expected: [ALICE, ALICE_LOOKALIKE],
 			name: "both accounts when the committer only shares the author's login",
 		},
-	])("collects $name", ({ entry, expected }) => {
+	])("collects $name", ({ author, committer, expected }) => {
 		expect.hasAssertions();
-		expect(commitPrincipals(entry)).toStrictEqual(expected);
+		expect(commitPrincipals(author, committer)).toStrictEqual(expected);
 	});
 });
 
