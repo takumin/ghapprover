@@ -20,9 +20,12 @@ import { verifyWebhookSignature } from "./webhook";
  * this Worker could act on. The HMAC covers the raw body, so the body must be
  * buffered before the caller can be authenticated (SPEC.md §4 step 1), and this
  * is the cap on what an unauthenticated caller on the public endpoint can make
- * the Worker hold in memory and hash.
+ * the Worker hold in memory and hash. Exported for the suite that drives the
+ * bound, which states the oversized body as one byte past it rather than as a
+ * literal of its own — a literal would keep passing as a body within the cap if
+ * this changed.
  */
-const MAX_BODY_BYTES = 26_214_400;
+export const MAX_BODY_BYTES = 26_214_400;
 
 function respond(outcome: Outcome): Response {
 	const { decision, httpStatus: status, reason } = outcome;

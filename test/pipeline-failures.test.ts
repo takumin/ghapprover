@@ -35,6 +35,7 @@ import {
 } from "./fetch-stub";
 import { ORG, REPOSITORY } from "./accounts";
 import { describe, expect, it } from "vitest";
+import { MAX_ERROR_MESSAGE_CHARS } from "../src/log";
 import type { PlannedRoute } from "./fetch-stub";
 
 /** What the auth library says about that key, and what §8's errorMessage exists to carry into the entry. */
@@ -129,9 +130,8 @@ describe("github api failures", () => {
 	});
 });
 
-/** SPEC.md §8: the truncation bound, and a message that runs past it. */
-const MESSAGE_LIMIT = 512;
-const OVERLONG_MESSAGE = "boom ".repeat(MESSAGE_LIMIT);
+/** SPEC.md §8: a message that runs past the bound the log entry applies to it. */
+const OVERLONG_MESSAGE = "boom ".repeat(MAX_ERROR_MESSAGE_CHARS);
 
 /** The commits request is where these cases plant the failure: every full run reaches it. */
 function commitsFailureRoute(
@@ -210,7 +210,7 @@ describe("error message bounds", () => {
 		]);
 		await postSigned(buildPayload());
 		expect(logSpy).toHaveBeenCalledWith(
-			expect.objectContaining({ errorMessage: OVERLONG_MESSAGE.slice(0, MESSAGE_LIMIT) }),
+			expect.objectContaining({ errorMessage: OVERLONG_MESSAGE.slice(0, MAX_ERROR_MESSAGE_CHARS) }),
 		);
 		session.assertDone();
 	});

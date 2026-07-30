@@ -10,7 +10,6 @@ import {
 	APP_ENDPOINT,
 	COMMITS_ENDPOINT,
 	COMMITS_SUFFIX,
-	FULL_PAGE,
 	MEMBERSHIP_ORG,
 	MEMBERSHIP_USER,
 	NEXT_PAGE,
@@ -40,6 +39,7 @@ import {
 	requestByUrl,
 } from "./fetch-stub";
 import {
+	PAGE_SIZE,
 	createApprovalReview,
 	fetchAppBotLogin,
 	fetchOrgMembership,
@@ -85,11 +85,11 @@ describe("listPullRequestCommits() pagination", () => {
 		const secondUrl = pullUrl(`${COMMITS_SUFFIX}${NEXT_PAGE}`);
 		const mock = installFetchMock([
 			installTokenRoute(),
-			linkedRoute({ next: secondUrl, payload: commitPage(FULL_PAGE, 0), url: firstUrl }),
-			linkedRoute({ payload: commitPage(SECOND_PAGE_COUNT, FULL_PAGE), url: secondUrl }),
+			linkedRoute({ next: secondUrl, payload: commitPage(PAGE_SIZE, 0), url: firstUrl }),
+			linkedRoute({ payload: commitPage(SECOND_PAGE_COUNT, PAGE_SIZE), url: secondUrl }),
 		]);
 		const commits = await listPullRequestCommits(await makeClient(), REPO, PULL_NUMBER);
-		expect(commits).toHaveLength(FULL_PAGE + SECOND_PAGE_COUNT);
+		expect(commits).toHaveLength(PAGE_SIZE + SECOND_PAGE_COUNT);
 		expect(commits.at(-1)).toMatchObject({ sha: "sha-136" });
 		expect(mock.requests.map((seen) => seen.url)).toStrictEqual([TOKEN_URL, firstUrl, secondUrl]);
 		mock.assertDone();
@@ -187,13 +187,13 @@ describe("listPullRequestReviews()", () => {
 			installTokenRoute(),
 			linkedRoute({
 				next: secondUrl,
-				payload: Array.from({ length: FULL_PAGE }, (_, index) => reviewBody(`rev-${index}`)),
+				payload: Array.from({ length: PAGE_SIZE }, (_, index) => reviewBody(`rev-${index}`)),
 				url: firstUrl,
 			}),
 			linkedRoute({ payload: [reviewBody("rev-tail")], url: secondUrl }),
 		]);
 		const reviews = await listPullRequestReviews(await makeClient(), REPO, PULL_NUMBER);
-		expect(reviews).toHaveLength(FULL_PAGE + 1);
+		expect(reviews).toHaveLength(PAGE_SIZE + 1);
 		expect(mock.requests.map((seen) => seen.url)).toStrictEqual([TOKEN_URL, firstUrl, secondUrl]);
 	});
 

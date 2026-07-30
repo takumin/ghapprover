@@ -14,6 +14,7 @@ import type { ApprovalTarget, RepoRef } from "../src/github";
 import { HTTP_CREATED, HTTP_OK, jsonRoute } from "./fetch-stub";
 import type { GithubAccount } from "../src/types";
 import type { GithubClient } from "../src/client";
+import { PAGE_SIZE } from "../src/github";
 import type { PlannedRoute } from "./fetch-stub";
 import { createGithubClient } from "../src/client";
 import { privateKeyPemOnce } from "./app-key";
@@ -91,10 +92,9 @@ export const REPO: RepoRef = { owner: REPOSITORY.owner.login, repo: REPOSITORY.n
 /** The pull request every payload fixture describes and every per-PR route below serves. */
 export const PULL_NUMBER = 5;
 export const HEAD_SHA = "head-sha";
-/** The page size the list calls ask for, and therefore the query their routes are planned on. */
-export const FULL_PAGE = 100;
-export const COMMITS_SUFFIX = `/commits?per_page=${FULL_PAGE}`;
-export const REVIEWS_SUFFIX = `/reviews?per_page=${FULL_PAGE}`;
+/** The query the paginated routes are planned on, from the page size the calls themselves ask for. */
+export const COMMITS_SUFFIX = `/commits?per_page=${PAGE_SIZE}`;
+export const REVIEWS_SUFFIX = `/reviews?per_page=${PAGE_SIZE}`;
 /** What the link header points the next page at, appended to the suffixes above. */
 export const NEXT_PAGE = "&page=2";
 /* Every per-PR route is built from the repository and pull request the calls are themselves made

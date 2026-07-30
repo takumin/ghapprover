@@ -8,7 +8,6 @@
 import {
 	APP_URL,
 	COMMITS_SUFFIX,
-	FULL_PAGE,
 	JWT_PATTERN,
 	NEXT_PAGE,
 	PULL_NUMBER,
@@ -23,8 +22,8 @@ import {
 	makeClient,
 	pullUrl,
 } from "./github-api";
+import { PAGE_SIZE, fetchAppBotLogin, listPullRequestCommits } from "../src/github";
 import { describe, expect, it } from "vitest";
-import { fetchAppBotLogin, listPullRequestCommits } from "../src/github";
 import { installFetchMock, requestByUrl } from "./fetch-stub";
 import type { RecordedRequest } from "./fetch-stub";
 
@@ -71,7 +70,7 @@ describe("delivery deadline", () => {
 		const secondUrl = pullUrl(`${COMMITS_SUFFIX}${NEXT_PAGE}`);
 		const mock = installFetchMock([
 			installTokenRoute(),
-			linkedRoute({ next: secondUrl, payload: commitPage(FULL_PAGE, 0), url: firstUrl }),
+			linkedRoute({ next: secondUrl, payload: commitPage(PAGE_SIZE, 0), url: firstUrl }),
 			linkedRoute({ payload: [commitItem({ sha: "sha-tail" })], url: secondUrl }),
 		]);
 		await listPullRequestCommits(await makeClient(), REPO, PULL_NUMBER);

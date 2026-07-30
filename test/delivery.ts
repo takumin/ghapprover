@@ -25,15 +25,15 @@ import {
 import { HTTP_NOT_FOUND, HTTP_OK, jsonRoute } from "./fetch-stub";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { expect, onTestFinished, vi } from "vitest";
+import worker, { MAX_BODY_BYTES } from "../src/index";
 import type { GithubAccount } from "../src/types";
 import type { MockInstance } from "vitest";
 import type { PlannedRoute } from "./fetch-stub";
 import { privateKeyPemOnce } from "./app-key";
 import { sign } from "@octokit/webhooks-methods";
-import worker from "../src/index";
 
-/** One byte past GitHub's 25 MB webhook payload cap. */
-export const OVERSIZED_BODY_BYTES = 26_214_401;
+/** One byte past the cap the Worker enforces, taken from the cap itself (SPEC.md §9). */
+export const OVERSIZED_BODY_BYTES = MAX_BODY_BYTES + 1;
 
 export const WEBHOOK_URL = "http://example.com/webhook";
 export const SECRET = "test-secret";
