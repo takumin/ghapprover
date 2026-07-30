@@ -48,7 +48,7 @@ async function evaluateTrust(
 	if (evaluation.kind === "untrusted") {
 		return false;
 	}
-	return isOwnerMembership(await fetchOrgMembership(client, evaluation.org, evaluation.login));
+	return isOwnerMembership(await fetchOrgMembership(client, evaluation.org, user.login));
 }
 /* Memoizes per delivery so each distinct account is looked up at most once (SPEC.md §3.1).
  * The key is the accountKey pair, not the login: evaluateTrust decides on the id as well

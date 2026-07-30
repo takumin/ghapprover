@@ -4,7 +4,7 @@
  * near-miss case exists because trust is decided on the (id, login) pair, never the login alone.
  */
 
-import { AUTOFIX_CI, HUMAN, ORG, OWNER, RENOVATE, RENOVATE_WRONG_ID, allowedBot } from "./accounts";
+import { AUTOFIX_CI, HUMAN, ORG, OWNER, RENOVATE, RENOVATE_WRONG_ID, allowedBot } from "./fixtures";
 import type { GithubAccount, OrgMembership } from "../src/types";
 import { classifyPrincipal, isOwnerMembership } from "../src/decision";
 import { describe, expect, it } from "vitest";
@@ -42,7 +42,7 @@ const CLASSIFY_CASES = [
 		user: OWNER_WRONG_ID,
 	},
 	{
-		expected: { kind: "org-membership", login: OWNER.login, org: ORG.login },
+		expected: { kind: "org-membership", org: ORG.login },
 		name: "a user on an org repository",
 		owner: ORG,
 		user: OWNER,
@@ -96,7 +96,7 @@ const CLASSIFY_CASES = [
 		user: BOT_NAMED_LIKE_OWNER,
 	},
 	{
-		expected: { kind: "org-membership", login: RENOVATE.login, org: ORG.login },
+		expected: { kind: "org-membership", org: ORG.login },
 		name: "a User named like renovate on an org repository",
 		owner: ORG,
 		user: RENOVATE_TYPE_USER,
