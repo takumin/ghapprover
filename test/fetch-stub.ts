@@ -6,21 +6,27 @@
  * carry a JSON content-type (octokit only parses JSON bodies with one) plus
  * any planned extra headers, e.g. the link header pagination follows.
  *
- * The statuses a route is planned with and a response asserted against are stated here too, this
- * being the one module every suite imports: a suite must not pick up a different 403 from whichever
- * helper module it happened to import. What the routes themselves are — the API origin, the fixture
- * repository, and the route templates — is stated in test/github-api.ts.
+ * The statuses a route is planned with and a response asserted against are served from here too,
+ * this being the one module every suite imports: a suite must not pick up a different 403 from
+ * whichever helper module it happened to import. The ones the Worker itself names are re-exported
+ * from src/http-status.ts rather than restated — a suite asserting its own 413 would keep passing
+ * against a Worker that answered another. What the routes themselves are — the API origin, the
+ * fixture repository, and the route templates — is stated in test/github-api.ts.
  */
 import { vi } from "vitest";
 
-export const HTTP_OK = 200;
+export {
+	HTTP_INTERNAL_ERROR,
+	HTTP_NOT_FOUND,
+	HTTP_OK,
+	HTTP_PAYLOAD_TOO_LARGE,
+	HTTP_UNAUTHORIZED,
+	HTTP_UNPROCESSABLE_ENTITY,
+} from "../src/http-status";
+
+/** The two statuses only a stubbed response is planned with; the Worker never names either. */
 export const HTTP_CREATED = 201;
-export const HTTP_UNAUTHORIZED = 401;
 export const HTTP_FORBIDDEN = 403;
-export const HTTP_NOT_FOUND = 404;
-export const HTTP_PAYLOAD_TOO_LARGE = 413;
-export const HTTP_UNPROCESSABLE_ENTITY = 422;
-export const HTTP_INTERNAL_ERROR = 500;
 
 export interface PlannedRoute {
 	readonly body: string;
