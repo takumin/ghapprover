@@ -3,8 +3,8 @@
  * their responses against the frozen contract schemas (src/types.ts): every value
  * is rebuilt by the schema that models it, and a response that violates one is a
  * broken API contract and throws (fail closed, SPEC.md §9). The client these calls
- * are issued through, the delivery budget bounding them, and the mapping of a
- * thrown failure onto GithubApiError live in src/client.ts.
+ * are issued through and the delivery budget bounding them live in src/client.ts;
+ * the mapping of a thrown failure onto GithubApiError lives in src/api-error.ts.
  */
 
 import type { GenericSchema, InferOutput } from "valibot";
@@ -16,7 +16,7 @@ import {
 	pullRequestCommitSchema,
 	pullRequestReviewSchema,
 } from "./types";
-import { isHttpStatusOn, shapeError, toApiError } from "./client";
+import { isHttpStatusOn, shapeError, toApiError } from "./api-error";
 import type { GithubClient } from "./client";
 import { safeParse } from "valibot";
 

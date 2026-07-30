@@ -46,7 +46,7 @@ import {
 	listPullRequestReviews,
 } from "../src/github";
 import { describe, expect, it } from "vitest";
-import { GithubApiError } from "../src/client";
+import { GithubApiError } from "../src/api-error";
 
 const SECOND_PAGE_COUNT = 37;
 

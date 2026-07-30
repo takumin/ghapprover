@@ -6,7 +6,6 @@
  * that decide what an outcome can say.
  */
 
-import type { ApiDiagnostics, GithubClient } from "./client";
 import type { ApprovalTarget, RepoRef } from "./github";
 import type {
 	CommitCountProblem,
@@ -15,7 +14,6 @@ import type {
 	PrStateProblem,
 } from "./decision";
 import type { GithubAccount, PullRequestEventPayload } from "./types";
-import { GithubApiError, createGithubClient } from "./client";
 import {
 	accountKey,
 	checkCommitCount,
@@ -36,6 +34,10 @@ import {
 	listPullRequestCommits,
 	listPullRequestReviews,
 } from "./github";
+import type { ApiDiagnostics } from "./api-error";
+import { GithubApiError } from "./api-error";
+import type { GithubClient } from "./client";
+import { createGithubClient } from "./client";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
