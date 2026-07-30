@@ -13,13 +13,18 @@ import type { PlannedRoute } from "./fetch-stub";
 import { createGithubClient } from "../src/client";
 import { privateKeyPemOnce } from "./app-key";
 
-export const REPO: RepoRef = { owner: "octo", repo: "hello" };
+export const ACCOUNT = OCTO;
+export const REPO: RepoRef = { owner: ACCOUNT.login, repo: "hello" };
 export const TOKEN = "installation-token";
 const INSTALLATION_ID = 12_345;
 export const TOKENS_URL = tokenUrl(INSTALLATION_ID);
-const MEMBERSHIP_URL = `${BASE}/orgs/octo/memberships/someone`;
+/* The org and member the membership cases look up, stated with the URL they are planned on rather
+ * than beside it: the call itself is made with these, so a URL built from its own literals would
+ * surface as an unplanned request instead of as an assertion about the wrong lookup. */
+export const MEMBERSHIP_ORG = REPO.owner;
+export const MEMBERSHIP_USER = "someone";
+const MEMBERSHIP_URL = `${BASE}/orgs/${MEMBERSHIP_ORG}/memberships/${MEMBERSHIP_USER}`;
 export const FULL_PAGE = 100;
-export const ACCOUNT = OCTO;
 
 export async function makeClient(): Promise<GithubClient> {
 	return createGithubClient(
@@ -47,8 +52,8 @@ export function commitPage(count: number, offset: number): Record<string, unknow
 /* Every per-PR route the endpoint suites plan, built from the REPO and PULL_NUMBER the calls
  * themselves are made with: a URL assembled from its own literals can disagree with those, and
  * surfaces as the stub's "unplanned request" rather than as an assertion about the wrong route. */
-export function pullUrl(suffix = ""): string {
-	return `${BASE}/repos/${REPO.owner}/${REPO.repo}/pulls/${PULL_NUMBER}${suffix}`;
+export function pullUrl(suffix = "", repo: string = REPO.repo): string {
+	return `${BASE}/repos/${REPO.owner}/${repo}/pulls/${PULL_NUMBER}${suffix}`;
 }
 export function commitsUrl(query: string): string {
 	return pullUrl(`/commits${query}`);
@@ -84,7 +89,7 @@ export function membershipRoute(payload: unknown, status: number): PlannedRoute 
 
 /** The review-POST URL; only the case about a repository named like the token path varies the repository. */
 export function reviewsPostUrl(repo: string = REPO.repo): string {
-	return `${BASE}/repos/${REPO.owner}/${repo}/pulls/${PULL_NUMBER}/reviews`;
+	return pullUrl("/reviews", repo);
 }
 export function reviewPostRoute(payload: unknown, status: number): PlannedRoute {
 	return jsonRoute({ method: "POST", payload, status, url: reviewsPostUrl() });

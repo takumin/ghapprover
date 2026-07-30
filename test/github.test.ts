@@ -8,6 +8,8 @@
 import {
 	ACCOUNT,
 	FULL_PAGE,
+	MEMBERSHIP_ORG,
+	MEMBERSHIP_USER,
 	REPO,
 	TOKENS_URL,
 	appRoute,
@@ -143,7 +145,9 @@ describe("fetchOrgMembership()", () => {
 			installTokenRoute(),
 			membershipRoute({ organization_url: "ignored", role: "admin", state: "active" }, HTTP_OK),
 		]);
-		await expect(fetchOrgMembership(await makeClient(), "octo", "someone")).resolves.toStrictEqual({
+		await expect(
+			fetchOrgMembership(await makeClient(), MEMBERSHIP_ORG, MEMBERSHIP_USER),
+		).resolves.toStrictEqual({
 			role: "admin",
 			state: "active",
 		});
@@ -153,13 +157,15 @@ describe("fetchOrgMembership()", () => {
 	it("returns null on 404", async () => {
 		expect.hasAssertions();
 		installFetchMock([installTokenRoute(), membershipRoute({ message: "no" }, HTTP_NOT_FOUND)]);
-		await expect(fetchOrgMembership(await makeClient(), "octo", "someone")).resolves.toBeNull();
+		await expect(
+			fetchOrgMembership(await makeClient(), MEMBERSHIP_ORG, MEMBERSHIP_USER),
+		).resolves.toBeNull();
 	});
 
 	it("throws with the status on 403", async () => {
 		expect.hasAssertions();
 		installFetchMock([installTokenRoute(), membershipRoute({ message: "no" }, HTTP_FORBIDDEN)]);
-		const promise = fetchOrgMembership(await makeClient(), "octo", "someone");
+		const promise = fetchOrgMembership(await makeClient(), MEMBERSHIP_ORG, MEMBERSHIP_USER);
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({ status: HTTP_FORBIDDEN });
 	});

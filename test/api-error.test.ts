@@ -20,6 +20,8 @@ import {
 	jsonRoute,
 } from "./fetch-stub";
 import {
+	MEMBERSHIP_ORG,
+	MEMBERSHIP_USER,
 	TOKENS_URL,
 	appRoute,
 	approvalTarget,
@@ -113,7 +115,7 @@ describe("token request attribution", () => {
 				url: TOKENS_URL,
 			}),
 		]);
-		const promise = fetchOrgMembership(await makeClient(), "octo", "someone");
+		const promise = fetchOrgMembership(await makeClient(), MEMBERSHIP_ORG, MEMBERSHIP_USER);
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({
 			endpoint: TOKEN_ENDPOINT,
