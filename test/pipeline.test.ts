@@ -7,38 +7,35 @@
 
 import {
 	APP_URL,
-	HTTP_OK,
-	HTTP_UNPROCESSABLE_ENTITY,
+	COMMITS_SUFFIX,
+	HEAD_SHA,
 	JWT_PATTERN,
 	PULL_NUMBER,
-	installFetchMock,
-	requestByUrl,
-} from "./fetch-stub";
-import { AUTOFIX_CI, ORG, RENOVATE, WEB_FLOW_USER } from "./accounts";
-import {
-	COMMITS_SUFFIX,
-	DELIVERY_ID,
-	HEAD_SHA,
-	OWNER,
-	OWN_APPROVAL,
-	REPO_ID,
+	TOKEN,
 	TOKEN_URL,
 	appRoute,
+	commitItem,
+	installTokenRoute,
+	pullUrl,
+} from "./github-api";
+import { AUTOFIX_CI, ORG, OWNER, RENOVATE, WEB_FLOW_USER } from "./accounts";
+import {
+	DELIVERY_ID,
+	OWN_APPROVAL,
+	REPO_ID,
 	buildPayload,
 	captureLog,
-	commitItem,
 	commitsRouteFor,
 	expectReply,
 	happyRoutes,
-	installTokenRoute,
 	membershipAdminRoute,
 	membershipMissingRoute,
 	pipelineRoutes,
 	postSigned,
-	pullsUrl,
 	reviewPostRouteFor,
 	reviewsRouteFor,
 } from "./delivery";
+import { HTTP_OK, HTTP_UNPROCESSABLE_ENTITY, installFetchMock, requestByUrl } from "./fetch-stub";
 import { describe, expect, it } from "vitest";
 
 /* SPEC.md §4 step 2: the state conditions are decided on the payload alone, so each of them
@@ -72,7 +69,7 @@ describe("owner approval flow", () => {
 		const session = installFetchMock(happyRoutes());
 		const response = await postSigned(buildPayload());
 		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
-		const posted = requestByUrl(session, pullsUrl("/reviews"));
+		const posted = requestByUrl(session, pullUrl("/reviews"));
 		expect(posted.body).toBe('{"commit_id":"head-sha","event":"APPROVE"}');
 		session.assertDone();
 	});
@@ -83,11 +80,11 @@ describe("owner approval flow", () => {
 		await postSigned(buildPayload());
 		expect(requestByUrl(session, TOKEN_URL).headers["authorization"]).toMatch(JWT_PATTERN);
 		expect(requestByUrl(session, APP_URL).headers["authorization"]).toMatch(JWT_PATTERN);
-		expect(requestByUrl(session, pullsUrl(COMMITS_SUFFIX)).headers["authorization"]).toBe(
-			"token install-token",
+		expect(requestByUrl(session, pullUrl(COMMITS_SUFFIX)).headers["authorization"]).toBe(
+			`token ${TOKEN}`,
 		);
-		expect(requestByUrl(session, pullsUrl("/reviews")).headers["authorization"]).toBe(
-			"token install-token",
+		expect(requestByUrl(session, pullUrl("/reviews")).headers["authorization"]).toBe(
+			`token ${TOKEN}`,
 		);
 	});
 

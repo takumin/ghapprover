@@ -47,13 +47,16 @@ export const WEB_FLOW_USER: GithubAccount = {
 /** Same login, different account: the committer exemption must not fire on the login alone. */
 export const WEB_FLOW_LOOKALIKE: GithubAccount = { id: 999, login: WEB_FLOW.login, type: "User" };
 
+/** The slug GET /app answers with (test/github-api.ts), and the App's own bot login below. */
+export const APP_SLUG = "ghapprover";
 /**
- * The App's own bot user (SPEC.md §3 cond. 5): the login GET /app derives from the "ghapprover"
- * slug the route fixtures serve. Stated once because both the unit suite that drives
- * hasOwnApproval and the delivery suites that serve its own approval as a review have to mean the
- * same account by it — two declarations could disagree and both still pass.
+ * The App's own bot user (SPEC.md §3 cond. 5): the login GET /app derives from the slug above,
+ * derived here the same way rather than spelled out, so the account the suites match reviews
+ * against cannot disagree with the response the route serves. Stated once because both the unit
+ * suite that drives hasOwnApproval and the delivery suites that serve its own approval as a review
+ * have to mean the same account by it.
  */
-export const APP_BOT: GithubAccount = { id: 201, login: "ghapprover[bot]", type: "Bot" };
+export const APP_BOT: GithubAccount = { id: 201, login: `${APP_SLUG}[bot]`, type: "Bot" };
 
 /** The repository owner the payload fixtures are built around. */
 export const OCTOCAT: GithubAccount = { id: 77, login: "octocat", type: "User" };
@@ -70,11 +73,11 @@ export const WIDGETS_REPO: EventRepository = {
 	owner: OCTOCAT,
 };
 /**
- * The owner of the `octo/hello` fixture repository both route-helper families build their calls
- * against (delivery.ts, github-routes.ts): the delivery suites approve its pull request and the
- * endpoint suites serve it as a commit and review author, so the two must mean one account by it.
+ * The owner of the fixture repository every GitHub call is made against (test/github-api.ts): the
+ * delivery suites approve its pull request and the endpoint suites serve it as a commit and review
+ * author, so all of them must mean one account by it.
  */
-export const OCTO: GithubAccount = { id: 7, login: "octo", type: "User" };
+export const OWNER: GithubAccount = { id: 7, login: "octo", type: "User" };
 /**
  * The organization every §3.1 org-branch case is owned by: the unit suite that drives
  * classifyPrincipal and the delivery suites that serve the membership lookup it defers to have to

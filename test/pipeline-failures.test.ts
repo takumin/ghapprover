@@ -9,28 +9,30 @@
 
 import {
 	COMMITS_ENDPOINT,
-	HTTP_FORBIDDEN,
-	HTTP_INTERNAL_ERROR,
-	HTTP_NOT_FOUND,
+	COMMITS_SUFFIX,
+	HEAD_SHA,
 	PULL_NUMBER,
 	REFUSAL_HEADERS,
 	TOKEN_ENDPOINT,
-	installFetchMock,
-	jsonRoute,
-} from "./fetch-stub";
-import {
-	COMMITS_SUFFIX,
-	DELIVERY_ID,
-	HEAD_SHA,
 	TOKEN_URL,
+	installTokenRoute,
+	pullUrl,
+} from "./github-api";
+import {
+	DELIVERY_ID,
 	buildPayload,
 	captureLog,
 	expectReply,
-	installTokenRoute,
 	makeEnv,
 	postSigned,
-	pullsUrl,
 } from "./delivery";
+import {
+	HTTP_FORBIDDEN,
+	HTTP_INTERNAL_ERROR,
+	HTTP_NOT_FOUND,
+	installFetchMock,
+	jsonRoute,
+} from "./fetch-stub";
 import { describe, expect, it } from "vitest";
 import { ORG } from "./accounts";
 import type { PlannedRoute } from "./fetch-stub";
@@ -96,7 +98,7 @@ describe("github api failures", () => {
 				method: "GET",
 				payload: { message: "boom" },
 				status: HTTP_INTERNAL_ERROR,
-				url: pullsUrl(COMMITS_SUFFIX),
+				url: pullUrl(COMMITS_SUFFIX),
 			}),
 		]);
 		const response = await postSigned(buildPayload());
@@ -115,7 +117,7 @@ describe("github api failures", () => {
 				method: "GET",
 				payload: {},
 				status: 0,
-				url: pullsUrl(COMMITS_SUFFIX),
+				url: pullUrl(COMMITS_SUFFIX),
 			}),
 		]);
 		const response = await postSigned(buildPayload());
@@ -142,7 +144,7 @@ function commitsFailureRoute(
 		method: "GET",
 		payload,
 		status,
-		url: pullsUrl(COMMITS_SUFFIX),
+		url: pullUrl(COMMITS_SUFFIX),
 	});
 }
 /* SPEC.md §8 and §9: a github-api-error is greppable, but only these fields say which failure it
