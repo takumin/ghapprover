@@ -56,6 +56,22 @@ const OPTIONAL_LOG_FIELDS = [
 	"errorName",
 	"field",
 ] as const;
+/** Resolves only when Field is never; used as a compile-time assertion below. */
+type NoneOf<Field extends never> = Field;
+/**
+ * Compile-time check that every §8 field an outcome can carry reaches the entry:
+ * `decision` and `errorMessage` are logged by name in logOutcome, `httpStatus` is
+ * the §9 response status rather than a log field, and the rest must be listed
+ * above. Without this, a field added to Outcome (src/pipeline.ts) and populated on
+ * a failure path would simply never be logged — an observability gap no type error
+ * or test failure would surface.
+ */
+export type AllOutcomeFieldsLogged = NoneOf<
+	Exclude<
+		keyof Outcome,
+		"decision" | "errorMessage" | "httpStatus" | (typeof OPTIONAL_LOG_FIELDS)[number]
+	>
+>;
 /**
  * The one bound on the one §8 field that has none at its source: @octokit/request
  * builds an error message from the response body and takes the whole body when
