@@ -120,17 +120,6 @@ async function evaluateDelivery(request: Request, env: Env, log: LogFields): Pro
 function isMisrouted(request: Request): boolean {
 	return request.method !== "POST" || new URL(request.url).pathname !== "/webhook";
 }
-/* SPEC.md §8: the reason vocabulary is what an operator greps, and a webhook URL pointing at the
- * wrong path is exactly what not-found exists to surface — so it has to leave a log entry, not
- * only a 404 body. Settled on the evaluation path rather than in fetch so every request leaves
- * through the one log-and-respond frame; nothing has read the body, so the payload fields stay
- * unknown. */
-async function evaluateRequest(request: Request, env: Env, log: LogFields): Promise<Outcome> {
-	if (isMisrouted(request)) {
-		return errorOutcome("not-found");
-	}
-	return evaluateDelivery(request, env, log);
-}
 /* SPEC.md §8 and §9: the one frame that maps a thrown failure onto an outcome, for the whole
  * delivery rather than the pipeline alone — reading the body and verifying the signature run
  * outside the pipeline and can reject on their own (a client disconnect or a truncated chunked
@@ -138,7 +127,15 @@ async function evaluateRequest(request: Request, env: Env, log: LogFields): Prom
  * 500 and leave no log entry at all, which is the one outcome §8 does not allow. */
 async function evaluateOrFail(request: Request, env: Env, log: LogFields): Promise<Outcome> {
 	try {
-		return await evaluateRequest(request, env, log);
+		/* SPEC.md §8: the reason vocabulary is what an operator greps, and a webhook URL pointing at
+		 * the wrong path is exactly what not-found exists to surface — so it has to leave a log entry,
+		 * not only a 404 body. Settled on the evaluation path rather than in fetch so every request
+		 * leaves through the one log-and-respond frame; nothing has read the body, so the payload
+		 * fields stay unknown. */
+		if (isMisrouted(request)) {
+			return errorOutcome("not-found");
+		}
+		return await evaluateDelivery(request, env, log);
 	} catch (error) {
 		/* SPEC.md §9's "any other thrown failure": the class name keeps configuration mistakes
 		 * (e.g. a PKCS#1 key the auth library rejects) distinguishable from code bugs, and §8's
