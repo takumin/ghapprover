@@ -8,6 +8,7 @@
 
 import { HTTP_NOT_FOUND, HTTP_OK, jsonRoute, tokenRoute } from "./fetch-stub";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+import { APP_BOT } from "./accounts";
 import type { GithubAccount } from "../src/types";
 import type { PlannedRoute } from "./fetch-stub";
 import { expect } from "vitest";
@@ -37,8 +38,7 @@ export const OWNER: GithubAccount = { id: 7, login: "octo", type: "User" };
 export const ORG: GithubAccount = { id: 88, login: "acme", type: "Organization" };
 export const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User" };
 export const OTHER_STRANGER: GithubAccount = { id: 998, login: "eve", type: "User" };
-const APP_BOT_USER: GithubAccount = { id: 201, login: "ghapprover[bot]", type: "Bot" };
-export const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT_USER };
+export const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT };
 
 export async function makeEnv(): Promise<Env> {
 	return {

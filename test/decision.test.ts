@@ -6,6 +6,7 @@
  * commits.test.ts.
  */
 
+import { APP_BOT, HUMAN, OCTOCAT } from "./accounts";
 import type {
 	EventPullRequest,
 	EventRepository,
@@ -13,7 +14,6 @@ import type {
 	LivePullRequest,
 	PullRequestReview,
 } from "../src/types";
-import { HUMAN, OCTOCAT } from "./accounts";
 import {
 	checkPullRequestState,
 	hasOwnApproval,
@@ -23,8 +23,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 const HEAD_SHA = "head-sha";
-const BOT_LOGIN = "ghapprover[bot]";
-const APP_BOT: GithubAccount = { id: 201, login: BOT_LOGIN, type: "Bot" };
+const BOT_LOGIN = APP_BOT.login;
 
 interface PrStateOverrides {
 	readonly draft?: boolean;
