@@ -81,22 +81,20 @@ function logOutcome(log: LogFields, outcome: Outcome): void {
 	console.log(log);
 }
 
-/** The thrown value's class name, which stays bounded whatever was thrown (§8). */
-function thrownErrorName(error: unknown): string {
-	if (error instanceof Error) {
-		return error.name;
-	}
-	return "unknown";
+interface ThrownFailure {
+	readonly errorMessage: string | undefined;
+	readonly errorName: string;
 }
-/* §8 pairs the class name with the message the thrown value carries, truncated with every other
- * path onto that field above. A value thrown that is not an Error has no message to report — the
- * class name already says so — so the field is left off rather than filled with a stringification
- * of whatever it was. */
-function thrownErrorMessage(error: unknown): string | undefined {
+/* What §8 reports about a thrown value: its class name, which stays bounded whatever was thrown,
+ * paired with the message it carries, truncated with every other path onto that field above. One
+ * helper for the pair because one `instanceof` decides both. A value thrown that is not an Error
+ * has no message to report — the class name already says so — so the field is left off rather than
+ * filled with a stringification of whatever it was. */
+function thrownFailure(error: unknown): ThrownFailure {
 	if (error instanceof Error) {
-		return error.message;
+		return { errorMessage: error.message, errorName: error.name };
 	}
-	return undefined;
+	return { errorMessage: undefined, errorName: "unknown" };
 }
 /* A body that is not JSON is not the modeled shape either, and names no field: there is no
  * document to locate one in (SPEC.md §8). */
@@ -220,10 +218,11 @@ async function evaluateOrFail(request: Request, env: Env, log: LogFields): Promi
 		 * errorMessage is what says which mistake it was — the class alone is `Error` for both. A
 		 * failed GitHub call is not one of these: runPipeline maps its own GithubApiError onto the
 		 * github-api-error outcome, with the §8 diagnostics that error carries. */
+		const { errorMessage, errorName } = thrownFailure(error);
 		return {
 			decision: "error",
-			errorMessage: thrownErrorMessage(error),
-			errorName: thrownErrorName(error),
+			errorMessage,
+			errorName,
 			httpStatus: HTTP_INTERNAL_ERROR,
 			reason: "internal-error",
 		};
