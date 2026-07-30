@@ -17,7 +17,7 @@ import {
 	pullRequestCommitSchema,
 	pullRequestReviewSchema,
 } from "./types";
-import { isHttpStatusOn, shapeError, toApiError } from "./api-error";
+import { isFailureOn, shapeError, toApiError } from "./api-error";
 import type { GithubClient } from "./client";
 import { safeParse } from "valibot";
 
@@ -54,6 +54,31 @@ function parseContract<Schema extends GenericSchema>(
 }
 
 /**
+ * The one frame every call below is dispatched inside: whatever it throws leaves as the frozen
+ * GithubApiError contract, named after the endpoint asked for (SPEC.md §9, §11). Owned here rather
+ * than restated per endpoint, because a call that skipped the mapping would reach the entry point
+ * as an internal-error and drop the §8 diagnostics the failed call carries — which compiles, and
+ * still works, so nothing else would say so. The dispatch is passed in rather than the route, so
+ * each endpoint keeps octokit's own checking of the parameters that route takes.
+ */
+async function dispatched<Result>(endpoint: string, call: () => Promise<Result>): Promise<Result> {
+	try {
+		return await call();
+	} catch (error) {
+		throw toApiError(endpoint, error);
+	}
+}
+/** A response and the schema that models it, through the frame above: the two halves every non-paginated call is made of. */
+async function contractCall<Schema extends GenericSchema>(
+	endpoint: string,
+	call: () => Promise<{ readonly data: unknown; readonly status: number }>,
+	schema: Schema,
+): Promise<InferOutput<Schema>> {
+	const response = await dispatched(endpoint, call);
+	return parseContract(schema, response.data, { endpoint, status: response.status });
+}
+
+/**
  * GET /app — the App's own bot-user login, which is "<slug>[bot]" for the
  * non-empty slug the endpoint returns (SPEC.md §3 cond. 5). The suffix is a
  * GitHub naming convention, so deriving the login belongs to this module
@@ -61,14 +86,8 @@ function parseContract<Schema extends GenericSchema>(
  */
 export async function fetchAppBotLogin(client: GithubClient): Promise<string> {
 	const endpoint = "GET /app";
-	try {
-		const response = await client.request(endpoint);
-		const { status } = response;
-		const { slug } = parseContract(appSchema, response.data, { endpoint, status });
-		return `${slug}[bot]`;
-	} catch (error) {
-		throw toApiError(endpoint, error);
-	}
+	const { slug } = await contractCall(endpoint, async () => client.request(endpoint), appSchema);
+	return `${slug}[bot]`;
 }
 
 /** The two paginated per-PR list endpoints; both take the same parameters and differ only in the item shape. */
@@ -87,18 +106,16 @@ async function listPullRequestItems<Schema extends GenericSchema>(
 	itemSchema: Schema,
 ): Promise<readonly InferOutput<Schema>[]> {
 	const { endpoint, pullNumber, repo } = list;
-	try {
-		const items = await client.paginate(endpoint, {
+	const items = await dispatched(endpoint, async () =>
+		client.paginate(endpoint, {
 			owner: repo.owner,
 			per_page: PAGE_SIZE,
 			pull_number: pullNumber,
 			repo: repo.repo,
-		});
-		/* Item shape errors surface after a successful page, so they carry 200. */
-		return items.map((item) => parseContract(itemSchema, item, { endpoint, status: HTTP_OK }));
-	} catch (error) {
-		throw toApiError(endpoint, error);
-	}
+		}),
+	);
+	/* Item shape errors surface after a successful page, so they carry 200. */
+	return items.map((item) => parseContract(itemSchema, item, { endpoint, status: HTTP_OK }));
 }
 
 /** All PR commits via Link-header pagination (SPEC.md §3.2); the 250-commit cap is enforced upstream by precheckCommitCount. */
@@ -122,14 +139,16 @@ export async function fetchOrgMembership(
 ): Promise<OrgMembership | null> {
 	const endpoint = "GET /orgs/{org}/memberships/{username}";
 	try {
-		const response = await client.request(endpoint, { org, username });
-		const { status } = response;
-		return parseContract(orgMembershipSchema, response.data, { endpoint, status });
+		return await contractCall(
+			endpoint,
+			async () => client.request(endpoint, { org, username }),
+			orgMembershipSchema,
+		);
 	} catch (error) {
-		if (isHttpStatusOn(error, HTTP_NOT_FOUND)) {
+		if (isFailureOn(error, endpoint, HTTP_NOT_FOUND)) {
 			return null;
 		}
-		throw toApiError(endpoint, error);
+		throw error;
 	}
 }
 
@@ -153,17 +172,16 @@ export async function fetchPullRequest(
 	pullNumber: number,
 ): Promise<LivePullRequest> {
 	const endpoint = "GET /repos/{owner}/{repo}/pulls/{pull_number}";
-	try {
-		const response = await client.request(endpoint, {
-			owner: repo.owner,
-			pull_number: pullNumber,
-			repo: repo.repo,
-		});
-		const { status } = response;
-		return parseContract(livePullRequestSchema, response.data, { endpoint, status });
-	} catch (error) {
-		throw toApiError(endpoint, error);
-	}
+	return contractCall(
+		endpoint,
+		async () =>
+			client.request(endpoint, {
+				owner: repo.owner,
+				pull_number: pullNumber,
+				repo: repo.repo,
+			}),
+		livePullRequestSchema,
+	);
 }
 
 /** The pull request and head commit one approval review is anchored to, and the caller's §3.3 live check compares against. */
@@ -184,18 +202,20 @@ export async function createApprovalReview(
 	const { commitId, pullNumber, repo } = target;
 	const endpoint = "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews";
 	try {
-		await client.request(endpoint, {
-			commit_id: commitId,
-			event: "APPROVE",
-			owner: repo.owner,
-			pull_number: pullNumber,
-			repo: repo.repo,
-		});
+		await dispatched(endpoint, async () =>
+			client.request(endpoint, {
+				commit_id: commitId,
+				event: "APPROVE",
+				owner: repo.owner,
+				pull_number: pullNumber,
+				repo: repo.repo,
+			}),
+		);
 		return "created";
 	} catch (error) {
-		if (isHttpStatusOn(error, HTTP_UNPROCESSABLE_ENTITY)) {
+		if (isFailureOn(error, endpoint, HTTP_UNPROCESSABLE_ENTITY)) {
 			return "rejected";
 		}
-		throw toApiError(endpoint, error);
+		throw error;
 	}
 }

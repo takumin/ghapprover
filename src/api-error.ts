@@ -165,17 +165,18 @@ function toHttpFailure(error: unknown): HttpFailure | null {
 }
 
 /*
- * True only when the guarded endpoint itself failed with the given status —
- * without excluding the token request, a token-issuance 404 would pass the
- * membership guard and read as a normal "not a member" skip instead of the loud
- * configuration failure §9 requires.
+ * True only when the guarded endpoint itself failed with the given status, read off the mapped
+ * contract rather than off the raw octokit failure: the mapping already resolved which route a
+ * failure is attributed to, so comparing the endpoint is what excludes the token request — without
+ * that, a token-issuance 404 would pass the membership guard and read as a normal "not a member"
+ * skip instead of the loud configuration failure §9 requires. A transport failure (status 0) and a
+ * failure this module passed through unmapped are neither, so both answer false.
  */
-export function isHttpStatusOn(error: unknown, status: number): boolean {
-	const failure = toHttpFailure(error);
-	if (failure === null) {
+export function isFailureOn(error: unknown, endpoint: string, status: number): boolean {
+	if (!(error instanceof GithubApiError)) {
 		return false;
 	}
-	return failure.hasResponse && failure.status === status && !failure.fromTokenRequest;
+	return error.endpoint === endpoint && error.status === status;
 }
 
 /** Status 0: a call that never received a response — a transport failure, or the §4 deadline firing. */
