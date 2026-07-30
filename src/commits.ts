@@ -34,9 +34,22 @@ export function commitPrincipals(
 	return [author, committer];
 }
 
-export type CommitCountProblem = "no-commits" | "too-many-commits";
+/**
+ * What §3.2 can settle about a pull request's commits: the two the declared count settles on its
+ * own, the one the fetched list settles against it, and the two one commit can fail on. One
+ * vocabulary for the whole condition rather than one alias per check — the checks run in a single
+ * frame (src/pipeline.ts) and reach SPEC.md §8 as one reason each, so an alias apiece only made the
+ * reason vocabulary (src/outcome.ts) name this module three times over to say "§3.2".
+ */
+export type CommitProblem =
+	| "commit-count-mismatch"
+	| "no-commits"
+	| "too-many-commits"
+	| "untrusted-commit"
+	| "unverified-commit";
+
 /** SPEC.md §3.2: zero commits, or more than the commits API can return, fail closed. */
-export function precheckCommitCount(declaredCount: number): CommitCountProblem | null {
+export function precheckCommitCount(declaredCount: number): CommitProblem | null {
 	if (declaredCount === 0) {
 		return "no-commits";
 	}
@@ -46,22 +59,18 @@ export function precheckCommitCount(declaredCount: number): CommitCountProblem |
 	return null;
 }
 
-export type CommitListProblem = "commit-count-mismatch";
 /* SPEC.md §3.2: the fetched list must match the count the payload declared. The declared count
  * itself is settled by precheckCommitCount, which the caller runs before it spends the fetch. */
 export function checkCommitCount(
 	fetchedCount: number,
 	declaredCount: number,
-): CommitListProblem | null {
+): CommitProblem | null {
 	if (fetchedCount !== declaredCount) {
 		return "commit-count-mismatch";
 	}
 	return null;
 }
 
-/* What §3.2 can settle about one commit, as opposed to about the list (the count problems above).
- * Each check below is typed by what it can actually return, so narrowing one is a local change. */
-export type CommitProblem = "untrusted-commit" | "unverified-commit";
 /* SPEC.md §3.2 for one commit, in the order the checks must run: the signature, then the principals
  * the payload has to map at all, then their trust. Both directions of that order are load-bearing —
  * what a commit can be settled by without a lookup comes first, so no membership lookup is spent on

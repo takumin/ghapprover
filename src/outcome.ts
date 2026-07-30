@@ -8,7 +8,6 @@
  */
 
 import type { ApiDiagnostics, GithubApiError } from "./api-error";
-import type { CommitCountProblem, CommitListProblem, CommitProblem } from "./commits";
 import {
 	HTTP_INTERNAL_ERROR,
 	HTTP_NOT_FOUND,
@@ -16,19 +15,17 @@ import {
 	HTTP_PAYLOAD_TOO_LARGE,
 	HTTP_UNAUTHORIZED,
 } from "./http-status";
+import type { CommitProblem } from "./commits";
 import type { PrStateProblem } from "./decision";
 
 /**
  * The half of the vocabulary a delivery skips with: an evaluation that completed
- * and did not approve. The §3 rows are one per decision check, named by what that
- * check can actually return, so a renamed problem there is a compile error here
- * rather than a silent change to the logged vocabulary — and a check narrowed to
- * fewer members is caught here too, rather than being absorbed by a union wide
- * enough to cover its siblings. The rest are outcomes of the pipeline itself.
+ * and did not approve. The §3 rows are one per condition, named by what that
+ * condition can actually return, so a renamed problem there is a compile error
+ * here rather than a silent change to the logged vocabulary. The rest are
+ * outcomes of the pipeline itself.
  */
 export type SkipReason =
-	| CommitCountProblem
-	| CommitListProblem
 	| CommitProblem
 	| PrStateProblem
 	| "already-approved"
