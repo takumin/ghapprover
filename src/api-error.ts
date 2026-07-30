@@ -187,17 +187,25 @@ function transportError(endpoint: string, diagnostics: ApiDiagnostics): GithubAp
 		status: NETWORK_FAILURE_STATUS,
 	});
 }
-/** HTTP failures keep their status, attributed to the auth strategy's token endpoint when its internal request is the one that failed. */
+/** Which route a failure is named after: the auth strategy's token endpoint when its internal request is the one that failed, and the guarded endpoint otherwise. */
+function attributedEndpoint(endpoint: string, fromTokenRequest: boolean): string {
+	if (fromTokenRequest) {
+		return TOKEN_ENDPOINT;
+	}
+	return endpoint;
+}
+/** HTTP failures keep their status, attributed to the endpoint above rather than to the call the caller asked for. */
 function httpFailureError(endpoint: string, failure: HttpFailure): GithubApiError {
 	const { diagnostics, fromTokenRequest, hasResponse, status } = failure;
 	if (!hasResponse) {
 		return transportError(endpoint, diagnostics);
 	}
-	const failed = { diagnostics, endpoint, reason: "unexpected response status", status };
-	if (fromTokenRequest) {
-		failed.endpoint = TOKEN_ENDPOINT;
-	}
-	return new GithubApiError(failed);
+	return new GithubApiError({
+		diagnostics,
+		endpoint: attributedEndpoint(endpoint, fromTokenRequest),
+		reason: "unexpected response status",
+		status,
+	});
 }
 
 /**
