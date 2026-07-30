@@ -8,7 +8,7 @@
 
 import type { AppCredentials, GithubClient } from "./client";
 import type { ApprovalTarget, RepoRef } from "./github";
-import type { GithubAccount, PullRequestEventPayload } from "./types";
+import type { EventPullRequest, GithubAccount, PullRequestEventPayload } from "./types";
 import {
 	accountKey,
 	checkPullRequestState,
@@ -34,10 +34,6 @@ import { createGithubClient } from "./client";
 
 /** Resolves one account's §3.1 trust, memoized per delivery; see createTrustResolver. */
 type TrustResolver = (user: GithubAccount) => Promise<boolean>;
-
-function repoRef(payload: PullRequestEventPayload): RepoRef {
-	return { owner: payload.repository.owner.login, repo: payload.repository.name };
-}
 
 async function evaluateTrust(
 	client: GithubClient,
@@ -73,17 +69,16 @@ function createTrustResolver(client: GithubClient, repoOwner: GithubAccount): Tr
 
 /** SPEC.md §4 step 5 (§3.2): the declared count, then every fetched commit verified. */
 async function checkCommitCondition(
-	payload: PullRequestEventPayload,
-	client: GithubClient,
-	trust: TrustResolver,
+	pullRequest: EventPullRequest,
+	call: { readonly client: GithubClient; readonly repo: RepoRef; readonly trust: TrustResolver },
 ): Promise<Outcome | null> {
-	const { pull_request: pullRequest } = payload;
+	const { client, repo, trust } = call;
 	/* Ahead of the fetch: what the declared count alone settles costs no subrequest to decide. */
 	const declaredProblem = precheckCommitCount(pullRequest.commits);
 	if (declaredProblem !== null) {
 		return skippedOutcome(declaredProblem);
 	}
-	const commits = await listPullRequestCommits(client, repoRef(payload), pullRequest.number);
+	const commits = await listPullRequestCommits(client, repo, pullRequest.number);
 	/* A list that does not match the declared count settles the condition on its own, so the
 	 * per-commit walk (and the membership lookups it spends) only runs once the list is whole. */
 	const problem =
@@ -108,15 +103,7 @@ async function submitApproval(client: GithubClient, target: ApprovalTarget): Pro
 	return approvedOutcome();
 }
 /** SPEC.md §4 step 6 (§6): an own APPROVE for this head ends the run successfully. */
-async function approvePullRequest(
-	payload: PullRequestEventPayload,
-	client: GithubClient,
-): Promise<Outcome> {
-	const target: ApprovalTarget = {
-		commitId: payload.pull_request.head.sha,
-		pullNumber: payload.pull_request.number,
-		repo: repoRef(payload),
-	};
+async function approvePullRequest(client: GithubClient, target: ApprovalTarget): Promise<Outcome> {
 	/* Independent: GET /app takes no argument the reviews list produces, and both feed only the
 	 * check below. Concurrency here is not the burst §3.1 memoization cannot bound — that is the
 	 * per-principal membership lookups, whose count follows the PR — but two fixed calls, so the
@@ -133,7 +120,8 @@ async function approvePullRequest(
 /**
  * SPEC.md §4 steps 3-8, in the order they must run: the client, whose auth strategy signs the JWT
  * and issues the token on first use, then the author condition (step 4), the commit condition
- * (step 5), and the approval.
+ * (step 5), and the approval. The repository the calls are made against is derived once here, at
+ * the seam between the payload and the GitHub API, rather than by each step from the payload again.
  */
 async function approveWhenConditionsHold(
 	payload: PullRequestEventPayload,
@@ -141,15 +129,21 @@ async function approveWhenConditionsHold(
 	installationId: number,
 ): Promise<Outcome> {
 	const client = createGithubClient(credentials, installationId);
-	const trust = createTrustResolver(client, payload.repository.owner);
-	if (!(await trust(payload.pull_request.user))) {
+	const { pull_request: pullRequest, repository } = payload;
+	const repo: RepoRef = { owner: repository.owner.login, repo: repository.name };
+	const trust = createTrustResolver(client, repository.owner);
+	if (!(await trust(pullRequest.user))) {
 		return skippedOutcome("author-not-trusted");
 	}
-	const commitOutcome = await checkCommitCondition(payload, client, trust);
+	const commitOutcome = await checkCommitCondition(pullRequest, { client, repo, trust });
 	if (commitOutcome !== null) {
 		return commitOutcome;
 	}
-	return approvePullRequest(payload, client);
+	return approvePullRequest(client, {
+		commitId: pullRequest.head.sha,
+		pullNumber: pullRequest.number,
+		repo,
+	});
 }
 /** SPEC.md §4 step 2: action scope and PR state precede any API call. */
 async function evaluateApproval(
