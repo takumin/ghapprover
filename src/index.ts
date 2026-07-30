@@ -8,6 +8,7 @@
 
 import { deliveryFields, logOutcome, recordPayload, thrownFailure } from "./log";
 import { errorOutcome, skippedOutcome } from "./outcome";
+import type { AppCredentials } from "./client";
 import type { LogFields } from "./log";
 import type { Outcome } from "./outcome";
 import type { PayloadValidation } from "./payload";
@@ -42,6 +43,12 @@ function parseBody(body: string): PayloadValidation {
 		return { payload: null };
 	}
 }
+/* SPEC.md §7: the Workers binding is unpacked at this seam and nowhere deeper — the webhook secret
+ * below and the App credentials here — so the pipeline is handed the §7 credential contract rather
+ * than the platform binding it would otherwise have to reach through. */
+function appCredentials(env: Env): AppCredentials {
+	return { appId: env.GITHUB_APP_ID, privateKeyPem: env.GITHUB_APP_PRIVATE_KEY };
+}
 /**
  * A body that cannot be modeled means the evaluation could not be completed (SPEC.md §9). The
  * entry carries §8's `field` with it — the dot path of what failed and never the value there,
@@ -53,7 +60,7 @@ async function evaluateBody(body: string, env: Env, log: LogFields): Promise<Out
 		return errorOutcome("invalid-payload", { field });
 	}
 	recordPayload(log, payload);
-	return runPipeline(payload, env);
+	return runPipeline(payload, appCredentials(env));
 }
 /** True only for a Content-Length that parses and exceeds the cap; anything else goes to the read. */
 function exceedsBodyLimit(header: string | null): boolean {

@@ -6,6 +6,7 @@
  * decides which one a delivery reaches.
  */
 
+import type { AppCredentials, GithubClient } from "./client";
 import type { ApprovalTarget, RepoRef } from "./github";
 import type { GithubAccount, PullRequestEventPayload } from "./types";
 import {
@@ -28,7 +29,6 @@ import {
 	listPullRequestReviews,
 } from "./github";
 import { GithubApiError } from "./api-error";
-import type { GithubClient } from "./client";
 import type { Outcome } from "./outcome";
 import { createGithubClient } from "./client";
 
@@ -137,13 +137,10 @@ async function approvePullRequest(
  */
 async function approveWhenConditionsHold(
 	payload: PullRequestEventPayload,
-	env: Env,
+	credentials: AppCredentials,
 	installationId: number,
 ): Promise<Outcome> {
-	const client = createGithubClient(
-		{ appId: env.GITHUB_APP_ID, privateKeyPem: env.GITHUB_APP_PRIVATE_KEY },
-		installationId,
-	);
+	const client = createGithubClient(credentials, installationId);
 	const trust = createTrustResolver(client, payload.repository.owner);
 	if (!(await trust(payload.pull_request.user))) {
 		return skippedOutcome("author-not-trusted");
@@ -155,7 +152,10 @@ async function approveWhenConditionsHold(
 	return approvePullRequest(payload, client);
 }
 /** SPEC.md §4 step 2: action scope and PR state precede any API call. */
-async function evaluateApproval(payload: PullRequestEventPayload, env: Env): Promise<Outcome> {
+async function evaluateApproval(
+	payload: PullRequestEventPayload,
+	credentials: AppCredentials,
+): Promise<Outcome> {
 	if (!isTargetAction(payload.action)) {
 		return skippedOutcome("event-out-of-scope");
 	}
@@ -166,16 +166,19 @@ async function evaluateApproval(payload: PullRequestEventPayload, env: Env): Pro
 	if (payload.installation === undefined || payload.installation === null) {
 		return errorOutcome("missing-installation");
 	}
-	return approveWhenConditionsHold(payload, env, payload.installation.id);
+	return approveWhenConditionsHold(payload, credentials, payload.installation.id);
 }
 /**
  * The pipeline, with the one failure its own calls raise mapped onto an outcome (SPEC.md §9): every
  * endpoint in src/github.ts throws GithubApiError, so this is where that contract is read. Anything
  * else thrown travels on to the entry point's catch-all, which owns §9's "any other thrown failure".
  */
-export async function runPipeline(payload: PullRequestEventPayload, env: Env): Promise<Outcome> {
+export async function runPipeline(
+	payload: PullRequestEventPayload,
+	credentials: AppCredentials,
+): Promise<Outcome> {
 	try {
-		return await evaluateApproval(payload, env);
+		return await evaluateApproval(payload, credentials);
 	} catch (error) {
 		if (error instanceof GithubApiError) {
 			return apiErrorOutcome(error);
