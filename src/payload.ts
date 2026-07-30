@@ -38,3 +38,18 @@ export function parsePullRequestEvent(payload: unknown): PayloadValidation {
 	}
 	return { field: issueField(result.issues[0]), payload: null };
 }
+
+/**
+ * The delivery body itself, which is what the entry point actually holds: whether it is JSON at all
+ * is a fact about the body's validity, so it is settled here rather than at the seam that reads it.
+ * A body that is not JSON is not the modeled shape either, and names no field: there is no document
+ * to locate one in (SPEC.md §8).
+ */
+export function parsePullRequestEventBody(body: string): PayloadValidation {
+	try {
+		const parsed: unknown = JSON.parse(body);
+		return parsePullRequestEvent(parsed);
+	} catch {
+		return { payload: null };
+	}
+}

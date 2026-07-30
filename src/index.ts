@@ -11,8 +11,7 @@ import { errorOutcome, skippedOutcome } from "./outcome";
 import type { AppCredentials } from "./client";
 import type { LogFields } from "./log";
 import type { Outcome } from "./outcome";
-import type { PayloadValidation } from "./payload";
-import { parsePullRequestEvent } from "./payload";
+import { parsePullRequestEventBody } from "./payload";
 import { runPipeline } from "./pipeline";
 import { verifyWebhookSignature } from "./webhook";
 
@@ -33,16 +32,6 @@ function respond(outcome: Outcome): Response {
 	return Response.json({ decision, reason }, { status });
 }
 
-/* A body that is not JSON is not the modeled shape either, and names no field: there is no
- * document to locate one in (SPEC.md §8). */
-function parseBody(body: string): PayloadValidation {
-	try {
-		const parsed: unknown = JSON.parse(body);
-		return parsePullRequestEvent(parsed);
-	} catch {
-		return { payload: null };
-	}
-}
 /* SPEC.md §7: the Workers binding is unpacked at this seam and nowhere deeper — the webhook secret
  * below and the App credentials here — so the pipeline is handed the §7 credential contract rather
  * than the platform binding it would otherwise have to reach through. */
@@ -55,7 +44,7 @@ function appCredentials(env: Env): AppCredentials {
  * which is webhook payload content structured logs do not carry (§8 warning).
  */
 async function evaluateBody(body: string, env: Env, log: LogFields): Promise<Outcome> {
-	const { field, payload } = parseBody(body);
+	const { field, payload } = parsePullRequestEventBody(body);
 	if (payload === null) {
 		return errorOutcome("invalid-payload", { field });
 	}
