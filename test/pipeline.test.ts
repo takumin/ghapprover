@@ -8,17 +8,26 @@
 import {
 	APP_URL,
 	COMMITS_SUFFIX,
-	HEAD_SHA,
 	JWT_PATTERN,
-	PULL_NUMBER,
 	TOKEN,
 	TOKEN_URL,
 	appRoute,
 	commitItem,
 	installTokenRoute,
+	membershipAdminRoute,
+	membershipMissingRoute,
 	pullUrl,
 } from "./github-api";
-import { AUTOFIX_CI, ORG, OWNER, RENOVATE, REPOSITORY, WEB_FLOW_USER } from "./accounts";
+import {
+	AUTOFIX_CI,
+	HEAD_SHA,
+	ORG,
+	OWNER,
+	PULL_NUMBER,
+	RENOVATE,
+	REPOSITORY,
+	WEB_FLOW_USER,
+} from "./fixtures";
 import {
 	DELIVERY_ID,
 	OWN_APPROVAL,
@@ -27,8 +36,6 @@ import {
 	commitsRouteFor,
 	expectReply,
 	happyRoutes,
-	membershipAdminRoute,
-	membershipMissingRoute,
 	pipelineRoutes,
 	postSigned,
 	reviewPostRouteFor,

@@ -10,8 +10,6 @@
 import {
 	COMMITS_ENDPOINT,
 	COMMITS_SUFFIX,
-	HEAD_SHA,
-	PULL_NUMBER,
 	REFUSAL_HEADERS,
 	TOKEN_ENDPOINT,
 	TOKEN_URL,
@@ -26,6 +24,7 @@ import {
 	makeEnv,
 	postSigned,
 } from "./delivery";
+import { HEAD_SHA, ORG, PULL_NUMBER, REPOSITORY } from "./fixtures";
 import {
 	HTTP_FORBIDDEN,
 	HTTP_INTERNAL_ERROR,
@@ -33,7 +32,6 @@ import {
 	installFetchMock,
 	jsonRoute,
 } from "./fetch-stub";
-import { ORG, REPOSITORY } from "./accounts";
 import { describe, expect, it } from "vitest";
 import { MAX_ERROR_MESSAGE_CHARS } from "../src/log";
 import type { PlannedRoute } from "./fetch-stub";
