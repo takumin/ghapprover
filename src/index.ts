@@ -7,7 +7,6 @@
  */
 
 import { errorOutcome, runPipeline, skippedOutcome } from "./pipeline";
-import { GithubApiError } from "./client";
 import type { Outcome } from "./pipeline";
 import type { PayloadValidation } from "./payload";
 import type { PullRequestEventPayload } from "./types";
@@ -216,29 +215,11 @@ async function evaluateOrFail(request: Request, env: Env, log: LogFields): Promi
 	try {
 		return await evaluateRequest(request, env, log);
 	} catch (error) {
-		if (error instanceof GithubApiError) {
-			/* SPEC.md §9: keep status and endpoint so 401/403 configuration problems are
-			 * distinguishable in logs, and the §8 diagnostics with them — status alone does not say
-			 * whether a 403 was a missing permission or a rate limit, which is the distinction §9
-			 * asks for. They are absent when the failure carried no response to read them from. */
-			const { acceptedPermissions, errorMessage, rateLimitRemaining, rateLimitReset, requestId } =
-				error.diagnostics;
-			return {
-				acceptedPermissions,
-				decision: "error",
-				endpoint: error.endpoint,
-				errorMessage,
-				httpStatus: HTTP_INTERNAL_ERROR,
-				rateLimitRemaining,
-				rateLimitReset,
-				reason: "github-api-error",
-				requestId,
-				status: error.status,
-			};
-		}
 		/* SPEC.md §9's "any other thrown failure": the class name keeps configuration mistakes
 		 * (e.g. a PKCS#1 key the auth library rejects) distinguishable from code bugs, and §8's
-		 * errorMessage is what says which mistake it was — the class alone is `Error` for both. */
+		 * errorMessage is what says which mistake it was — the class alone is `Error` for both. A
+		 * failed GitHub call is not one of these: runPipeline maps its own GithubApiError onto the
+		 * github-api-error outcome, with the §8 diagnostics that error carries. */
 		return {
 			decision: "error",
 			errorMessage: thrownErrorMessage(error),

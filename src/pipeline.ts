@@ -14,6 +14,7 @@ import type {
 	PrStateProblem,
 } from "./decision";
 import type { GithubAccount, PullRequestEventPayload } from "./types";
+import { GithubApiError, createGithubClient } from "./client";
 import {
 	accountKey,
 	checkCommitCount,
@@ -35,7 +36,6 @@ import {
 	listPullRequestReviews,
 } from "./github";
 import type { GithubClient } from "./client";
-import { createGithubClient } from "./client";
 
 const HTTP_OK = 200;
 const HTTP_INTERNAL_ERROR = 500;
@@ -106,6 +106,28 @@ export function skippedOutcome(reason: Reason): Outcome {
  * except the three the request itself settles (404, 401, 413). */
 export function errorOutcome(reason: Reason, httpStatus: number = HTTP_INTERNAL_ERROR): Outcome {
 	return { decision: "error", httpStatus, reason };
+}
+/* SPEC.md §9: keep status and endpoint so 401/403 configuration problems are distinguishable in
+ * logs, and the §8 diagnostics with them — status alone does not say whether a 403 was a missing
+ * permission or a rate limit, which is the distinction §9 asks for. They are absent when the
+ * failure carried no response to read them from. Mapped here, beside the outcome vocabulary and in
+ * the module whose calls raise the error, so the §8 diagnostics are named in one place rather than
+ * restated by whoever catches them. */
+function apiErrorOutcome(error: GithubApiError): Outcome {
+	const { acceptedPermissions, errorMessage, rateLimitRemaining, rateLimitReset, requestId } =
+		error.diagnostics;
+	return {
+		acceptedPermissions,
+		decision: "error",
+		endpoint: error.endpoint,
+		errorMessage,
+		httpStatus: HTTP_INTERNAL_ERROR,
+		rateLimitRemaining,
+		rateLimitReset,
+		reason: "github-api-error",
+		requestId,
+		status: error.status,
+	};
 }
 
 function repoRef(payload: PullRequestEventPayload): RepoRef {
@@ -228,7 +250,7 @@ async function approveWhenConditionsHold(
 	return approvePullRequest(payload, client);
 }
 /** SPEC.md §4 step 2: action scope and PR state precede any API call. */
-export async function runPipeline(payload: PullRequestEventPayload, env: Env): Promise<Outcome> {
+async function evaluateApproval(payload: PullRequestEventPayload, env: Env): Promise<Outcome> {
 	if (!isTargetAction(payload.action)) {
 		return skippedOutcome("event-out-of-scope");
 	}
@@ -240,4 +262,19 @@ export async function runPipeline(payload: PullRequestEventPayload, env: Env): P
 		return errorOutcome("missing-installation");
 	}
 	return approveWhenConditionsHold(payload, env, payload.installation.id);
+}
+/**
+ * The pipeline, with the one failure its own calls raise mapped onto an outcome (SPEC.md §9): every
+ * endpoint in src/github.ts throws GithubApiError, so this is where that contract is read. Anything
+ * else thrown travels on to the entry point's catch-all, which owns §9's "any other thrown failure".
+ */
+export async function runPipeline(payload: PullRequestEventPayload, env: Env): Promise<Outcome> {
+	try {
+		return await evaluateApproval(payload, env);
+	} catch (error) {
+		if (error instanceof GithubApiError) {
+			return apiErrorOutcome(error);
+		}
+		throw error;
+	}
 }
