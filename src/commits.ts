@@ -104,6 +104,7 @@ export async function checkCommit(
 		return "untrusted-commit";
 	}
 	for (const account of commitPrincipals(author, committer)) {
+		// oxlint-disable-next-line eslint/no-await-in-loop -- sequential by design: parallel lookups are the burst this walk exists to bound
 		if (!(await isTrusted(account))) {
 			return "untrusted-commit";
 		}
@@ -121,6 +122,7 @@ export async function checkCommits(
 	isTrusted: TrustResolver,
 ): Promise<CommitProblem | null> {
 	for (const entry of commits) {
+		// oxlint-disable-next-line eslint/no-await-in-loop -- sequential by design: the first failing commit must end the walk before another lookup is spent
 		const problem = await checkCommit(entry, isTrusted);
 		if (problem !== null) {
 			return problem;

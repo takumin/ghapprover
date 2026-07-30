@@ -61,18 +61,30 @@
 		"eslint/no-useless-assignment": "error",
 		// Not the duplicate of typescript/require-await the name suggests: this one
 		// also reports an `async` function that returns a promise without awaiting
-		// it, which is the shape most of the async helpers in src/ have. The
-		// type-aware rule, which reports only a function with nothing async about
-		// it at all, is left on by category to carry the check.
+		// it, which is the shape most of the async helpers in src/ have. It cannot
+		// be an error while two enabled rules stand: typescript/promise-function-async
+		// requires a promise-returning helper to be async, and typescript/return-await
+		// (in-try-catch) forbids the `return await` that would appease this rule
+		// outside a try/catch — together the three would leave a pass-through helper
+		// no legal spelling at all. The type-aware rule, which reports only a
+		// function with nothing async about it at all, is left on by category to
+		// carry the check.
 		"eslint/require-await": "off",
 		// The import group, in the order oxlint sorts it:
-		// - exports-last, group-exports, no-named-export and prefer-default-export
-		//   all push a module towards a single default export, which rejects the
-		//   named `export function` shape SPEC §12 asks for so that the decision
-		//   logic can be unit-tested without mocking the GitHub API.
-		// - no-default-export bans the Workers entrypoint, so it is narrowed to the
-		//   two files that cannot avoid a default export (see the override below)
-		//   rather than switched off everywhere.
+		// - no-named-export and prefer-default-export each contradict
+		//   no-default-export, which the restriction category keeps on: the first
+		//   pair as errors leaves a module nothing it may export, and the second
+		//   orders the single-export modules to write the default export the
+		//   enabled rule bans. The named shape is also what lets SPEC §12's
+		//   decision logic be unit-tested without mocking the GitHub API.
+		// - exports-last and group-exports reject export-at-declaration, the shape
+		//   every module here is written in: satisfying them restates every public
+		//   declaration in a trailing export block without changing anything a
+		//   rule could catch afterwards.
+		// - no-default-export bans the Workers entrypoint, so the two declarations
+		//   that cannot avoid a default export (src/index.ts, vitest.config.mts)
+		//   carry a line exemption rather than the rule being switched off for
+		//   whole files.
 		"import/exports-last": "off",
 		// Reports nothing against the extensionless imports this codebase writes, so
 		// it is carried as a guard on that style rather than switched off.
@@ -80,7 +92,10 @@
 		"import/group-exports": "off",
 		"import/no-named-export": "off",
 		"import/prefer-default-export": "off",
-		// Bans async/await outright.
+		// Bans async/await outright, while the enabled
+		// typescript/promise-function-async requires every promise-returning
+		// function to be async: as errors the pair leaves no legal way to return a
+		// promise, and a Worker's fetch handler returns nothing else.
 		"oxc/no-async-await": "off",
 		// Nursery, as above.
 		"promise/no-return-in-finally": "error",
@@ -102,7 +117,9 @@
 		// Nursery, as above.
 		"typescript/no-unnecessary-condition": "error",
 		"typescript/prefer-optional-chain": "error",
-		// Too broad for Workers handler signatures.
+		// Too broad for the boundary this Worker sits on: most signatures take a
+		// foreign type — the runtime's Request, the generated Env, the octokit
+		// client — that is not deeply readonly and not this codebase's to change.
 		"typescript/prefer-readonly-parameter-types": "off",
 		// GitHub's webhook payloads and REST responses really carry `null`, and the
 		// frozen contract (src/types.ts) models that absence as `null` rather than
@@ -114,46 +131,16 @@
 	},
 	"overrides": [
 		{
-			"files": ["src/commits.ts"],
-			"rules": {
-				// Trust resolution walks principals and commits sequentially on purpose
-				// (SPEC.md §3.1, §3.2): the first failure ends the loop, so a delivery
-				// that ends in a skip never bursts one membership lookup per principal
-				// against the Worker subrequest allowance or GitHub's secondary rate
-				// limits. Awaiting in parallel is the burst the sequential walk exists
-				// to bound, which is why the rule is off rather than worked around. The
-				// one module that owns those walks is named rather than src/ as a
-				// whole, so an awaited loop anywhere else is still reported.
-				"eslint/no-await-in-loop": "off",
-			},
-		},
-		{
-			"files": ["src/log.ts"],
-			"rules": {
-				// SPEC §8 requires exactly one structured log entry per delivery, and
-				// `console` is the only sink a Worker has. Scoped to the module that
-				// builds and emits that entry, so a stray `console` anywhere else in
-				// src/ — the entrypoint included — is still reported.
-				"eslint/no-console": "off",
-			},
-		},
-		{
-			"files": ["src/index.ts", "vitest.config.mts"],
-			"rules": {
-				// The two files whose default export is imposed from outside: the
-				// Workers entrypoint, and the vitest config. Every other module is
-				// still held to the named-export shape SPEC §12 asks for.
-				"import/no-default-export": "off",
-			},
-		},
-		{
 			"files": ["vitest.config.mts", "test/**/*.ts"],
 			"plugins": ["vitest"],
 			"rules": {
 				// The tests import from `../src`.
 				"import/no-relative-parent-imports": "off",
 				// vitest globals are not enabled (see vitest.config.mts), so the
-				// suites import `describe`/`it`/`expect` explicitly.
+				// suites import `describe`/`it`/`expect` explicitly — the spelling
+				// the enabled vitest/prefer-importing-vitest-globals requires; as
+				// errors the pair would leave a suite no way to name its test
+				// functions.
 				"vitest/no-importing-vitest-globals": "off",
 				// Demands an explicit timeout argument on every test. The suites run
 				// in-process against stubs, so they rely on the default instead.
