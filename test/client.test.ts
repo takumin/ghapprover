@@ -51,7 +51,7 @@ describe("client authentication", () => {
 });
 
 /** The delivery signal on a recorded dispatch; absent means the budget did not reach it. */
-function dispatchedSignal(seen: RecordedRequest): AbortSignal {
+function signalOf(seen: RecordedRequest): AbortSignal {
 	const { signal } = seen;
 	if (signal === undefined) {
 		throw new Error(`no signal was installed on the dispatch: ${seen.url}`);
@@ -75,7 +75,7 @@ describe("delivery deadline", () => {
 		]);
 		await listPullRequestCommits(await makeClient(), REPO, PULL_NUMBER);
 		expect(mock.requests.map((seen) => seen.url)).toStrictEqual([TOKEN_URL, firstUrl, secondUrl]);
-		const signals = mock.requests.map((seen) => dispatchedSignal(seen));
+		const signals = mock.requests.map((seen) => signalOf(seen));
 		expect(new Set(signals).size).toBe(1);
 	});
 
@@ -83,6 +83,6 @@ describe("delivery deadline", () => {
 		expect.hasAssertions();
 		const mock = installFetchMock([appRoute()]);
 		await fetchAppBotLogin(await makeClient());
-		expect(dispatchedSignal(requestByUrl(mock, APP_URL))).toMatchObject({ aborted: false });
+		expect(signalOf(requestByUrl(mock, APP_URL))).toMatchObject({ aborted: false });
 	});
 });

@@ -6,11 +6,11 @@
  * membership lookup per principal (SPEC.md §3.1, §4).
  */
 
-import { HTTP_OK, installFetchMock } from "./fetch-stub";
 import { ORG, OWNER, RENOVATE, RENOVATE_WRONG_ID, WEB_FLOW_USER } from "./fixtures";
-import { buildPayload, commitsRouteFor, expectReply, postSigned } from "./delivery";
+import { buildPayload, expectSkipped, postSigned } from "./delivery";
 import {
 	commitItem,
+	commitsRoute,
 	installTokenRoute,
 	membershipAdminRoute,
 	membershipMissingRoute,
@@ -19,6 +19,7 @@ import {
 import { describe, expect, it } from "vitest";
 import type { GithubAccount } from "../src/types";
 import { MAX_VERIFIABLE_COMMITS } from "../src/commits";
+import { installFetchMock } from "./fetch-stub";
 
 /* Two ordinary untrusted commit principals, stated here rather than with the shared account
  * fixtures: this is the only suite that needs them, and what it needs of them is that they are two
@@ -38,19 +39,16 @@ describe("commit conditions", () => {
 			expect.hasAssertions();
 			const session = installFetchMock([]);
 			const response = await postSigned(buildPayload({ commits }));
-			await expectReply(response, { body: { decision: "skipped", reason }, status: HTTP_OK });
+			await expectSkipped(response, reason);
 			session.assertDone();
 		},
 	);
 
 	it("skips on a commit count mismatch", async () => {
 		expect.hasAssertions();
-		const session = installFetchMock([installTokenRoute(), commitsRouteFor([commitItem()])]);
+		const session = installFetchMock([installTokenRoute(), commitsRoute([commitItem()])]);
 		const response = await postSigned(buildPayload({ commits: 2 }));
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "commit-count-mismatch" },
-			status: HTTP_OK,
-		});
+		await expectSkipped(response, "commit-count-mismatch");
 		session.assertDone();
 	});
 });
@@ -66,9 +64,9 @@ describe("commit verification", () => {
 		},
 	])("skips $name", async ({ commit, reason }) => {
 		expect.hasAssertions();
-		const session = installFetchMock([installTokenRoute(), commitsRouteFor([commitItem(commit)])]);
+		const session = installFetchMock([installTokenRoute(), commitsRoute([commitItem(commit)])]);
 		const response = await postSigned(buildPayload());
-		await expectReply(response, { body: { decision: "skipped", reason }, status: HTTP_OK });
+		await expectSkipped(response, reason);
 		session.assertDone();
 	});
 
@@ -77,16 +75,13 @@ describe("commit verification", () => {
 		const session = installFetchMock([
 			installTokenRoute(),
 			membershipAdminRoute(OWNER),
-			commitsRouteFor(
+			commitsRoute(
 				[commitItem({ author: STRANGER, verified: false }), commitItem({ author: STRANGER })],
 				ORG,
 			),
 		]);
 		const response = await postSigned(buildPayload({ commits: 2, repoOwner: ORG }));
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "unverified-commit" },
-			status: HTTP_OK,
-		});
+		await expectSkipped(response, "unverified-commit");
 		session.assertDone();
 	});
 });
@@ -100,13 +95,10 @@ describe("principal trust resolution", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
-			commitsRouteFor([commitItem({ author: RENOVATE_WRONG_ID, committer: WEB_FLOW_USER })]),
+			commitsRoute([commitItem({ author: RENOVATE_WRONG_ID, committer: WEB_FLOW_USER })]),
 		]);
 		const response = await postSigned(buildPayload({ user: RENOVATE }));
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "untrusted-commit" },
-			status: HTTP_OK,
-		});
+		await expectSkipped(response, "untrusted-commit");
 		session.assertDone();
 	});
 
@@ -117,14 +109,11 @@ describe("principal trust resolution", () => {
 		const session = installFetchMock([
 			installTokenRoute(),
 			membershipAdminRoute(OWNER),
-			commitsRouteFor([commitItem({ author: STRANGER, committer: OTHER_STRANGER })], ORG),
+			commitsRoute([commitItem({ author: STRANGER, committer: OTHER_STRANGER })], ORG),
 			membershipMissingRoute(STRANGER),
 		]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "untrusted-commit" },
-			status: HTTP_OK,
-		});
+		await expectSkipped(response, "untrusted-commit");
 		expect(session.requests.map((entry) => entry.url)).not.toContain(membershipUrl(OTHER_STRANGER));
 		session.assertDone();
 	});

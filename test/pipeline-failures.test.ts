@@ -10,6 +10,7 @@
 import {
 	COMMITS_ENDPOINT,
 	COMMITS_SUFFIX,
+	HTTP_FORBIDDEN,
 	REFUSAL_HEADERS,
 	TOKEN_ENDPOINT,
 	TOKEN_URL,
@@ -20,19 +21,14 @@ import {
 	DELIVERY_ID,
 	buildPayload,
 	captureLog,
-	expectReply,
+	expectError,
 	makeEnv,
 	postSigned,
 } from "./delivery";
 import { HEAD_SHA, ORG, PULL_NUMBER, REPOSITORY } from "./fixtures";
-import {
-	HTTP_FORBIDDEN,
-	HTTP_INTERNAL_ERROR,
-	HTTP_NOT_FOUND,
-	installFetchMock,
-	jsonRoute,
-} from "./fetch-stub";
+import { HTTP_INTERNAL_ERROR, HTTP_NOT_FOUND } from "../src/http-status";
 import { describe, expect, it } from "vitest";
+import { installFetchMock, jsonRoute } from "./fetch-stub";
 import { MAX_ERROR_MESSAGE_CHARS } from "../src/log";
 import type { PlannedRoute } from "./fetch-stub";
 
@@ -49,10 +45,7 @@ describe("auth configuration failures", () => {
 		const session = installFetchMock([]);
 		const env = await makeEnv({ GITHUB_APP_PRIVATE_KEY: PKCS1_PEM });
 		const response = await postSigned(buildPayload(), "pull_request", env);
-		await expectReply(response, {
-			body: { decision: "error", reason: "internal-error" },
-			status: HTTP_INTERNAL_ERROR,
-		});
+		await expectError(response, "internal-error", HTTP_INTERNAL_ERROR);
 		/* SPEC.md §8: the class name is `Error` for every configuration mistake alike, so what says
 		 * which one this was is the message the auth library raised. */
 		expect(logSpy).toHaveBeenCalledWith(
@@ -77,10 +70,7 @@ describe("auth configuration failures", () => {
 			}),
 		]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
-		await expectReply(response, {
-			body: { decision: "error", reason: "github-api-error" },
-			status: HTTP_INTERNAL_ERROR,
-		});
+		await expectError(response, "github-api-error", HTTP_INTERNAL_ERROR);
 		expect(logSpy).toHaveBeenCalledWith(
 			expect.objectContaining({ endpoint: TOKEN_ENDPOINT, status: HTTP_NOT_FOUND }),
 		);
@@ -101,10 +91,7 @@ describe("github api failures", () => {
 			}),
 		]);
 		const response = await postSigned(buildPayload());
-		await expectReply(response, {
-			body: { decision: "error", reason: "github-api-error" },
-			status: HTTP_INTERNAL_ERROR,
-		});
+		await expectError(response, "github-api-error", HTTP_INTERNAL_ERROR);
 		session.assertDone();
 	});
 
@@ -120,10 +107,7 @@ describe("github api failures", () => {
 			}),
 		]);
 		const response = await postSigned(buildPayload());
-		await expectReply(response, {
-			body: { decision: "error", reason: "github-api-error" },
-			status: HTTP_INTERNAL_ERROR,
-		});
+		await expectError(response, "github-api-error", HTTP_INTERNAL_ERROR);
 		session.assertDone();
 	});
 });

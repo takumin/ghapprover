@@ -52,13 +52,11 @@ export function checkPullRequestState(
 	return null;
 }
 
-/* The verdict, or the one lookup that resolves it: the org whose membership decides this account.
- * The account itself is not restated here — the caller passed it in and still holds it, and a copy
- * of its login is a second place the lookup could be made about somebody else. */
-export type TrustEvaluation =
-	| { readonly kind: "trusted" }
-	| { readonly kind: "untrusted" }
-	| { readonly kind: "org-membership"; readonly org: string };
+/* The verdict, or the one lookup that resolves it — the membership of the organization that owns
+ * the repository. Neither account is restated here: the caller passed both the principal and the
+ * repository owner in and still holds them, and a copy of either login is a second place the
+ * lookup could be made about somebody else. */
+export type TrustEvaluation = "org-membership" | "trusted" | "untrusted";
 
 /* SPEC.md §3.1: bots are trusted solely via the allowlist (login and numeric id both matching)
  * and never fall through to the owner/org checks; users on org repositories resolve through the
@@ -69,17 +67,17 @@ export type TrustEvaluation =
 export function classifyPrincipal(user: GithubAccount, repoOwner: GithubAccount): TrustEvaluation {
 	if (user.type === "Bot") {
 		if (isAllowedBot(user)) {
-			return { kind: "trusted" };
+			return "trusted";
 		}
-		return { kind: "untrusted" };
+		return "untrusted";
 	}
 	if (repoOwner.type === "Organization") {
-		return { kind: "org-membership", org: repoOwner.login };
+		return "org-membership";
 	}
 	if (isSameAccount(user, repoOwner)) {
-		return { kind: "trusted" };
+		return "trusted";
 	}
-	return { kind: "untrusted" };
+	return "untrusted";
 }
 
 /** SPEC.md §3.1: an org owner is an active admin; null (404, not a member) is not one. */

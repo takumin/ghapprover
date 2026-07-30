@@ -13,10 +13,13 @@ import {
 	TOKEN_URL,
 	appRoute,
 	commitItem,
+	commitsRoute,
 	installTokenRoute,
 	membershipAdminRoute,
 	membershipMissingRoute,
 	pullUrl,
+	reviewPostRoute,
+	reviewsRoute,
 } from "./github-api";
 import {
 	AUTOFIX_CI,
@@ -33,16 +36,15 @@ import {
 	OWN_APPROVAL,
 	buildPayload,
 	captureLog,
-	commitsRouteFor,
-	expectReply,
+	expectApproved,
+	expectSkipped,
 	happyRoutes,
 	pipelineRoutes,
 	postSigned,
-	reviewPostRouteFor,
-	reviewsRouteFor,
 } from "./delivery";
-import { HTTP_OK, HTTP_UNPROCESSABLE_ENTITY, installFetchMock, requestByUrl } from "./fetch-stub";
+import { HTTP_OK, HTTP_UNPROCESSABLE_ENTITY } from "../src/http-status";
 import { describe, expect, it } from "vitest";
+import { installFetchMock, requestByUrl } from "./fetch-stub";
 
 /* SPEC.md §4 step 2: the state conditions are decided on the payload alone, so each of them
  * settles the delivery before the client is built — which is what the request count asserts. */
@@ -64,7 +66,7 @@ describe("pull request state", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([]);
 		const response = await postSigned(buildPayload(overrides));
-		await expectReply(response, { body: { decision: "skipped", reason }, status: HTTP_OK });
+		await expectSkipped(response, reason);
 		expect(session.requests).toHaveLength(0);
 	});
 });
@@ -74,7 +76,7 @@ describe("owner approval flow", () => {
 		expect.hasAssertions();
 		const session = installFetchMock(happyRoutes());
 		const response = await postSigned(buildPayload());
-		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
+		await expectApproved(response);
 		const posted = requestByUrl(session, pullUrl("/reviews"));
 		expect(posted.body).toBe('{"commit_id":"head-sha","event":"APPROVE"}');
 		session.assertDone();
@@ -119,10 +121,10 @@ describe("author trust", () => {
 			installTokenRoute(),
 			membershipAdminRoute(OWNER),
 			...pipelineRoutes({ commits: [commitItem()], owner: ORG, reviews: [] }),
-			reviewPostRouteFor(HTTP_OK, ORG),
+			reviewPostRoute(HTTP_OK, ORG),
 		]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
-		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
+		await expectApproved(response);
 		session.assertDone();
 	});
 
@@ -130,10 +132,7 @@ describe("author trust", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([installTokenRoute(), membershipMissingRoute(OWNER)]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "author-not-trusted" },
-			status: HTTP_OK,
-		});
+		await expectSkipped(response, "author-not-trusted");
 		session.assertDone();
 	});
 
@@ -145,10 +144,10 @@ describe("author trust", () => {
 				commits: [commitItem({ author: RENOVATE, committer: WEB_FLOW_USER })],
 				reviews: [],
 			}),
-			reviewPostRouteFor(HTTP_OK),
+			reviewPostRoute(HTTP_OK),
 		]);
 		const response = await postSigned(buildPayload({ user: RENOVATE }));
-		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
+		await expectApproved(response);
 		session.assertDone();
 	});
 });
@@ -168,10 +167,10 @@ describe("autofix.ci commits", () => {
 				],
 				reviews: [],
 			}),
-			reviewPostRouteFor(HTTP_OK),
+			reviewPostRoute(HTTP_OK),
 		]);
 		const response = await postSigned(buildPayload({ commits: 2, user: RENOVATE }));
-		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
+		await expectApproved(response);
 		session.assertDone();
 	});
 });
@@ -181,15 +180,12 @@ describe("duplicate approval check", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
-			commitsRouteFor([commitItem()]),
+			commitsRoute([commitItem()]),
 			appRoute(),
-			reviewsRouteFor([OWN_APPROVAL]),
+			reviewsRoute([OWN_APPROVAL]),
 		]);
 		const response = await postSigned(buildPayload());
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "already-approved" },
-			status: HTTP_OK,
-		});
+		await expectSkipped(response, "already-approved");
 		session.assertDone();
 	});
 });
@@ -206,10 +202,7 @@ describe("live state checks", () => {
 			}),
 		]);
 		const response = await postSigned(buildPayload());
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "head-moved" },
-			status: HTTP_OK,
-		});
+		await expectSkipped(response, "head-moved");
 		session.assertDone();
 	});
 
@@ -218,13 +211,10 @@ describe("live state checks", () => {
 		const session = installFetchMock([
 			installTokenRoute(),
 			...pipelineRoutes({ commits: [commitItem()], reviews: [] }),
-			reviewPostRouteFor(HTTP_UNPROCESSABLE_ENTITY),
+			reviewPostRoute(HTTP_UNPROCESSABLE_ENTITY),
 		]);
 		const response = await postSigned(buildPayload());
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "review-rejected" },
-			status: HTTP_OK,
-		});
+		await expectSkipped(response, "review-rejected");
 		session.assertDone();
 	});
 });

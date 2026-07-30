@@ -11,13 +11,21 @@
 
 import { APP_SLUG, HEAD_SHA, ORG, OWNER, PULL_NUMBER, REPOSITORY } from "./fixtures";
 import type { ApprovalTarget, RepoRef } from "../src/github";
-import { HTTP_CREATED, HTTP_NOT_FOUND, HTTP_OK, jsonRoute } from "./fetch-stub";
+import { HTTP_NOT_FOUND, HTTP_OK } from "../src/http-status";
 import type { GithubAccount } from "../src/types";
 import type { GithubClient } from "../src/client";
 import { PAGE_SIZE } from "../src/github";
 import type { PlannedRoute } from "./fetch-stub";
 import { createGithubClient } from "../src/client";
+import { jsonRoute } from "./fetch-stub";
 import { privateKeyPemOnce } from "./app-key";
+
+/* The two statuses GitHub answers with that the Worker never names itself, so src/http-status.ts
+ * does not state them: the 201 of a freshly issued installation token, and the 403 a refused call
+ * comes back with. Stated with the routes they are planned on rather than with the stub that serves
+ * them — a stub serves whatever status it is handed, and it is GitHub that decides these two. */
+export const HTTP_CREATED = 201;
+export const HTTP_FORBIDDEN = 403;
 
 /** The API origin every route below is built on; the calls themselves reach nothing else. */
 const BASE = "https://api.github.com";
@@ -104,6 +112,37 @@ export function pullUrl(suffix = "", owner: string = REPO.owner, repo: string = 
 /** What every review-POST case approves; only the case about the URL varies the repository. */
 export function approvalTarget(repo: RepoRef = REPO): ApprovalTarget {
 	return { commitId: HEAD_SHA, pullNumber: PULL_NUMBER, repo };
+}
+
+/* The four per-PR routes, each planned on the URL the matching call in src/github.ts is made on.
+ * One builder apiece rather than one per suite family: the delivery suites consume these routes as
+ * steps of a run and the endpoint suites plan them one call at a time, and a route built twice is
+ * one that can be corrected in whichever suite failed and left wrong in the one that still passes.
+ * The owner is the account owning the fixture repository, which varies only for the cases that own
+ * it through an organization; what else a case varies is the response, which is why that is the
+ * first parameter of the three routes whose body is read at all. */
+export function commitsRoute(payload: unknown, owner: GithubAccount = OWNER): PlannedRoute {
+	return getRoute(pullUrl(COMMITS_SUFFIX, owner.login), payload);
+}
+export function reviewsRoute(payload: unknown, owner: GithubAccount = OWNER): PlannedRoute {
+	return getRoute(pullUrl(REVIEWS_SUFFIX, owner.login), payload);
+}
+/** The §3.3 live read, which a case varies only by the head it reports. */
+export function livePullRequestRoute(headSha: string, owner: GithubAccount = OWNER): PlannedRoute {
+	return getRoute(pullUrl("", owner.login), {
+		draft: false,
+		head: { sha: headSha },
+		state: "open",
+	});
+}
+/** The review POST. Its response body is the one no caller reads, so a case varies only the status. */
+export function reviewPostRoute(status: number, owner: GithubAccount = OWNER): PlannedRoute {
+	return jsonRoute({
+		method: "POST",
+		payload: { id: 1 },
+		status,
+		url: pullUrl("/reviews", owner.login),
+	});
 }
 
 /* The §3.1 membership lookup, for one account in the fixture organization: the URL, and the two

@@ -42,13 +42,12 @@ async function evaluateTrust(
 	repoOwner: GithubAccount,
 ): Promise<boolean> {
 	const evaluation = classifyPrincipal(user, repoOwner);
-	if (evaluation.kind === "trusted") {
-		return true;
+	if (evaluation !== "org-membership") {
+		return evaluation === "trusted";
 	}
-	if (evaluation.kind === "untrusted") {
-		return false;
-	}
-	return isOwnerMembership(await fetchOrgMembership(client, evaluation.org, user.login));
+	/* The org is the repository owner this call was made about, read from the account the caller
+	 * passed in rather than from a login the classification copied out of it. */
+	return isOwnerMembership(await fetchOrgMembership(client, repoOwner.login, user.login));
 }
 /* Memoizes per delivery so each distinct account is looked up at most once (SPEC.md §3.1).
  * The key is the accountKey pair, not the login: evaluateTrust decides on the id as well

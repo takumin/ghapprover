@@ -16,7 +16,9 @@ import {
 	deliveryHeaders,
 	deliveryRequest,
 	dispatch,
-	expectReply,
+	expectApproved,
+	expectError,
+	expectSkipped,
 	happyRoutes,
 	postSigned,
 	signedDelivery,
@@ -26,12 +28,11 @@ import {
 import {
 	HTTP_INTERNAL_ERROR,
 	HTTP_NOT_FOUND,
-	HTTP_OK,
 	HTTP_PAYLOAD_TOO_LARGE,
 	HTTP_UNAUTHORIZED,
-	installFetchMock,
-} from "./fetch-stub";
+} from "../src/http-status";
 import { describe, expect, it } from "vitest";
+import { installFetchMock } from "./fetch-stub";
 import { sign } from "@octokit/webhooks-methods";
 
 describe("request routing", () => {
@@ -46,10 +47,7 @@ describe("request routing", () => {
 	])("returns 404 for $name", async ({ init, url }) => {
 		expect.hasAssertions();
 		installFetchMock([]);
-		await expectReply(await dispatch(new Request(url, init)), {
-			body: { decision: "error", reason: "not-found" },
-			status: HTTP_NOT_FOUND,
-		});
+		await expectError(await dispatch(new Request(url, init)), "not-found", HTTP_NOT_FOUND);
 	});
 
 	/* SPEC.md §8: a webhook URL pointing at the wrong path is what not-found exists to
@@ -82,10 +80,7 @@ describe("signature verification", () => {
 		expect.hasAssertions();
 		installFetchMock([]);
 		const request = deliveryRequest(buildPayload(), unsignedDeliveryHeaders());
-		await expectReply(await dispatch(request), {
-			body: { decision: "error", reason: "invalid-signature" },
-			status: HTTP_UNAUTHORIZED,
-		});
+		await expectError(await dispatch(request), "invalid-signature", HTTP_UNAUTHORIZED);
 	});
 
 	it("rejects a signature over a tampered body", async () => {
@@ -96,10 +91,7 @@ describe("signature verification", () => {
 			buildPayload({ action: "synchronize" }),
 			deliveryHeaders(signature),
 		);
-		await expectReply(await dispatch(request), {
-			body: { decision: "error", reason: "invalid-signature" },
-			status: HTTP_UNAUTHORIZED,
-		});
+		await expectError(await dispatch(request), "invalid-signature", HTTP_UNAUTHORIZED);
 	});
 });
 
@@ -108,20 +100,14 @@ describe("event scoping", () => {
 		expect.hasAssertions();
 		installFetchMock([]);
 		const response = await postSigned("zen text, deliberately not JSON", "ping");
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "event-out-of-scope" },
-			status: HTTP_OK,
-		});
+		await expectSkipped(response, "event-out-of-scope");
 	});
 
 	it("skips a non-target action", async () => {
 		expect.hasAssertions();
 		installFetchMock([]);
 		const response = await postSigned(buildPayload({ action: "closed" }));
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "event-out-of-scope" },
-			status: HTTP_OK,
-		});
+		await expectSkipped(response, "event-out-of-scope");
 	});
 });
 
@@ -148,10 +134,7 @@ describe("payload validation", () => {
 		expect.hasAssertions();
 		const logSpy = captureLog();
 		installFetchMock([]);
-		await expectReply(await postSigned(body), {
-			body: { decision: "error", reason: "invalid-payload" },
-			status: HTTP_INTERNAL_ERROR,
-		});
+		await expectError(await postSigned(body), "invalid-payload", HTTP_INTERNAL_ERROR);
 		expect(logSpy).toHaveBeenCalledWith(entry);
 	});
 
@@ -159,10 +142,7 @@ describe("payload validation", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([]);
 		const response = await postSigned(buildPayload({ installation: null }));
-		await expectReply(response, {
-			body: { decision: "error", reason: "missing-installation" },
-			status: HTTP_INTERNAL_ERROR,
-		});
+		await expectError(response, "missing-installation", HTTP_INTERNAL_ERROR);
 		session.assertDone();
 	});
 });
@@ -210,10 +190,7 @@ describe("request body limits", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([]);
 		const response = await postSignedWithLength(buildPayload(), OVERSIZED_BODY_BYTES);
-		await expectReply(response, {
-			body: { decision: "error", reason: "payload-too-large" },
-			status: HTTP_PAYLOAD_TOO_LARGE,
-		});
+		await expectError(response, "payload-too-large", HTTP_PAYLOAD_TOO_LARGE);
 		expect(session.requests).toHaveLength(0);
 	});
 
@@ -222,7 +199,7 @@ describe("request body limits", () => {
 		installFetchMock(happyRoutes());
 		const body = buildPayload();
 		const response = await postSignedWithLength(body, new TextEncoder().encode(body).length);
-		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
+		await expectApproved(response);
 	});
 
 	/* The case the declared length cannot cover: an unauthenticated caller streams a body past
@@ -230,10 +207,11 @@ describe("request body limits", () => {
 	it("rejects a chunked body past the cap, which declares no Content-Length", async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([]);
-		await expectReply(await dispatch(oversizedChunkedRequest()), {
-			body: { decision: "error", reason: "payload-too-large" },
-			status: HTTP_PAYLOAD_TOO_LARGE,
-		});
+		await expectError(
+			await dispatch(oversizedChunkedRequest()),
+			"payload-too-large",
+			HTTP_PAYLOAD_TOO_LARGE,
+		);
 		expect(session.requests).toHaveLength(0);
 	});
 
@@ -242,10 +220,7 @@ describe("request body limits", () => {
 	it("processes a chunked delivery within the cap", async () => {
 		expect.hasAssertions();
 		installFetchMock(happyRoutes());
-		await expectReply(await postSignedChunked(buildPayload()), {
-			body: { decision: "approved" },
-			status: HTTP_OK,
-		});
+		await expectApproved(await postSignedChunked(buildPayload()));
 	});
 });
 
@@ -270,10 +245,11 @@ describe("unreadable deliveries", () => {
 		expect.hasAssertions();
 		const logSpy = captureLog();
 		const session = installFetchMock([]);
-		await expectReply(await dispatch(requestWithFailingBody()), {
-			body: { decision: "error", reason: "internal-error" },
-			status: HTTP_INTERNAL_ERROR,
-		});
+		await expectError(
+			await dispatch(requestWithFailingBody()),
+			"internal-error",
+			HTTP_INTERNAL_ERROR,
+		);
 		expect(logSpy).toHaveBeenCalledWith(
 			expect.objectContaining({
 				decision: "error",

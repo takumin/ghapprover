@@ -24,85 +24,85 @@ const PENDING_ADMIN: OrgMembership = { role: "admin", state: "pending" };
 
 const CLASSIFY_CASES = [
 	{
-		expected: { kind: "trusted" },
+		expected: "trusted",
 		name: "the personal repository owner",
 		owner: OWNER,
 		user: OWNER,
 	},
 	{
-		expected: { kind: "untrusted" },
+		expected: "untrusted",
 		name: "another user on a personal repository",
 		owner: OWNER,
 		user: HUMAN,
 	},
 	{
-		expected: { kind: "untrusted" },
+		expected: "untrusted",
 		name: "a user with the owner's login but another id",
 		owner: OWNER,
 		user: OWNER_WRONG_ID,
 	},
 	{
-		expected: { kind: "org-membership", org: ORG.login },
+		expected: "org-membership",
 		name: "a user on an org repository",
 		owner: ORG,
 		user: OWNER,
 	},
 	{
-		expected: { kind: "trusted" },
+		expected: "trusted",
 		name: "renovate with the exact login and id",
 		owner: OWNER,
 		user: RENOVATE,
 	},
 	{
-		expected: { kind: "trusted" },
+		expected: "trusted",
 		name: "dependabot on an org repository",
 		owner: ORG,
 		user: DEPENDABOT,
 	},
 	{
-		expected: { kind: "trusted" },
+		expected: "trusted",
 		name: "autofix-ci with the exact login and id",
 		owner: OWNER,
 		user: AUTOFIX_CI,
 	},
 	{
-		expected: { kind: "untrusted" },
+		expected: "untrusted",
 		name: "a bot with the autofix-ci login but another id",
 		owner: OWNER,
 		user: AUTOFIX_CI_WRONG_ID,
 	},
 	{
-		expected: { kind: "untrusted" },
+		expected: "untrusted",
 		name: "a bot with the renovate login but another id",
 		owner: OWNER,
 		user: RENOVATE_WRONG_ID,
 	},
 	{
-		expected: { kind: "untrusted" },
+		expected: "untrusted",
 		name: "a bot with the renovate id but another login",
 		owner: OWNER,
 		user: RENOVATE_WRONG_LOGIN,
 	},
 	{
-		expected: { kind: "untrusted" },
+		expected: "untrusted",
 		name: "github-actions even on an org repository",
 		owner: ORG,
 		user: GITHUB_ACTIONS,
 	},
 	{
-		expected: { kind: "untrusted" },
+		expected: "untrusted",
 		name: "a bot named like the personal owner",
 		owner: OWNER,
 		user: BOT_NAMED_LIKE_OWNER,
 	},
 	{
-		expected: { kind: "org-membership", org: ORG.login },
+		expected: "org-membership",
 		name: "a User named like renovate on an org repository",
 		owner: ORG,
 		user: RENOVATE_TYPE_USER,
 	},
 	{
-		expected: { kind: "untrusted" },
+		expected: "untrusted",
 		name: "a User named like renovate on a personal repository",
 		owner: OWNER,
 		user: RENOVATE_TYPE_USER,
@@ -110,9 +110,9 @@ const CLASSIFY_CASES = [
 ];
 
 describe("principal classification", () => {
-	it.each(CLASSIFY_CASES)("classifies $name as $expected.kind", ({ expected, owner, user }) => {
+	it.each(CLASSIFY_CASES)("classifies $name as $expected", ({ expected, owner, user }) => {
 		expect.hasAssertions();
-		expect(classifyPrincipal(user, owner)).toStrictEqual(expected);
+		expect(classifyPrincipal(user, owner)).toBe(expected);
 	});
 });
 
