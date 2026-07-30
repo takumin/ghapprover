@@ -89,7 +89,13 @@ const TOKEN_ENDPOINT = "POST /app/installations/{installation_id}/access_tokens"
  */
 const TOKEN_PATH_PATTERN = /^\/app\/installations\/\d+\/access_tokens$/u;
 
-/** Whether the failed request is the auth strategy's token request, matched on its path alone; a URL that will not parse is not it. */
+/**
+ * Whether the failed request is the auth strategy's internal token request rather
+ * than the call the caller asked for — the strategy issues it lazily inside
+ * whichever call runs first, so its failure surfaces as that call's exception, and
+ * those two are the only requests a single call dispatches. Matched on the path
+ * alone; a URL that will not parse is not it.
+ */
 function isTokenRequest(url: string): boolean {
 	try {
 		return TOKEN_PATH_PATTERN.test(new URL(url).pathname);
@@ -146,19 +152,17 @@ function transportError(endpoint: string, diagnostics: ApiDiagnostics): GithubAp
 	});
 }
 /** Which route a failure is named after: the auth strategy's token endpoint when its internal request is the one that failed, and the guarded endpoint otherwise. */
-function attributedEndpoint(endpoint: string, requestUrl: string): string {
-	if (isTokenRequest(requestUrl)) {
+function attributedEndpoint(endpoint: string, fromTokenRequest: boolean): string {
+	if (fromTokenRequest) {
 		return TOKEN_ENDPOINT;
 	}
 	return endpoint;
 }
 /**
- * A RequestError, the one octokit failure whose status, request and response the package types for
- * us — which is what earns it a line of its own in the §11 table. It carries a response for an HTTP
- * failure and none for a transport failure, and only the former is attributed to a route other than
- * the guarded one: the auth strategy issues its token request lazily inside whichever call runs
- * first, so that request's failure surfaces as this call's exception, and those two are the only
- * requests a single call dispatches.
+ * A thrown RequestError — the one octokit failure whose status, request and response the package
+ * types for us, which is what earns it a line of its own in the §11 table. It carries a response
+ * for an HTTP failure, which keeps its status and is attributed to the endpoint above, and none for
+ * a transport failure.
  */
 function requestFailureError(endpoint: string, error: RequestError): GithubApiError {
 	const diagnostics = diagnosticsOf(error);
@@ -167,14 +171,10 @@ function requestFailureError(endpoint: string, error: RequestError): GithubApiEr
 	}
 	return new GithubApiError({
 		diagnostics,
-		endpoint: attributedEndpoint(endpoint, error.request.url),
+		endpoint: attributedEndpoint(endpoint, isTokenRequest(error.request.url)),
 		reason: "unexpected response status",
 		status: error.status,
 	});
-}
-/** The delivery deadline firing (src/client.ts): @octokit/request rethrows an aborted fetch as it is rather than wrapping it, so it is recognized by name. */
-function isAborted(error: Error): boolean {
-	return error.name === "AbortError" || error.name === "TimeoutError";
 }
 
 /**
@@ -187,16 +187,16 @@ export function toApiError(endpoint: string, error: unknown): Error {
 	if (error instanceof GithubApiError) {
 		return error;
 	}
-	if (!(error instanceof Error)) {
-		return transportError(endpoint, NO_DIAGNOSTICS);
-	}
-	/* Before the RequestError branch, as the abort is rethrown unwrapped: a thrown value that is
-	 * neither is a failure this module does not model, and travels on unchanged. */
-	if (isAborted(error)) {
+	/* An aborted fetch (the delivery deadline firing, src/client.ts) is rethrown by
+	 * @octokit/request as it is rather than wrapped, so it is matched first and by name. */
+	if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
 		return transportError(endpoint, withoutResponse(error.message));
 	}
 	if (error instanceof RequestError) {
 		return requestFailureError(endpoint, error);
 	}
-	return error;
+	if (error instanceof Error) {
+		return error;
+	}
+	return transportError(endpoint, NO_DIAGNOSTICS);
 }

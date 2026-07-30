@@ -45,8 +45,6 @@ export function memberUrl(member: GithubAccount): string {
 	return membershipUrl(ORG.login, member.login);
 }
 
-export const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User" };
-export const OTHER_STRANGER: GithubAccount = { id: 998, login: "eve", type: "User" };
 export const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT };
 
 /** The env a delivery runs against; a case about the configuration itself overrides the one secret it is about. */

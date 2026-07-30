@@ -19,15 +19,14 @@ import {
 import type { PrStateProblem } from "./decision";
 
 /**
- * SPEC.md §8's reason vocabulary, closed rather than illustrative because it is
- * what an operator greps. The §3 rows are one per decision check, named by what
- * that check can actually return, so a renamed problem there is a compile error
- * here rather than a silent change to the logged vocabulary — and a check
- * narrowed to fewer members is caught here too, rather than being absorbed by a
- * union wide enough to cover its siblings. The rest are outcomes of the pipeline
- * and of the entry point that wraps it.
+ * The half of the vocabulary a delivery skips with: an evaluation that completed
+ * and did not approve. The §3 rows are one per decision check, named by what that
+ * check can actually return, so a renamed problem there is a compile error here
+ * rather than a silent change to the logged vocabulary — and a check narrowed to
+ * fewer members is caught here too, rather than being absorbed by a union wide
+ * enough to cover its siblings. The rest are outcomes of the pipeline itself.
  */
-export type Reason =
+export type SkipReason =
 	| CommitCountProblem
 	| CommitListProblem
 	| CommitProblem
@@ -35,15 +34,25 @@ export type Reason =
 	| "already-approved"
 	| "author-not-trusted"
 	| "event-out-of-scope"
-	| "github-api-error"
 	| "head-moved"
+	| "review-rejected";
+/** The other half: an evaluation that could not be completed, which the §9 status table below keys. */
+export type ErrorReason =
+	| "github-api-error"
 	| "internal-error"
 	| "invalid-payload"
 	| "invalid-signature"
 	| "missing-installation"
 	| "not-found"
-	| "payload-too-large"
-	| "review-rejected";
+	| "payload-too-large";
+/**
+ * SPEC.md §8's reason vocabulary, closed rather than illustrative because it is what an operator
+ * greps — and stated as the two halves above rather than as one flat union, because §8's table
+ * assigns every reason to exactly one decision: flat, a skip could be reported as an error, and the
+ * §9 status table below would be keyed by reasons that can never reach it. Reunited here because
+ * the logged vocabulary is the whole of both.
+ */
+export type Reason = ErrorReason | SkipReason;
 
 /**
  * Evaluation result mapped onto the §9 status table and the §8 log entry.
@@ -77,7 +86,7 @@ type ErrorDetail = Omit<Outcome, "decision" | "httpStatus" | "reason">;
 export function approvedOutcome(): Outcome {
 	return { decision: "approved", httpStatus: HTTP_OK };
 }
-export function skippedOutcome(reason: Reason): Outcome {
+export function skippedOutcome(reason: SkipReason): Outcome {
 	return { decision: "skipped", httpStatus: HTTP_OK, reason };
 }
 /**
@@ -87,7 +96,7 @@ export function skippedOutcome(reason: Reason): Outcome {
  * redeliverable — so a reason added to the vocabulary with no entry here answers 500 by the rule
  * §9 states, rather than by whichever caller remembered to pass a status.
  */
-const ERROR_STATUS: Partial<Record<Reason, number>> = {
+const ERROR_STATUS: Partial<Record<ErrorReason, number>> = {
 	"invalid-signature": HTTP_UNAUTHORIZED,
 	"not-found": HTTP_NOT_FOUND,
 	"payload-too-large": HTTP_PAYLOAD_TOO_LARGE,
@@ -95,7 +104,7 @@ const ERROR_STATUS: Partial<Record<Reason, number>> = {
 /* The one way an error outcome is built, whichever §8 fields it carries: the reason decides the
  * status, and the detail is merged onto it with Object.assign rather than spread (the spread
  * properties are lint-banned), so what every failure has in common is stated once. */
-export function errorOutcome(reason: Reason, detail: ErrorDetail = {}): Outcome {
+export function errorOutcome(reason: ErrorReason, detail: ErrorDetail = {}): Outcome {
 	const failure: Outcome = {
 		decision: "error",
 		httpStatus: ERROR_STATUS[reason] ?? HTTP_INTERNAL_ERROR,
