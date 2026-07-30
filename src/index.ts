@@ -6,8 +6,8 @@
  * Deliveries and redeliverable (§9).
  */
 
-import { deliveryFields, logOutcome, recordPayload, thrownFailure } from "./log";
-import { errorOutcome, skippedOutcome } from "./outcome";
+import { deliveryFields, logOutcome, recordPayload } from "./log";
+import { errorOutcome, internalErrorOutcome, skippedOutcome } from "./outcome";
 import type { AppCredentials } from "./client";
 import type { LogFields } from "./log";
 import type { Outcome } from "./outcome";
@@ -140,12 +140,10 @@ async function evaluateOrFail(request: Request, env: Env, log: LogFields): Promi
 		}
 		return await evaluateDelivery(request, env, log);
 	} catch (error) {
-		/* SPEC.md §9's "any other thrown failure": the class name keeps configuration mistakes
-		 * (e.g. a PKCS#1 key the auth library rejects) distinguishable from code bugs, and §8's
-		 * errorMessage is what says which mistake it was — the class alone is `Error` for both. A
-		 * failed GitHub call is not one of these: runPipeline maps its own GithubApiError onto the
-		 * github-api-error outcome, with the §8 diagnostics that error carries. */
-		return errorOutcome("internal-error", thrownFailure(error));
+		/* SPEC.md §9's "any other thrown failure". A failed GitHub call is not one of these:
+		 * runPipeline maps its own GithubApiError onto the github-api-error outcome, with the §8
+		 * diagnostics that error carries. */
+		return internalErrorOutcome(error);
 	}
 }
 /** The one terminal frame: every request leaves through exactly one log entry and one response. */

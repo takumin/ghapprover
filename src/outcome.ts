@@ -119,3 +119,16 @@ export function apiErrorOutcome(error: GithubApiError): Outcome {
 	const origin = { endpoint: error.endpoint, status: error.status };
 	return errorOutcome("github-api-error", Object.assign(origin, error.diagnostics));
 }
+/* SPEC.md §9's "any other thrown failure", mapped beside the failure the pipeline maps above so
+ * every thrown value becomes its outcome in this one module: the class name keeps configuration
+ * mistakes (e.g. a PKCS#1 key the auth library rejects) distinguishable from code bugs, and §8's
+ * errorMessage — truncated where the log entry is built (src/log.ts) — is what says which mistake
+ * it was, the class alone being `Error` for both. A value thrown that is not an Error has no
+ * message to report — the class name already says so — so the field is left off rather than
+ * filled with a stringification of whatever it was. */
+export function internalErrorOutcome(error: unknown): Outcome {
+	if (error instanceof Error) {
+		return errorOutcome("internal-error", { errorMessage: error.message, errorName: error.name });
+	}
+	return errorOutcome("internal-error", { errorName: "unknown" });
+}

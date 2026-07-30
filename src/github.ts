@@ -18,6 +18,7 @@ import {
 	pullRequestReviewSchema,
 } from "./types";
 import { isFailureOn, shapeError, toApiError } from "./api-error";
+import type { EndpointStatus } from "./api-error";
 import type { GithubClient } from "./client";
 import { safeParse } from "valibot";
 
@@ -28,12 +29,6 @@ export const PAGE_SIZE = 100;
 export interface RepoRef {
 	readonly owner: string;
 	readonly repo: string;
-}
-
-/** One route and one status: what a shape violation is attributed to, and which failure a call below tolerates. */
-interface EndpointStatus {
-	readonly endpoint: string;
-	readonly status: number;
 }
 
 /*
@@ -50,7 +45,7 @@ function parseContract<Schema extends GenericSchema>(
 ): InferOutput<Schema> {
 	const result = safeParse(schema, value);
 	if (!result.success) {
-		throw shapeError(origin.endpoint, origin.status);
+		throw shapeError(origin);
 	}
 	return result.output;
 }
@@ -86,7 +81,7 @@ async function answering<Answer, Result>(
 	try {
 		return await call();
 	} catch (error) {
-		if (isFailureOn(error, tolerated.endpoint, tolerated.status)) {
+		if (isFailureOn(error, tolerated)) {
 			return answer;
 		}
 		throw error;

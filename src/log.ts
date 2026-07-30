@@ -85,19 +85,3 @@ export function logOutcome(log: LogFields, outcome: Outcome): void {
 	}
 	console.log(log);
 }
-
-interface ThrownFailure {
-	readonly errorMessage: string | undefined;
-	readonly errorName: string;
-}
-/* What §8 reports about a thrown value: its class name, which stays bounded whatever was thrown,
- * paired with the message it carries, truncated with every other path onto that field above. One
- * helper for the pair because one `instanceof` decides both. A value thrown that is not an Error
- * has no message to report — the class name already says so — so the field is left off rather than
- * filled with a stringification of whatever it was. */
-export function thrownFailure(error: unknown): ThrownFailure {
-	if (error instanceof Error) {
-		return { errorMessage: error.message, errorName: error.name };
-	}
-	return { errorMessage: undefined, errorName: "unknown" };
-}
