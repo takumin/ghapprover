@@ -13,10 +13,13 @@ import {
 	TOKEN_URL,
 	appRoute,
 	commitItem,
+	commitsRoute,
 	installTokenRoute,
 	membershipAdminRoute,
 	membershipMissingRoute,
 	pullUrl,
+	reviewPostRoute,
+	reviewsRoute,
 } from "./github-api";
 import {
 	AUTOFIX_CI,
@@ -33,14 +36,11 @@ import {
 	OWN_APPROVAL,
 	buildPayload,
 	captureLog,
-	commitsRouteFor,
 	expectApproved,
 	expectSkipped,
 	happyRoutes,
 	pipelineRoutes,
 	postSigned,
-	reviewPostRouteFor,
-	reviewsRouteFor,
 } from "./delivery";
 import { HTTP_OK, HTTP_UNPROCESSABLE_ENTITY, installFetchMock, requestByUrl } from "./fetch-stub";
 import { describe, expect, it } from "vitest";
@@ -120,7 +120,7 @@ describe("author trust", () => {
 			installTokenRoute(),
 			membershipAdminRoute(OWNER),
 			...pipelineRoutes({ commits: [commitItem()], owner: ORG, reviews: [] }),
-			reviewPostRouteFor(HTTP_OK, ORG),
+			reviewPostRoute(HTTP_OK, ORG),
 		]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
 		await expectApproved(response);
@@ -143,7 +143,7 @@ describe("author trust", () => {
 				commits: [commitItem({ author: RENOVATE, committer: WEB_FLOW_USER })],
 				reviews: [],
 			}),
-			reviewPostRouteFor(HTTP_OK),
+			reviewPostRoute(HTTP_OK),
 		]);
 		const response = await postSigned(buildPayload({ user: RENOVATE }));
 		await expectApproved(response);
@@ -166,7 +166,7 @@ describe("autofix.ci commits", () => {
 				],
 				reviews: [],
 			}),
-			reviewPostRouteFor(HTTP_OK),
+			reviewPostRoute(HTTP_OK),
 		]);
 		const response = await postSigned(buildPayload({ commits: 2, user: RENOVATE }));
 		await expectApproved(response);
@@ -179,9 +179,9 @@ describe("duplicate approval check", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
-			commitsRouteFor([commitItem()]),
+			commitsRoute([commitItem()]),
 			appRoute(),
-			reviewsRouteFor([OWN_APPROVAL]),
+			reviewsRoute([OWN_APPROVAL]),
 		]);
 		const response = await postSigned(buildPayload());
 		await expectSkipped(response, "already-approved");
@@ -210,7 +210,7 @@ describe("live state checks", () => {
 		const session = installFetchMock([
 			installTokenRoute(),
 			...pipelineRoutes({ commits: [commitItem()], reviews: [] }),
-			reviewPostRouteFor(HTTP_UNPROCESSABLE_ENTITY),
+			reviewPostRoute(HTTP_UNPROCESSABLE_ENTITY),
 		]);
 		const response = await postSigned(buildPayload());
 		await expectSkipped(response, "review-rejected");

@@ -19,11 +19,13 @@ import {
 	approvalTarget,
 	commitItem,
 	commitPage,
+	getRoute,
 	installTokenRoute,
 	linkedRoute,
 	makeClient,
 	membershipRoute,
 	pullUrl,
+	reviewPostRoute,
 } from "./github-api";
 import {
 	HTTP_FORBIDDEN,
@@ -32,7 +34,6 @@ import {
 	HTTP_OK,
 	HTTP_UNPROCESSABLE_ENTITY,
 	installFetchMock,
-	jsonRoute,
 	requestByUrl,
 } from "./fetch-stub";
 import {
@@ -46,13 +47,8 @@ import {
 } from "../src/github";
 import { describe, expect, it } from "vitest";
 import { GithubApiError } from "../src/api-error";
-import type { PlannedRoute } from "./fetch-stub";
 
 const SECOND_PAGE_COUNT = 37;
-/** The review-POST route, which is the one call planned on a POST rather than a GET. */
-function reviewPostRoute(payload: unknown, status: number): PlannedRoute {
-	return jsonRoute({ method: "POST", payload, status, url: pullUrl("/reviews") });
-}
 
 function reviewBody(commitId: string): Record<string, unknown> {
 	return { commit_id: commitId, state: "APPROVED", user: OWNER };
@@ -223,11 +219,12 @@ describe("fetchPullRequest()", () => {
 		expect.hasAssertions();
 		const mock = installFetchMock([
 			installTokenRoute(),
-			jsonRoute({
-				method: "GET",
-				payload: { draft: false, head: { label: "octo:main", sha: "live-sha" }, state: "open" },
-				status: HTTP_OK,
-				url: pullUrl(),
+			/* The extra `label` is what this case is about: the contract must strip it, so the
+			 * body is stated here rather than taken from the shared live-PR route. */
+			getRoute(pullUrl(), {
+				draft: false,
+				head: { label: "octo:main", sha: "live-sha" },
+				state: "open",
 			}),
 		]);
 		await expect(fetchPullRequest(await makeClient(), REPO, PULL_NUMBER)).resolves.toStrictEqual({
@@ -242,7 +239,7 @@ describe("fetchPullRequest()", () => {
 describe("createApprovalReview()", () => {
 	it("returns created on 200 and posts commit_id with APPROVE", async () => {
 		expect.hasAssertions();
-		const mock = installFetchMock([installTokenRoute(), reviewPostRoute({ id: 1 }, HTTP_OK)]);
+		const mock = installFetchMock([installTokenRoute(), reviewPostRoute(HTTP_OK)]);
 		await expect(createApprovalReview(await makeClient(), approvalTarget())).resolves.toBe(
 			"created",
 		);
@@ -253,10 +250,7 @@ describe("createApprovalReview()", () => {
 
 	it("returns rejected on 422", async () => {
 		expect.hasAssertions();
-		installFetchMock([
-			installTokenRoute(),
-			reviewPostRoute({ message: "closed" }, HTTP_UNPROCESSABLE_ENTITY),
-		]);
+		installFetchMock([installTokenRoute(), reviewPostRoute(HTTP_UNPROCESSABLE_ENTITY)]);
 		await expect(createApprovalReview(await makeClient(), approvalTarget())).resolves.toBe(
 			"rejected",
 		);
@@ -264,10 +258,7 @@ describe("createApprovalReview()", () => {
 
 	it("throws GithubApiError on 500", async () => {
 		expect.hasAssertions();
-		installFetchMock([
-			installTokenRoute(),
-			reviewPostRoute({ message: "boom" }, HTTP_INTERNAL_ERROR),
-		]);
+		installFetchMock([installTokenRoute(), reviewPostRoute(HTTP_INTERNAL_ERROR)]);
 		const promise = createApprovalReview(await makeClient(), approvalTarget());
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({

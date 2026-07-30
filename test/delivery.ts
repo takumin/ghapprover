@@ -2,28 +2,29 @@
  * One webhook delivery, end to end: the signed request the Worker is handed, the env it runs
  * against, and the planned routes a full run consumes (SPEC.md §4). Shared by the suite that drives
  * the entry point (index.test.ts) and the ones that drive the pipeline behind it
- * (pipeline*.test.ts), so a delivery is built the same way in all of them. The routes themselves are
- * built from the fixtures in test/github-api.ts, which is what the calls are made against — a route
- * stated twice is a route that can disagree with itself about what the pipeline actually calls.
+ * (pipeline*.test.ts), so a delivery is built the same way in all of them. The routes themselves
+ * come whole from test/github-api.ts, which is where every suite's routes are built — what belongs
+ * here is only the order a run consumes them in, a route stated twice being one that can disagree
+ * with itself about what the pipeline actually calls.
  */
 
 import { APP_BOT, HEAD_SHA, OWNER, PULL_NUMBER, REPOSITORY, repositoryOwnedBy } from "./fixtures";
 import {
 	APP_ID,
-	COMMITS_SUFFIX,
 	INSTALLATION_ID,
-	REVIEWS_SUFFIX,
 	appRoute,
 	commitItem,
-	getRoute,
+	commitsRoute,
 	installTokenRoute,
-	pullUrl,
+	livePullRequestRoute,
+	reviewPostRoute,
+	reviewsRoute,
 } from "./github-api";
-import { HTTP_OK, jsonRoute } from "./fetch-stub";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { expect, onTestFinished, vi } from "vitest";
 import worker, { MAX_BODY_BYTES } from "../src/index";
 import type { GithubAccount } from "../src/types";
+import { HTTP_OK } from "./fetch-stub";
 import type { MockInstance } from "vitest";
 import type { PlannedRoute } from "./fetch-stub";
 import { privateKeyPemOnce } from "./app-key";
@@ -89,24 +90,6 @@ export function buildPayload(overrides: PayloadOverrides = {}): string {
 	});
 }
 
-export function commitsRouteFor(commits: unknown, owner: GithubAccount = OWNER): PlannedRoute {
-	return getRoute(pullUrl(COMMITS_SUFFIX, owner.login), commits);
-}
-export function reviewsRouteFor(reviews: unknown, owner: GithubAccount = OWNER): PlannedRoute {
-	return getRoute(pullUrl(REVIEWS_SUFFIX, owner.login), reviews);
-}
-function liveRouteFor(sha: string, owner: GithubAccount): PlannedRoute {
-	return getRoute(pullUrl("", owner.login), { draft: false, head: { sha }, state: "open" });
-}
-export function reviewPostRouteFor(status: number, owner: GithubAccount = OWNER): PlannedRoute {
-	return jsonRoute({
-		method: "POST",
-		payload: { id: 1 },
-		status,
-		url: pullUrl("/reviews", owner.login),
-	});
-}
-
 interface PipelineRoutesOptions {
 	readonly commits: readonly unknown[];
 	readonly liveSha?: string;
@@ -118,10 +101,10 @@ interface PipelineRoutesOptions {
 export function pipelineRoutes(options: PipelineRoutesOptions): PlannedRoute[] {
 	const { commits, liveSha = HEAD_SHA, owner = OWNER, reviews } = options;
 	return [
-		commitsRouteFor(commits, owner),
+		commitsRoute(commits, owner),
 		appRoute(),
-		reviewsRouteFor(reviews, owner),
-		liveRouteFor(liveSha, owner),
+		reviewsRoute(reviews, owner),
+		livePullRequestRoute(liveSha, owner),
 	];
 }
 
@@ -129,7 +112,7 @@ export function happyRoutes(): PlannedRoute[] {
 	return [
 		installTokenRoute(),
 		...pipelineRoutes({ commits: [commitItem()], reviews: [] }),
-		reviewPostRouteFor(HTTP_OK),
+		reviewPostRoute(HTTP_OK),
 	];
 }
 

@@ -7,9 +7,10 @@
  */
 
 import { ORG, OWNER, RENOVATE, RENOVATE_WRONG_ID, WEB_FLOW_USER } from "./fixtures";
-import { buildPayload, commitsRouteFor, expectSkipped, postSigned } from "./delivery";
+import { buildPayload, expectSkipped, postSigned } from "./delivery";
 import {
 	commitItem,
+	commitsRoute,
 	installTokenRoute,
 	membershipAdminRoute,
 	membershipMissingRoute,
@@ -45,7 +46,7 @@ describe("commit conditions", () => {
 
 	it("skips on a commit count mismatch", async () => {
 		expect.hasAssertions();
-		const session = installFetchMock([installTokenRoute(), commitsRouteFor([commitItem()])]);
+		const session = installFetchMock([installTokenRoute(), commitsRoute([commitItem()])]);
 		const response = await postSigned(buildPayload({ commits: 2 }));
 		await expectSkipped(response, "commit-count-mismatch");
 		session.assertDone();
@@ -63,7 +64,7 @@ describe("commit verification", () => {
 		},
 	])("skips $name", async ({ commit, reason }) => {
 		expect.hasAssertions();
-		const session = installFetchMock([installTokenRoute(), commitsRouteFor([commitItem(commit)])]);
+		const session = installFetchMock([installTokenRoute(), commitsRoute([commitItem(commit)])]);
 		const response = await postSigned(buildPayload());
 		await expectSkipped(response, reason);
 		session.assertDone();
@@ -74,7 +75,7 @@ describe("commit verification", () => {
 		const session = installFetchMock([
 			installTokenRoute(),
 			membershipAdminRoute(OWNER),
-			commitsRouteFor(
+			commitsRoute(
 				[commitItem({ author: STRANGER, verified: false }), commitItem({ author: STRANGER })],
 				ORG,
 			),
@@ -94,7 +95,7 @@ describe("principal trust resolution", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
-			commitsRouteFor([commitItem({ author: RENOVATE_WRONG_ID, committer: WEB_FLOW_USER })]),
+			commitsRoute([commitItem({ author: RENOVATE_WRONG_ID, committer: WEB_FLOW_USER })]),
 		]);
 		const response = await postSigned(buildPayload({ user: RENOVATE }));
 		await expectSkipped(response, "untrusted-commit");
@@ -108,7 +109,7 @@ describe("principal trust resolution", () => {
 		const session = installFetchMock([
 			installTokenRoute(),
 			membershipAdminRoute(OWNER),
-			commitsRouteFor([commitItem({ author: STRANGER, committer: OTHER_STRANGER })], ORG),
+			commitsRoute([commitItem({ author: STRANGER, committer: OTHER_STRANGER })], ORG),
 			membershipMissingRoute(STRANGER),
 		]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
