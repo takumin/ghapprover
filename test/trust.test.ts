@@ -4,14 +4,21 @@
  * near-miss case exists because trust is decided on the (id, login) pair, never the login alone.
  */
 
-import { AUTOFIX_CI, OCTOCAT, ORG, RENOVATE, RENOVATE_WRONG_ID, allowedBot } from "./accounts";
+import {
+	AUTOFIX_CI,
+	HUMAN,
+	OCTOCAT,
+	ORG,
+	RENOVATE,
+	RENOVATE_WRONG_ID,
+	allowedBot,
+} from "./accounts";
 import type { GithubAccount, OrgMembership } from "../src/types";
 import { classifyPrincipal, isOwnerMembership } from "../src/decision";
 import { describe, expect, it } from "vitest";
 
 /** The owner's login under a different account: §3.1 pins the personal-repo owner's id too. */
 const OCTOCAT_WRONG_ID: GithubAccount = { id: 78, login: "octocat", type: "User" };
-const OTHER_USER: GithubAccount = { id: 55, login: "someone-else", type: "User" };
 const DEPENDABOT = allowedBot("dependabot[bot]");
 /** Deliberately not on the allowlist: a bot GitHub ships, which §3.1 still rejects. */
 const GITHUB_ACTIONS: GithubAccount = { id: 41_898_282, login: "github-actions[bot]", type: "Bot" };
@@ -34,7 +41,7 @@ const CLASSIFY_CASES = [
 		expected: { kind: "untrusted" },
 		name: "another user on a personal repository",
 		owner: OCTOCAT,
-		user: OTHER_USER,
+		user: HUMAN,
 	},
 	{
 		expected: { kind: "untrusted" },
