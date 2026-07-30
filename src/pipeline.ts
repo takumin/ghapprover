@@ -12,11 +12,11 @@ import type {
 	CommitProblem,
 	PrStateProblem,
 } from "./decision";
-import type { GithubAccount, PullRequestCommit, PullRequestEventPayload } from "./types";
+import type { GithubAccount, PullRequestEventPayload } from "./types";
 import {
 	accountKey,
-	checkCommit,
 	checkCommitCount,
+	checkCommits,
 	checkPullRequestState,
 	classifyPrincipal,
 	hasOwnApproval,
@@ -150,23 +150,6 @@ function createTrustResolver(client: GithubClient, repoOwner: GithubAccount): Tr
 	};
 }
 
-/* SPEC.md §3.2 in commit order: checkCommit settles one commit (spending a lookup only on what it
- * cannot settle without one), and the first failing commit ends the loop, so a delivery that ends
- * in a skip never bursts a lookup per principal against the Worker subrequest allowance or
- * GitHub's secondary rate limits. */
-async function findCommitProblem(
-	commits: readonly PullRequestCommit[],
-	trust: TrustResolver,
-): Promise<CommitProblem | null> {
-	for (const entry of commits) {
-		const problem = await checkCommit(entry, trust);
-		if (problem !== null) {
-			return problem;
-		}
-	}
-	return null;
-}
-
 /** SPEC.md §4 step 5 (§3.2): the declared count, then every fetched commit verified. */
 async function checkCommitCondition(
 	payload: PullRequestEventPayload,
@@ -183,8 +166,7 @@ async function checkCommitCondition(
 	/* A list that does not match the declared count settles the condition on its own, so the
 	 * per-commit walk (and the membership lookups it spends) only runs once the list is whole. */
 	const problem =
-		checkCommitCount(commits.length, pullRequest.commits) ??
-		(await findCommitProblem(commits, trust));
+		checkCommitCount(commits.length, pullRequest.commits) ?? (await checkCommits(commits, trust));
 	if (problem !== null) {
 		return skippedOutcome(problem);
 	}

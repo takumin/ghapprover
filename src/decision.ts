@@ -203,6 +203,24 @@ export async function checkCommit(
 	}
 	return checkCommitTrust(commitPrincipals(entry), isTrusted);
 }
+/* SPEC.md §3.2 for the whole list, in commit order: checkCommit settles one commit (spending a
+ * lookup only on what it cannot settle without one), and the first failing commit ends the loop for
+ * the same reason checkCommitTrust stops at the first untrusted principal — a delivery that ends in
+ * a skip must not burst a lookup per principal of every commit against the Worker subrequest
+ * allowance or GitHub's secondary rate limits. The walk lives here with the check it repeats, so
+ * that argument is made once and the caller is left with the fetch it sequences around it. */
+export async function checkCommits(
+	commits: readonly PullRequestCommit[],
+	isTrusted: (account: GithubAccount) => Promise<boolean>,
+): Promise<CommitProblem | null> {
+	for (const entry of commits) {
+		const problem = await checkCommit(entry, isTrusted);
+		if (problem !== null) {
+			return problem;
+		}
+	}
+	return null;
+}
 
 /* SPEC.md §3 condition 5: only an APPROVED review by the App's own bot user for the current head
  * suppresses re-approval; DISMISSED reviews do not (they are simply not APPROVED), so a manually
