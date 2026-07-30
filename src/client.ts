@@ -8,8 +8,8 @@
  * each endpoint maps for itself.
  */
 
-import { field, stringField } from "./parse";
 import { Octokit } from "@octokit/core";
+import { RequestError } from "@octokit/request-error";
 import { createAppAuth } from "@octokit/auth-app";
 import { paginateRest } from "@octokit/plugin-paginate-rest";
 
@@ -128,44 +128,36 @@ interface HttpFailure {
 	readonly status: number;
 }
 
-/** Path of the failed request ("" when the URL is absent or unparseable). */
-function pathnameOf(url: string): string {
+/** Whether the failed request is the auth strategy's token request, matched on its path alone; a URL that will not parse is not it. */
+function isTokenRequest(url: string): boolean {
 	try {
-		return new URL(url).pathname;
+		return TOKEN_PATH_PATTERN.test(new URL(url).pathname);
 	} catch {
-		return "";
+		return false;
 	}
-}
-/** Whether a thrown failure's `request` descriptor is the auth strategy's token request. */
-function isTokenRequest(request: unknown): boolean {
-	return TOKEN_PATH_PATTERN.test(pathnameOf(stringField(request, "url") ?? ""));
 }
 
 /**
- * Narrows a thrown octokit failure: a RequestError (name "HttpError", with a
- * response for HTTP failures and without one for transport failures) or an
- * aborted fetch (the delivery deadline firing). The request URL is resolved to
- * fromTokenRequest here rather than carried, so both consumers below read the
- * one answer instead of re-parsing the URL for it.
+ * Narrows a thrown octokit failure: an aborted fetch (the delivery deadline
+ * firing), which @octokit/request rethrows as it is rather than wrapping, so it
+ * is matched first and by name; or a RequestError, which carries a response for
+ * an HTTP failure and none for a transport failure, and whose status, request,
+ * and response the package types for us — which is what earns it a line of its
+ * own in the §11 table. The request URL is resolved to fromTokenRequest here
+ * rather than carried, so both consumers below read the one answer instead of
+ * re-parsing the URL for it.
  */
 function toHttpFailure(error: unknown): HttpFailure | null {
-	if (!(error instanceof Error)) {
-		return null;
-	}
-	if (error.name === "AbortError" || error.name === "TimeoutError") {
+	if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
 		return { fromTokenRequest: false, hasResponse: false, status: NETWORK_FAILURE_STATUS };
 	}
-	if (error.name !== "HttpError") {
-		return null;
-	}
-	const status = field(error, "status");
-	if (typeof status !== "number") {
+	if (!(error instanceof RequestError)) {
 		return null;
 	}
 	return {
-		fromTokenRequest: isTokenRequest(field(error, "request")),
-		hasResponse: field(error, "response") !== undefined,
-		status,
+		fromTokenRequest: isTokenRequest(error.request.url),
+		hasResponse: error.response !== undefined,
+		status: error.status,
 	};
 }
 

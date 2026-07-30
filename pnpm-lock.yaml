@@ -17,6 +17,9 @@ importers:
       '@octokit/plugin-paginate-rest':
         specifier: 14.0.0
         version: 14.0.0(@octokit/core@7.0.6)
+      '@octokit/request-error':
+        specifier: 7.1.0
+        version: 7.1.0
       '@octokit/webhooks-methods':
         specifier: 6.0.0
         version: 6.0.0

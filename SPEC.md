@@ -617,6 +617,7 @@ an official package covers a concern, the implementation must delegate to it:
 | App JWT and installation tokens (§7) | `@octokit/auth-app`             | RS256 JWT, token issuance, in-memory token cache             |
 | REST calls (§3, §4)                  | `@octokit/core`                 | a delivery-wide `AbortSignal` bounds every dispatch (§4, §9) |
 | Pagination (§3.2, §3 condition 5)    | `@octokit/plugin-paginate-rest` | follows the `Link` header; no manual page loops              |
+| Failure narrowing (§8, §9)           | `@octokit/request-error`        | typed `status` and `response.headers` on a failure (§8)      |
 | Webhook payload types                | `@octokit/webhooks-types`       | devDependency; type definitions only, never bundled          |
 
 Rules:
