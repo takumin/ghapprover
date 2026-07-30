@@ -6,11 +6,12 @@
  * Deliveries and redeliverable (§9).
  */
 
-import { errorOutcome, runPipeline, skippedOutcome } from "./pipeline";
-import type { Outcome } from "./pipeline";
+import { errorOutcome, skippedOutcome } from "./outcome";
+import type { Outcome } from "./outcome";
 import type { PayloadValidation } from "./payload";
 import type { PullRequestEventPayload } from "./types";
 import { parsePullRequestEvent } from "./payload";
+import { runPipeline } from "./pipeline";
 import { verifyWebhookSignature } from "./webhook";
 
 /**
@@ -57,7 +58,7 @@ type NoneOf<Field extends never> = Field;
  * Compile-time check that every §8 field an outcome can carry reaches the entry:
  * `decision` and `errorMessage` are logged by name in logOutcome, `httpStatus` is
  * the §9 response status rather than a log field, and the rest must be listed
- * above. Without this, a field added to Outcome (src/pipeline.ts) and populated on
+ * above. Without this, a field added to Outcome (src/outcome.ts) and populated on
  * a failure path would simply never be logged — an observability gap no type error
  * or test failure would surface.
  */
