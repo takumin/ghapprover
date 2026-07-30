@@ -9,8 +9,9 @@
 import type { AppCredentials, GithubClient } from "./client";
 import type { ApprovalTarget, RepoRef } from "./github";
 import type { EventPullRequest, GithubAccount, PullRequestEventPayload } from "./types";
+import { apiErrorOutcome, approvedOutcome, errorOutcome, skippedOutcome } from "./outcome";
+import { checkCommitCount, checkCommits, precheckCommitCount } from "./commits";
 import {
-	accountKey,
 	checkPullRequestState,
 	classifyPrincipal,
 	hasOwnApproval,
@@ -18,8 +19,6 @@ import {
 	isOwnerMembership,
 	isTargetAction,
 } from "./decision";
-import { apiErrorOutcome, approvedOutcome, errorOutcome, skippedOutcome } from "./outcome";
-import { checkCommitCount, checkCommits, precheckCommitCount } from "./commits";
 import {
 	createApprovalReview,
 	fetchAppBotLogin,
@@ -30,6 +29,7 @@ import {
 } from "./github";
 import { GithubApiError } from "./api-error";
 import type { Outcome } from "./outcome";
+import { accountKey } from "./account";
 import { createGithubClient } from "./client";
 
 /** Resolves one account's §3.1 trust, memoized per delivery; see createTrustResolver. */

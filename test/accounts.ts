@@ -1,6 +1,6 @@
 /**
  * Account fixtures shared across the suites, and the repository fixture built around one of them.
- * The allowlisted accounts are built from the in-code allowlist itself (src/allowlist.ts) so every
+ * The allowlisted accounts are built from the in-code allowlist itself (src/account.ts) so every
  * suite derives them the same way: an entry whose id
  * or login changes must not silently turn a trusted fixture into an ordinary account — that would
  * reduce every §3.1 case to an author-not-trusted skip while the assertions still pass. The
@@ -9,7 +9,7 @@
  * are here only because more than one suite builds a payload around them.
  */
 
-import { ALLOWED_BOTS, WEB_FLOW } from "../src/allowlist";
+import { ALLOWED_BOTS, WEB_FLOW } from "../src/account";
 import type { EventRepository, GithubAccount } from "../src/types";
 
 interface AccountOverrides {
