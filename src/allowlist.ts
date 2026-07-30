@@ -31,9 +31,3 @@ export const ALLOWED_BOTS: readonly AccountRef[] = [
  * this exemption decides approval, so it must not turn on a login string alone.
  */
 export const WEB_FLOW: AccountRef = { id: 19_864_447, login: "web-flow" };
-
-/**
- * The PR commits API returns at most 250 commits, so a PR declaring more can
- * never be fully verified and is not approved (SPEC.md §3.2).
- */
-export const MAX_VERIFIABLE_COMMITS = 250;

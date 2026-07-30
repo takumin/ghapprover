@@ -9,8 +9,15 @@
  */
 
 import type { GithubAccount, PullRequestCommit } from "./types";
-import { MAX_VERIFIABLE_COMMITS, WEB_FLOW } from "./allowlist";
+import { WEB_FLOW } from "./allowlist";
 import { accountKey } from "./decision";
+
+/**
+ * The PR commits API returns at most 250 commits, so a PR declaring more can never be fully
+ * verified and is not approved (SPEC.md §3.2). A capability limit of the endpoint rather than an
+ * approval constant, so it lives with the check that reads it and not in src/allowlist.ts (§5).
+ */
+export const MAX_VERIFIABLE_COMMITS = 250;
 
 /* Derived once at module scope: both lists are in-code constants (SPEC.md §5), and isWebFlow runs
  * once per commit principal, so deriving it per call is work every delivery repeats for nothing. */

@@ -22,7 +22,7 @@ import {
 	postSigned,
 } from "./delivery";
 import { describe, expect, it } from "vitest";
-import { MAX_VERIFIABLE_COMMITS } from "../src/allowlist";
+import { MAX_VERIFIABLE_COMMITS } from "../src/commits";
 
 describe("commit conditions", () => {
 	/** What the declared count alone settles (SPEC.md §3.2), which is why neither row plans a route. */

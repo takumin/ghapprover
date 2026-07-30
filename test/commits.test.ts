@@ -6,15 +6,15 @@
  */
 
 import type { GithubAccount, PullRequestCommit } from "../src/types";
-import { WEB_FLOW_LOOKALIKE, WEB_FLOW_USER } from "./accounts";
 import {
+	MAX_VERIFIABLE_COMMITS,
 	checkCommit,
 	checkCommitCount,
 	commitPrincipals,
 	precheckCommitCount,
 } from "../src/commits";
+import { WEB_FLOW_LOOKALIKE, WEB_FLOW_USER } from "./accounts";
 import { describe, expect, it } from "vitest";
-import { MAX_VERIFIABLE_COMMITS } from "../src/allowlist";
 import { accountKey } from "../src/decision";
 
 const ALICE: GithubAccount = { id: 101, login: "alice", type: "User" };
