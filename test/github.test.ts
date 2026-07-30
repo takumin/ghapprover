@@ -24,6 +24,7 @@ import {
 	reviewsUrl,
 } from "./github-routes";
 import {
+	APP_ENDPOINT,
 	BASE,
 	COMMITS_ENDPOINT,
 	HTTP_FORBIDDEN,
@@ -67,7 +68,7 @@ describe("fetchAppBotLogin()", () => {
 		installFetchMock([appRoute({ id: 1 })]);
 		const promise = fetchAppBotLogin(await makeClient());
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
-		await expect(promise).rejects.toMatchObject({ endpoint: "GET /app", status: HTTP_OK });
+		await expect(promise).rejects.toMatchObject({ endpoint: APP_ENDPOINT, status: HTTP_OK });
 	});
 });
 

@@ -7,7 +7,16 @@
  */
 
 import { APP_BOT, ORG } from "./accounts";
-import { BASE, HTTP_NOT_FOUND, HTTP_OK, PULL_NUMBER, jsonRoute, tokenRoute } from "./fetch-stub";
+import {
+	APP_URL,
+	BASE,
+	HTTP_NOT_FOUND,
+	HTTP_OK,
+	PULL_NUMBER,
+	jsonRoute,
+	tokenRoute,
+	tokenUrl,
+} from "./fetch-stub";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import type { GithubAccount } from "../src/types";
 import type { PlannedRoute } from "./fetch-stub";
@@ -28,8 +37,7 @@ const INSTALL_TOKEN = "install-token";
 const APP_SLUG = "ghapprover";
 /** The repository every payload fixture is for; the routes below are the calls made against it. */
 const REPO_NAME = "hello";
-export const TOKEN_URL = `${BASE}/app/installations/${INSTALLATION_ID}/access_tokens`;
-export const APP_URL = `${BASE}/app`;
+export const TOKEN_URL = tokenUrl(INSTALLATION_ID);
 export const membershipUrl = (login: string): string =>
 	`${BASE}/orgs/${ORG.login}/memberships/${login}`;
 export const COMMITS_SUFFIX = "/commits?per_page=100";

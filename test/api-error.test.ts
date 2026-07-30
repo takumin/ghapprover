@@ -8,15 +8,8 @@
  */
 
 import {
+	APP_ENDPOINT,
 	APP_URL,
-	TOKENS_URL,
-	appRoute,
-	approvalTarget,
-	installTokenRoute,
-	makeClient,
-	reviewsPostUrl,
-} from "./github-routes";
-import {
 	HTTP_FORBIDDEN,
 	HTTP_INTERNAL_ERROR,
 	HTTP_NOT_FOUND,
@@ -26,6 +19,14 @@ import {
 	installFetchMock,
 	jsonRoute,
 } from "./fetch-stub";
+import {
+	TOKENS_URL,
+	appRoute,
+	approvalTarget,
+	installTokenRoute,
+	makeClient,
+	reviewsPostUrl,
+} from "./github-routes";
 import { createApprovalReview, fetchAppBotLogin, fetchOrgMembership } from "../src/github";
 import { describe, expect, it } from "vitest";
 import { GithubApiError } from "../src/api-error";
@@ -40,7 +41,7 @@ describe("transport failure mapping", () => {
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({
 			diagnostics: { errorMessage: "simulated network failure", requestId: undefined },
-			endpoint: "GET /app",
+			endpoint: APP_ENDPOINT,
 			status: 0,
 		});
 	});
@@ -52,7 +53,7 @@ describe("transport failure mapping", () => {
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({
 			diagnostics: { errorMessage: "The operation timed out.", requestId: undefined },
-			endpoint: "GET /app",
+			endpoint: APP_ENDPOINT,
 			status: 0,
 		});
 	});
@@ -83,7 +84,7 @@ describe("failure diagnostics", () => {
 				rateLimitReset: "1770000000",
 				requestId: "F1E2:3D4C",
 			},
-			endpoint: "GET /app",
+			endpoint: APP_ENDPOINT,
 			status: HTTP_FORBIDDEN,
 		});
 	});
@@ -96,7 +97,7 @@ describe("failure diagnostics", () => {
 		const promise = fetchAppBotLogin(await makeClient());
 		await expect(promise).rejects.toMatchObject({
 			diagnostics: { errorMessage: undefined, requestId: undefined },
-			endpoint: "GET /app",
+			endpoint: APP_ENDPOINT,
 		});
 	});
 });

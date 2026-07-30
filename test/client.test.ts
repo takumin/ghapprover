@@ -5,8 +5,8 @@
  * call that fails becomes is asserted in test/api-error.test.ts.
  */
 
+import { APP_URL, JWT_PATTERN, PULL_NUMBER, installFetchMock, requestByUrl } from "./fetch-stub";
 import {
-	APP_URL,
 	FULL_PAGE,
 	REPO,
 	TOKEN,
@@ -19,7 +19,6 @@ import {
 	linkedRoute,
 	makeClient,
 } from "./github-routes";
-import { JWT_PATTERN, PULL_NUMBER, installFetchMock, requestByUrl } from "./fetch-stub";
 import { describe, expect, it } from "vitest";
 import { fetchAppBotLogin, listPullRequestCommits } from "../src/github";
 import type { RecordedRequest } from "./fetch-stub";

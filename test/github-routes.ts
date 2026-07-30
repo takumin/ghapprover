@@ -5,8 +5,8 @@
  * route and the same page shapes, so a route stated once here cannot drift between them.
  */
 
+import { APP_URL, BASE, HTTP_OK, PULL_NUMBER, jsonRoute, tokenRoute, tokenUrl } from "./fetch-stub";
 import type { ApprovalTarget, RepoRef } from "../src/github";
-import { BASE, HTTP_OK, PULL_NUMBER, jsonRoute, tokenRoute } from "./fetch-stub";
 import type { GithubClient } from "../src/client";
 import type { PlannedRoute } from "./fetch-stub";
 import { createGithubClient } from "../src/client";
@@ -15,8 +15,7 @@ import { privateKeyPemOnce } from "./app-key";
 export const REPO: RepoRef = { owner: "octo", repo: "hello" };
 export const TOKEN = "installation-token";
 const INSTALLATION_ID = 12_345;
-export const TOKENS_URL = `${BASE}/app/installations/${INSTALLATION_ID}/access_tokens`;
-export const APP_URL = `${BASE}/app`;
+export const TOKENS_URL = tokenUrl(INSTALLATION_ID);
 const MEMBERSHIP_URL = `${BASE}/orgs/octo/memberships/someone`;
 export const FULL_PAGE = 100;
 export const ACCOUNT = { id: 7, login: "octo", type: "User" };

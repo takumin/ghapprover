@@ -32,10 +32,18 @@ export const JWT_PATTERN = /^bearer eyJ[\w-]+\.[\w-]+\.[\w-]+$/u;
  * about is an unplanned request in whichever suite was not updated. */
 export const BASE = "https://api.github.com";
 export const PULL_NUMBER = 5;
+/* GET /app takes no parameter, so its URL is the same one for every fixture repository and
+ * installation — which is why it is stated here rather than once per route-helper family. */
+export const APP_URL = `${BASE}/app`;
+/** The installation-token route, whose path the §8 attribution of a token failure is matched on. */
+export function tokenUrl(installationId: number): string {
+	return `${BASE}/app/installations/${installationId}/access_tokens`;
+}
 /* The route templates SPEC.md §8's `endpoint` names, which is the vocabulary an operator greps: one
  * suite drives the call that raises them (github.test.ts, client.test.ts) and another the log entry
  * they end up in (pipeline-failures.test.ts), so a template stated per suite is one that can be
  * corrected in the one that fails and left wrong in the one that still passes. */
+export const APP_ENDPOINT = "GET /app";
 export const TOKEN_ENDPOINT = "POST /app/installations/{installation_id}/access_tokens";
 export const COMMITS_ENDPOINT = "GET /repos/{owner}/{repo}/pulls/{pull_number}/commits";
 export const REVIEW_POST_ENDPOINT = "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews";

@@ -7,6 +7,15 @@
 
 import {
 	APP_URL,
+	HTTP_OK,
+	HTTP_UNPROCESSABLE_ENTITY,
+	JWT_PATTERN,
+	PULL_NUMBER,
+	installFetchMock,
+	requestByUrl,
+} from "./fetch-stub";
+import { AUTOFIX_CI, ORG, RENOVATE, WEB_FLOW_USER } from "./accounts";
+import {
 	COMMITS_SUFFIX,
 	DELIVERY_ID,
 	HEAD_SHA,
@@ -28,15 +37,6 @@ import {
 	reviewPostRouteFor,
 	reviewsRouteFor,
 } from "./delivery";
-import { AUTOFIX_CI, ORG, RENOVATE, WEB_FLOW_USER } from "./accounts";
-import {
-	HTTP_OK,
-	HTTP_UNPROCESSABLE_ENTITY,
-	JWT_PATTERN,
-	PULL_NUMBER,
-	installFetchMock,
-	requestByUrl,
-} from "./fetch-stub";
 import { describe, expect, it, vi } from "vitest";
 
 /* SPEC.md §4 step 2: the state conditions are decided on the payload alone, so each of them
