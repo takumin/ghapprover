@@ -26,6 +26,8 @@ export const HEAD_SHA = "head-sha";
 const INSTALLATION_ID = 67_890;
 const INSTALL_TOKEN = "install-token";
 const APP_SLUG = "ghapprover";
+/** The repository every payload fixture is for; the routes below are the calls made against it. */
+const REPO_NAME = "hello";
 export const TOKEN_URL = `${BASE}/app/installations/${INSTALLATION_ID}/access_tokens`;
 export const APP_URL = `${BASE}/app`;
 export const membershipUrl = (login: string): string =>
@@ -86,9 +88,9 @@ export function buildPayload(overrides: PayloadOverrides = {}): string {
 			user,
 		},
 		repository: {
-			full_name: `${repoOwner.login}/hello`,
+			full_name: `${repoOwner.login}/${REPO_NAME}`,
 			id: REPO_ID,
-			name: "hello",
+			name: REPO_NAME,
 			owner: repoOwner,
 		},
 	});
@@ -106,7 +108,7 @@ export function commitItem(overrides: CommitOverrides = {}): Record<string, unkn
 }
 
 export function pullsUrl(owner: string, suffix: string): string {
-	return `${BASE}/repos/${owner}/hello/pulls/${PULL_NUMBER}${suffix}`;
+	return `${BASE}/repos/${owner}/${REPO_NAME}/pulls/${PULL_NUMBER}${suffix}`;
 }
 
 export function installTokenRoute(): PlannedRoute {
