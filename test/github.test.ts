@@ -11,6 +11,7 @@ import {
 	REPO,
 	TOKENS_URL,
 	appRoute,
+	approvalTarget,
 	commitBody,
 	commitPage,
 	commitsUrl,
@@ -221,13 +222,9 @@ describe("createApprovalReview()", () => {
 	it("returns created on 200 and posts commit_id with APPROVE", async () => {
 		expect.hasAssertions();
 		const mock = installFetchMock([installTokenRoute(), reviewPostRoute({ id: 1 }, HTTP_OK)]);
-		await expect(
-			createApprovalReview(await makeClient(), {
-				commitId: "head-sha",
-				pullNumber: PULL_NUMBER,
-				repo: REPO,
-			}),
-		).resolves.toBe("created");
+		await expect(createApprovalReview(await makeClient(), approvalTarget())).resolves.toBe(
+			"created",
+		);
 		const posted = requestByUrl(mock, reviewsPostUrl());
 		expect(posted).toMatchObject({ body: '{"commit_id":"head-sha","event":"APPROVE"}' });
 		expect(posted.headers["content-type"]).toMatch(/application\/json/u);
@@ -239,13 +236,9 @@ describe("createApprovalReview()", () => {
 			installTokenRoute(),
 			reviewPostRoute({ message: "closed" }, HTTP_UNPROCESSABLE_ENTITY),
 		]);
-		await expect(
-			createApprovalReview(await makeClient(), {
-				commitId: "head-sha",
-				pullNumber: PULL_NUMBER,
-				repo: REPO,
-			}),
-		).resolves.toBe("rejected");
+		await expect(createApprovalReview(await makeClient(), approvalTarget())).resolves.toBe(
+			"rejected",
+		);
 	});
 
 	it("throws GithubApiError on 500", async () => {
@@ -254,11 +247,7 @@ describe("createApprovalReview()", () => {
 			installTokenRoute(),
 			reviewPostRoute({ message: "boom" }, HTTP_INTERNAL_ERROR),
 		]);
-		const promise = createApprovalReview(await makeClient(), {
-			commitId: "head-sha",
-			pullNumber: PULL_NUMBER,
-			repo: REPO,
-		});
+		const promise = createApprovalReview(await makeClient(), approvalTarget());
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({
 			endpoint: REVIEW_POST_ENDPOINT,

@@ -13,6 +13,7 @@ import {
 	TOKEN,
 	TOKENS_URL,
 	appRoute,
+	approvalTarget,
 	commitBody,
 	commitPage,
 	commitsUrl,
@@ -169,11 +170,7 @@ describe("token request attribution", () => {
 				url: reviewsPostUrl(repo.repo),
 			}),
 		]);
-		const promise = createApprovalReview(await makeClient(), {
-			commitId: "head-sha",
-			pullNumber: PULL_NUMBER,
-			repo,
-		});
+		const promise = createApprovalReview(await makeClient(), approvalTarget(repo));
 		await expect(promise).rejects.toMatchObject({
 			endpoint: REVIEW_POST_ENDPOINT,
 			status: HTTP_INTERNAL_ERROR,

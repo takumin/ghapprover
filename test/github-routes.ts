@@ -5,13 +5,14 @@
  * route and the same page shapes, so a route stated once here cannot drift between them.
  */
 
+import type { ApprovalTarget, RepoRef } from "../src/github";
 import { BASE, HTTP_OK, PULL_NUMBER, jsonRoute, tokenRoute } from "./fetch-stub";
 import type { GithubClient } from "../src/client";
 import type { PlannedRoute } from "./fetch-stub";
 import { createGithubClient } from "../src/client";
 import { privateKeyPemOnce } from "./app-key";
 
-export const REPO = { owner: "octo", repo: "hello" };
+export const REPO: RepoRef = { owner: "octo", repo: "hello" };
 export const TOKEN = "installation-token";
 const INSTALLATION_ID = 12_345;
 export const TOKENS_URL = `${BASE}/app/installations/${INSTALLATION_ID}/access_tokens`;
@@ -80,4 +81,8 @@ export function reviewsPostUrl(repo: string = REPO.repo): string {
 }
 export function reviewPostRoute(payload: unknown, status: number): PlannedRoute {
 	return jsonRoute({ method: "POST", payload, status, url: reviewsPostUrl() });
+}
+/** What every review-POST case approves; only the case about the URL varies the repository. */
+export function approvalTarget(repo: RepoRef = REPO): ApprovalTarget {
+	return { commitId: "head-sha", pullNumber: PULL_NUMBER, repo };
 }
