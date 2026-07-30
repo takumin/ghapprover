@@ -64,7 +64,7 @@ export const APP_BOT: GithubAccount = { id: 201, login: `${APP_SLUG}[bot]`, type
  * personal-repository owner, so all of them must mean one account by it.
  */
 export const OWNER: GithubAccount = { id: 7, login: "octo", type: "User" };
-export const REPO_NAME = "hello";
+const REPO_NAME = "hello";
 /**
  * The one repository every suite is about, as an event payload carries it, stated with its owner
  * rather than beside it — under the owner a case gives it, because a repository owned by an

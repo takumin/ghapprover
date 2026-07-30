@@ -7,8 +7,10 @@
  * and redeploying, so the approval conditions are always version-controlled.
  */
 
-/** A GitHub account pinned by both login and numeric id (SPEC.md §3.1, §3.2). */
-export interface AccountRef {
+/* A GitHub account pinned by both login and numeric id (SPEC.md §3.1, §3.2). The parameter type of
+ * every predicate below, and the shape of the two constants — callers pass the payload's own account
+ * (src/types.ts), which is why this is not exported. */
+interface AccountRef {
 	readonly login: string;
 	readonly id: number;
 }

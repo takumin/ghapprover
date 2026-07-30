@@ -19,7 +19,8 @@ import type { PlannedRoute } from "./fetch-stub";
 import { createGithubClient } from "../src/client";
 import { privateKeyPemOnce } from "./app-key";
 
-export const BASE = "https://api.github.com";
+/** The API origin every route below is built on; the calls themselves reach nothing else. */
+const BASE = "https://api.github.com";
 /** App JWT authorization: "bearer" plus three dot-separated base64url segments. */
 export const JWT_PATTERN = /^bearer eyJ[\w-]+\.[\w-]+\.[\w-]+$/u;
 /* The route templates SPEC.md §8's `endpoint` names, which is the vocabulary an operator greps: one
