@@ -199,9 +199,30 @@ interface ExpectedReply {
 	readonly status: number;
 }
 
-export async function expectReply(response: Response, expected: ExpectedReply): Promise<void> {
+async function expectReply(response: Response, expected: ExpectedReply): Promise<void> {
 	expect(response.status).toBe(expected.status);
 	expect(response.headers.get("content-type")).toBe("application/json");
 	const body: unknown = await response.json();
 	expect(body).toStrictEqual(expected.body);
+}
+
+/*
+ * The §9 reply, as the three decisions it can announce. An evaluation that completed answers 200
+ * whether or not it approved, so that pairing is stated here once instead of beside every reason a
+ * suite is actually about — a suite spelling the pair itself is one that can assert a skip against
+ * a status §9 never gives it and still pass. An error is the one decision whose status varies by
+ * reason, which is why that one alone is named at the call.
+ */
+export async function expectApproved(response: Response): Promise<void> {
+	return expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
+}
+export async function expectSkipped(response: Response, reason: string): Promise<void> {
+	return expectReply(response, { body: { decision: "skipped", reason }, status: HTTP_OK });
+}
+export async function expectError(
+	response: Response,
+	reason: string,
+	status: number,
+): Promise<void> {
+	return expectReply(response, { body: { decision: "error", reason }, status });
 }

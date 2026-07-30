@@ -34,7 +34,8 @@ import {
 	buildPayload,
 	captureLog,
 	commitsRouteFor,
-	expectReply,
+	expectApproved,
+	expectSkipped,
 	happyRoutes,
 	pipelineRoutes,
 	postSigned,
@@ -64,7 +65,7 @@ describe("pull request state", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([]);
 		const response = await postSigned(buildPayload(overrides));
-		await expectReply(response, { body: { decision: "skipped", reason }, status: HTTP_OK });
+		await expectSkipped(response, reason);
 		expect(session.requests).toHaveLength(0);
 	});
 });
@@ -74,7 +75,7 @@ describe("owner approval flow", () => {
 		expect.hasAssertions();
 		const session = installFetchMock(happyRoutes());
 		const response = await postSigned(buildPayload());
-		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
+		await expectApproved(response);
 		const posted = requestByUrl(session, pullUrl("/reviews"));
 		expect(posted.body).toBe('{"commit_id":"head-sha","event":"APPROVE"}');
 		session.assertDone();
@@ -122,7 +123,7 @@ describe("author trust", () => {
 			reviewPostRouteFor(HTTP_OK, ORG),
 		]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
-		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
+		await expectApproved(response);
 		session.assertDone();
 	});
 
@@ -130,10 +131,7 @@ describe("author trust", () => {
 		expect.hasAssertions();
 		const session = installFetchMock([installTokenRoute(), membershipMissingRoute(OWNER)]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "author-not-trusted" },
-			status: HTTP_OK,
-		});
+		await expectSkipped(response, "author-not-trusted");
 		session.assertDone();
 	});
 
@@ -148,7 +146,7 @@ describe("author trust", () => {
 			reviewPostRouteFor(HTTP_OK),
 		]);
 		const response = await postSigned(buildPayload({ user: RENOVATE }));
-		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
+		await expectApproved(response);
 		session.assertDone();
 	});
 });
@@ -171,7 +169,7 @@ describe("autofix.ci commits", () => {
 			reviewPostRouteFor(HTTP_OK),
 		]);
 		const response = await postSigned(buildPayload({ commits: 2, user: RENOVATE }));
-		await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
+		await expectApproved(response);
 		session.assertDone();
 	});
 });
@@ -186,10 +184,7 @@ describe("duplicate approval check", () => {
 			reviewsRouteFor([OWN_APPROVAL]),
 		]);
 		const response = await postSigned(buildPayload());
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "already-approved" },
-			status: HTTP_OK,
-		});
+		await expectSkipped(response, "already-approved");
 		session.assertDone();
 	});
 });
@@ -206,10 +201,7 @@ describe("live state checks", () => {
 			}),
 		]);
 		const response = await postSigned(buildPayload());
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "head-moved" },
-			status: HTTP_OK,
-		});
+		await expectSkipped(response, "head-moved");
 		session.assertDone();
 	});
 
@@ -221,10 +213,7 @@ describe("live state checks", () => {
 			reviewPostRouteFor(HTTP_UNPROCESSABLE_ENTITY),
 		]);
 		const response = await postSigned(buildPayload());
-		await expectReply(response, {
-			body: { decision: "skipped", reason: "review-rejected" },
-			status: HTTP_OK,
-		});
+		await expectSkipped(response, "review-rejected");
 		session.assertDone();
 	});
 });
