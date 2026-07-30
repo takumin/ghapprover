@@ -1,7 +1,7 @@
 /**
- * Fail-closed payload parsing (src/payload.ts, SPEC.md §3). Every modeled field is narrowed from
- * unknown rather than asserted, so the matrix below has to state both halves: what the parser
- * accepts and normalizes, and what shape of body it must refuse to model at all.
+ * Fail-closed payload validation (src/payload.ts, SPEC.md §3). The schema (src/types.ts) decides
+ * the shape rather than a hand-written narrowing, so the matrix below has to state both halves:
+ * what the schema accepts and normalizes, and what shape of body it must refuse to model at all.
  */
 
 import { HUMAN, OCTOCAT } from "./accounts";
@@ -37,12 +37,14 @@ function pr(pullRequestOverrides: Record<string, unknown>): Record<string, unkno
 	return merged(base, { pull_request: merged(base.pull_request, pullRequestOverrides) });
 }
 
+/* An absent installation is left absent and a malformed one is replaced with null, which the
+ * pipeline settles alike as missing-installation (SPEC.md §9) — neither invalidates the body. */
 const WITHOUT_INSTALLATION = {
 	action: "opened",
 	pull_request: expectedPayload().pull_request,
 	repository: expectedPayload().repository,
 };
-const NO_INSTALLATION = merged(expectedPayload(), { installation: null });
+const NULL_INSTALLATION = merged(expectedPayload(), { installation: null });
 const NULL_HEAD_REPO = pr({ head: { repo: null, sha: HEAD_SHA } });
 
 const PARSE_OK_CASES = [
@@ -52,14 +54,14 @@ const PARSE_OK_CASES = [
 		name: "extra unmodeled fields",
 		payload: merged(expectedPayload(), { sender: HUMAN }),
 	},
-	{ expected: NO_INSTALLATION, name: "installation absent", payload: WITHOUT_INSTALLATION },
+	{ expected: WITHOUT_INSTALLATION, name: "installation absent", payload: WITHOUT_INSTALLATION },
 	{
-		expected: NO_INSTALLATION,
+		expected: NULL_INSTALLATION,
 		name: "installation id not numeric",
 		payload: merged(expectedPayload(), { installation: { id: "12" } }),
 	},
 	{
-		expected: NO_INSTALLATION,
+		expected: NULL_INSTALLATION,
 		name: "installation not an object",
 		payload: merged(expectedPayload(), { installation: "x" }),
 	},
@@ -121,14 +123,14 @@ const MALFORMED_PAYLOADS = [
 	},
 ];
 
-describe("webhook payload parsing", () => {
+describe("webhook payload validation", () => {
 	it("builds a new object instead of returning the input", () => {
 		expect.hasAssertions();
 		const payload = expectedPayload();
 		expect(parsePullRequestEvent(payload)).not.toBe(payload);
 	});
 
-	it.each(PARSE_OK_CASES)("parses $name", ({ expected, payload }) => {
+	it.each(PARSE_OK_CASES)("accepts $name", ({ expected, payload }) => {
 		expect.hasAssertions();
 		expect(parsePullRequestEvent(payload)).toStrictEqual(expected);
 	});

@@ -443,9 +443,11 @@ the information needed for evaluation comes from the following.
 - The allowlist matches the Mend-hosted Renovate app's bot user. Self-hosted Renovate
   deployments run under a different login (their own app slug, or a PAT user of type
   `User`) and are not matched by design
-- No runtime configuration loading, schema validation, or "configuration missing" branches are
-  needed. The constants are literals whose shape TypeScript checks at build time; whether a
-  given numeric id is the right one is settled by review and by the tests, not by the compiler
+- No runtime configuration loading, no schema validation of configuration, and no
+  "configuration missing" branches are needed. The constants are literals whose shape
+  TypeScript checks at build time; whether a given numeric id is the right one is settled by
+  review and by the tests, not by the compiler. The validation dependency of §11 covers
+  untrusted JSON arriving from GitHub, which is a different contract and a different threat
 
 ## 6. Idempotency and Duplicate Deliveries
 
@@ -643,10 +645,12 @@ it. Re-execution is consolidated into manual redelivery on the GitHub side.
 
 ## 11. Dependency Policy
 
-Runtime: Cloudflare Workers (TypeScript). External packages are minimized, with one
-class of exceptions: GitHub's official `@octokit/*` packages. Hand-rolling the
-GitHub-facing plumbing is more code to audit than the packages it replaces, so where
-an official package covers a concern, the implementation must delegate to it:
+Runtime: Cloudflare Workers (TypeScript). External packages are minimized, and the table
+below is the whole list. Most of it is GitHub's official `@octokit/*` packages, on the
+argument that hand-rolling the GitHub-facing plumbing is more code to audit than the
+packages it replaces; where such a package covers a concern, the implementation must
+delegate to it. The one non-Octokit entry is admitted on that same argument rather than
+as an exception to it (see the note below the table):
 
 | Concern                              | Package                         | Notes                                                        |
 | ------------------------------------ | ------------------------------- | ------------------------------------------------------------ |
@@ -655,20 +659,40 @@ an official package covers a concern, the implementation must delegate to it:
 | REST calls (§3, §4)                  | `@octokit/core`                 | a delivery-wide `AbortSignal` bounds every dispatch (§4, §9) |
 | Pagination (§3.2, §3 condition 5)    | `@octokit/plugin-paginate-rest` | follows the `Link` header; no manual page loops              |
 | Failure narrowing (§8, §9)           | `@octokit/request-error`        | typed `status` and `response.headers` on a failure (§8)      |
+| Untrusted JSON validation (§3, §4)   | `valibot`                       | schemas are the single source of the §3 contract types       |
 | Webhook payload types                | `@octokit/webhooks-types`       | devDependency; type definitions only, never bundled          |
 
 Rules:
 
-1. Direct runtime dependencies are limited to official `@octokit/*` packages, and only
-   the ones the table above requires. The transitive dependencies they pull in (e.g.
+1. Direct runtime dependencies are limited to what the table above requires: the official
+   `@octokit/*` packages, and any non-Octokit package the table names explicitly against
+   the concern it covers. The transitive dependencies they pull in (e.g.
    `universal-github-app-jwt`, `toad-cache`) are part of the package and equally
    acceptable
 2. Do not reimplement what the table delegates: no hand-rolled Web Crypto HMAC or
-   RS256/JWT code, no bespoke REST client, no manual `Link`-header pagination
-3. No other runtime dependencies. The single route, console JSON logging (§8), and
-   in-code constants (§5) are served by platform primitives; routing, validation, and
-   logging libraries are not
+   RS256/JWT code, no bespoke REST client, no manual `Link`-header pagination, no
+   field-by-field narrowing of untrusted JSON outside a schema
+3. No other runtime dependencies. The single route, the console JSON logging of §8, and
+   the in-code constants of §5 need no package: routing and logging libraries would add
+   mechanism the platform primitives already cover
 4. This spec does not pin package versions; Renovate keeps them current
+
+> [!NOTE]
+> `valibot` is the one non-Octokit runtime dependency. What it replaces is field-by-field
+> narrowing of every untrusted value — the webhook body and every REST response alike —
+> which was more code than the package and, having no vocabulary for _where_ a body
+> diverged, could only report that it did.
+> It has no dependencies of its own, is tree-shakable so only the primitives actually used
+> are bundled, and runs on the default Workers runtime like the rest of the table.
+> Schemas are the single source of truth for the contract types of §3: those types are
+> inferred from the schemas rather than declared alongside them, so a field tightened in
+> one cannot leave the other looser. The compile-time projection against
+> `@octokit/webhooks-types` is kept and applies to the inferred type, so drift from the
+> official payload definition still fails the build.
+>
+> A schema validates; it does not decide. Everything §3 settles — trust, verification,
+> duplication — stays in the pure decision functions of §12, so what the package is
+> trusted with is the shape of a value and never whether it may be approved.
 
 > [!NOTE]
 > The composite packages are deliberately not used: `@octokit/rest` adds generated
@@ -689,6 +713,9 @@ Rules:
   Workers runtime without the `nodejs_compat` compatibility flag
 - Testing: extract the decision logic (trusted principals, commit verification) as pure
   functions so it can be unit-tested without mocking the GitHub API
+- The §3 contract types are inferred from the validation schemas rather than declared
+  beside them (§11), which is what keeps the two from drifting. The projection check
+  against `@octokit/webhooks-types` applies to the inferred type
 - `errorMessage` is truncated where the log entry is built rather than where the error is
   raised, so every path onto that field is bounded by one rule (§8). The diagnostic
   headers come off the failed response, which is why they are absent whenever there was

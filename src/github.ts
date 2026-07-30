@@ -1,22 +1,24 @@
 /**
- * The GitHub REST calls the pipeline makes (SPEC.md §3, §4) and the mapping of
- * their responses onto the frozen contract types (src/types.ts): every object is
- * constructed field-by-field from unknown JSON, and a response lacking a required
- * field is a broken API contract and throws (fail closed, SPEC.md §9). The client
- * these calls are issued through, the delivery budget bounding them, and the
- * mapping of a thrown failure onto GithubApiError live in src/client.ts.
+ * The GitHub REST calls the pipeline makes (SPEC.md §3, §4) and the validation of
+ * their responses against the frozen contract schemas (src/types.ts): every value
+ * is rebuilt by the schema that models it, and a response that violates one is a
+ * broken API contract and throws (fail closed, SPEC.md §9). The client these calls
+ * are issued through, the delivery budget bounding them, and the mapping of a
+ * thrown failure onto GithubApiError live in src/client.ts.
  */
 
-import type {
-	GithubAccount,
-	LivePullRequest,
-	OrgMembership,
-	PullRequestCommit,
-	PullRequestReview,
+import type { GenericSchema, InferOutput } from "valibot";
+import type { LivePullRequest, OrgMembership, PullRequestCommit, PullRequestReview } from "./types";
+import {
+	appSchema,
+	livePullRequestSchema,
+	orgMembershipSchema,
+	pullRequestCommitSchema,
+	pullRequestReviewSchema,
 } from "./types";
-import { field, stringField, toAccount } from "./parse";
 import { isHttpStatusOn, shapeError, toApiError } from "./client";
 import type { GithubClient } from "./client";
+import { safeParse } from "valibot";
 
 const PAGE_SIZE = 100;
 /** Item shape errors surface after a successful page, so they carry 200. */
@@ -29,82 +31,29 @@ export interface RepoRef {
 	readonly repo: string;
 }
 
-/** Rejects the mapped-but-undefined sentinel: a missing field breaks the contract. */
-function required<Value>(value: Value | undefined, endpoint: string, status: number): Value {
-	if (value === undefined) {
-		throw shapeError(endpoint, status);
-	}
-	return value;
+/** What a shape violation is attributed to: the route that answered, and the status it answered with. */
+interface ResponseOrigin {
+	readonly endpoint: string;
+	readonly status: number;
 }
 
 /*
- * Mappers build fresh contract objects from unknown JSON; undefined signals a
- * malformed item and is converted into a GithubApiError by required() above.
- * The field accessors and toAccount are shared with the payload parser
- * (src/parse.ts) so both paths narrow the contract by the same rules.
+ * One response value against the schema that models it. The schema rebuilds the value from the
+ * modeled fields alone, so nothing unmodeled travels on from here, and a violation throws as a
+ * github-api-error naming the route (SPEC.md §9). The validation issue itself is discarded: §8
+ * gives `field` to invalid-payload alone, where the body is the App's own contract with GitHub;
+ * a response that breaks its shape is already located by the endpoint the error names.
  */
-function toNullableAccount(value: unknown): GithubAccount | null | undefined {
-	if (value === null) {
-		return value;
+function parseContract<Schema extends GenericSchema>(
+	schema: Schema,
+	value: unknown,
+	origin: ResponseOrigin,
+): InferOutput<Schema> {
+	const result = safeParse(schema, value);
+	if (!result.success) {
+		throw shapeError(origin.endpoint, origin.status);
 	}
-	return toAccount(value);
-}
-function toNullableString(value: unknown): string | null | undefined {
-	if (value === null || typeof value === "string") {
-		return value;
-	}
-	return undefined;
-}
-function toVerification(value: unknown): PullRequestCommit["commit"]["verification"] | undefined {
-	if (value === null) {
-		return value;
-	}
-	const verified = field(value, "verified");
-	if (typeof verified === "boolean") {
-		return { verified };
-	}
-	return undefined;
-}
-function toCommitItem(value: unknown): PullRequestCommit | undefined {
-	const author = toNullableAccount(field(value, "author"));
-	const committer = toNullableAccount(field(value, "committer"));
-	const sha = stringField(value, "sha");
-	const verification = toVerification(field(field(value, "commit"), "verification"));
-	if (
-		author === undefined ||
-		committer === undefined ||
-		sha === undefined ||
-		verification === undefined
-	) {
-		return undefined;
-	}
-	return { author, commit: { verification }, committer, sha };
-}
-function toReviewItem(value: unknown): PullRequestReview | undefined {
-	const commitId = toNullableString(field(value, "commit_id"));
-	const state = stringField(value, "state");
-	const user = toNullableAccount(field(value, "user"));
-	if (commitId === undefined || state === undefined || user === undefined) {
-		return undefined;
-	}
-	return { commit_id: commitId, state, user };
-}
-function toMembership(value: unknown): OrgMembership | undefined {
-	const role = stringField(value, "role");
-	const state = stringField(value, "state");
-	if (role === undefined || state === undefined) {
-		return undefined;
-	}
-	return { role, state };
-}
-function toLivePullRequest(value: unknown): LivePullRequest | undefined {
-	const draft = field(value, "draft");
-	const sha = stringField(field(value, "head"), "sha");
-	const state = stringField(value, "state");
-	if (typeof draft !== "boolean" || sha === undefined || state === undefined) {
-		return undefined;
-	}
-	return { draft, head: { sha }, state };
+	return result.output;
 }
 
 /**
@@ -117,10 +66,8 @@ export async function fetchAppBotLogin(client: GithubClient): Promise<string> {
 	const endpoint = "GET /app";
 	try {
 		const response = await client.request(endpoint);
-		const slug = stringField(response.data, "slug");
-		if (slug === undefined || slug === "") {
-			throw shapeError(endpoint, response.status);
-		}
+		const { status } = response;
+		const { slug } = parseContract(appSchema, response.data, { endpoint, status });
 		return `${slug}[bot]`;
 	} catch (error) {
 		throw toApiError(endpoint, error);
@@ -132,16 +79,16 @@ type PullRequestListEndpoint =
 	| "GET /repos/{owner}/{repo}/pulls/{pull_number}/commits"
 	| "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews";
 
-/** Follows the Link header to the last page and maps every item through the frozen contract. */
-async function listPullRequestItems<Item>(
+/** Follows the Link header to the last page and validates every item against the frozen contract. */
+async function listPullRequestItems<Schema extends GenericSchema>(
 	client: GithubClient,
 	list: {
 		readonly endpoint: PullRequestListEndpoint;
 		readonly pullNumber: number;
 		readonly repo: RepoRef;
 	},
-	toItem: (value: unknown) => Item | undefined,
-): Promise<readonly Item[]> {
+	itemSchema: Schema,
+): Promise<readonly InferOutput<Schema>[]> {
 	const { endpoint, pullNumber, repo } = list;
 	try {
 		const items = await client.paginate(endpoint, {
@@ -150,7 +97,7 @@ async function listPullRequestItems<Item>(
 			pull_number: pullNumber,
 			repo: repo.repo,
 		});
-		return items.map((item) => required(toItem(item), endpoint, HTTP_OK));
+		return items.map((item) => parseContract(itemSchema, item, { endpoint, status: HTTP_OK }));
 	} catch (error) {
 		throw toApiError(endpoint, error);
 	}
@@ -165,7 +112,7 @@ export async function listPullRequestCommits(
 	return listPullRequestItems(
 		client,
 		{ endpoint: "GET /repos/{owner}/{repo}/pulls/{pull_number}/commits", pullNumber, repo },
-		toCommitItem,
+		pullRequestCommitSchema,
 	);
 }
 
@@ -178,7 +125,8 @@ export async function fetchOrgMembership(
 	const endpoint = "GET /orgs/{org}/memberships/{username}";
 	try {
 		const response = await client.request(endpoint, { org, username });
-		return required(toMembership(response.data), endpoint, response.status);
+		const { status } = response;
+		return parseContract(orgMembershipSchema, response.data, { endpoint, status });
 	} catch (error) {
 		if (isHttpStatusOn(error, HTTP_NOT_FOUND)) {
 			return null;
@@ -196,7 +144,7 @@ export async function listPullRequestReviews(
 	return listPullRequestItems(
 		client,
 		{ endpoint: "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews", pullNumber, repo },
-		toReviewItem,
+		pullRequestReviewSchema,
 	);
 }
 
@@ -213,7 +161,8 @@ export async function fetchPullRequest(
 			pull_number: pullNumber,
 			repo: repo.repo,
 		});
-		return required(toLivePullRequest(response.data), endpoint, response.status);
+		const { status } = response;
+		return parseContract(livePullRequestSchema, response.data, { endpoint, status });
 	} catch (error) {
 		throw toApiError(endpoint, error);
 	}
