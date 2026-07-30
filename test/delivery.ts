@@ -205,16 +205,30 @@ export async function dispatch(request: Request, env?: Env): Promise<Response> {
 	return response;
 }
 
+/** What GitHub sends besides the signature; stated apart from it for the case about a delivery carrying none. */
+export function unsignedDeliveryHeaders(eventName = "pull_request"): Record<string, string> {
+	return { "x-github-delivery": DELIVERY_ID, "x-github-event": eventName };
+}
 /** The three headers GitHub sends on every delivery; cases vary the signature and the event. */
 export function deliveryHeaders(
 	signature: string,
 	eventName = "pull_request",
 ): Record<string, string> {
-	return {
-		"x-github-delivery": DELIVERY_ID,
-		"x-github-event": eventName,
-		"x-hub-signature-256": signature,
-	};
+	const headers = unsignedDeliveryHeaders(eventName);
+	return Object.assign(headers, { "x-hub-signature-256": signature });
+}
+/** The POST a delivery arrives as, however the case arrived at its headers. */
+export function deliveryRequest(body: string, headers: Record<string, string>): Request {
+	return new Request(WEBHOOK_URL, { body, headers, method: "POST" });
+}
+/** The same POST correctly signed over its own body; a case adds the headers GitHub would have sent with it. */
+export async function signedDelivery(
+	body: string,
+	extraHeaders: Record<string, string> = {},
+	eventName = "pull_request",
+): Promise<Request> {
+	const headers = deliveryHeaders(await sign(SECRET, body), eventName);
+	return deliveryRequest(body, Object.assign(headers, extraHeaders));
 }
 /** For deliveries rejected before verification runs, so the digest is never reached. */
 export const UNCHECKED_SIGNATURE = "sha256=00";
@@ -230,12 +244,7 @@ export async function postSigned(
 	eventName = "pull_request",
 	env?: Env,
 ): Promise<Response> {
-	const request = new Request(WEBHOOK_URL, {
-		body,
-		headers: deliveryHeaders(await sign(SECRET, body), eventName),
-		method: "POST",
-	});
-	return dispatch(request, env);
+	return dispatch(await signedDelivery(body, {}, eventName), env);
 }
 
 /* The spy on the one §8 log entry a delivery leaves, installed before the delivery is dispatched

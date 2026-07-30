@@ -14,11 +14,14 @@ import {
 	buildPayload,
 	captureLog,
 	deliveryHeaders,
+	deliveryRequest,
 	dispatch,
 	expectReply,
 	happyRoutes,
 	postSigned,
+	signedDelivery,
 	streamedDelivery,
+	unsignedDeliveryHeaders,
 } from "./delivery";
 import {
 	HTTP_INTERNAL_ERROR,
@@ -78,11 +81,7 @@ describe("signature verification", () => {
 	it("rejects a request without a signature header", async () => {
 		expect.hasAssertions();
 		installFetchMock([]);
-		const request = new Request(WEBHOOK_URL, {
-			body: buildPayload(),
-			headers: { "x-github-delivery": DELIVERY_ID, "x-github-event": "pull_request" },
-			method: "POST",
-		});
+		const request = deliveryRequest(buildPayload(), unsignedDeliveryHeaders());
 		await expectReply(await dispatch(request), {
 			body: { decision: "error", reason: "invalid-signature" },
 			status: HTTP_UNAUTHORIZED,
@@ -93,11 +92,10 @@ describe("signature verification", () => {
 		expect.hasAssertions();
 		installFetchMock([]);
 		const signature = await sign(SECRET, buildPayload());
-		const request = new Request(WEBHOOK_URL, {
-			body: buildPayload({ action: "synchronize" }),
-			headers: deliveryHeaders(signature),
-			method: "POST",
-		});
+		const request = deliveryRequest(
+			buildPayload({ action: "synchronize" }),
+			deliveryHeaders(signature),
+		);
 		await expectReply(await dispatch(request), {
 			body: { decision: "error", reason: "invalid-signature" },
 			status: HTTP_UNAUTHORIZED,
@@ -171,9 +169,7 @@ describe("payload validation", () => {
 
 /** A signed delivery declaring an explicit Content-Length, which postSigned leaves unset. */
 async function postSignedWithLength(body: string, contentLength: number): Promise<Response> {
-	const headers = deliveryHeaders(await sign(SECRET, body));
-	headers["content-length"] = String(contentLength);
-	return dispatch(new Request(WEBHOOK_URL, { body, headers, method: "POST" }));
+	return dispatch(await signedDelivery(body, { "content-length": String(contentLength) }));
 }
 
 /* A chunked upload carries no Content-Length, so the declared-length check cannot see it and
