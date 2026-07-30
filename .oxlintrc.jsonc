@@ -128,12 +128,12 @@
 			},
 		},
 		{
-			"files": ["src/index.ts"],
+			"files": ["src/log.ts"],
 			"rules": {
 				// SPEC §8 requires exactly one structured log entry per delivery, and
-				// `console` is the only sink a Worker has. Scoped to the entrypoint,
-				// which is the one module that emits it, so a stray `console` anywhere
-				// else in src/ is still reported.
+				// `console` is the only sink a Worker has. Scoped to the module that
+				// builds and emits that entry, so a stray `console` anywhere else in
+				// src/ — the entrypoint included — is still reported.
 				"eslint/no-console": "off",
 			},
 		},
