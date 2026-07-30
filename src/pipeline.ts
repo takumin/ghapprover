@@ -6,6 +6,7 @@
  * that decide what an outcome can say.
  */
 
+import type { ApiDiagnostics, GithubClient } from "./client";
 import type { ApprovalTarget, RepoRef } from "./github";
 import type {
 	CommitCountProblem,
@@ -35,7 +36,6 @@ import {
 	listPullRequestCommits,
 	listPullRequestReviews,
 } from "./github";
-import type { GithubClient } from "./client";
 
 const HTTP_OK = 200;
 const HTTP_INTERNAL_ERROR = 500;
@@ -69,29 +69,27 @@ export type Reason =
 
 /**
  * Evaluation result mapped onto the §9 status table and the §8 log entry.
- * endpoint, status (0 = network failure) and the three header-derived
- * diagnostics (the GithubApiError fields) are set for the github-api-error
- * outcome only; errorName (a thrown error's class name) for the internal-error
- * outcome only; errorMessage — the originating error's message, truncated where
- * the entry is built (§12) — for either; and field, the dot path of the payload
- * field that failed validation, for the invalid-payload outcome only. The
- * diagnostics are spelled `| undefined` rather than merely optional because the
- * failure paths set them from a failure that may have carried no response — and,
- * for field, no locatable field — at all, and §8 asks for them to be absent from
- * the entry rather than logged empty.
+ * endpoint, status (0 = network failure) and the ApiDiagnostics group it extends
+ * — the header-derived fields a failed call carries — are set for the
+ * github-api-error outcome only; errorName (a thrown error's class name) for the
+ * internal-error outcome only; errorMessage, part of that group, for either; and
+ * field, the dot path of the payload field that failed validation, for the
+ * invalid-payload outcome only. Extending Partial<ApiDiagnostics> rather than
+ * restating those fields is what makes a diagnostic added there reach this
+ * outcome — and, through the entry point's AllOutcomeFieldsLogged check, the §8
+ * log entry — instead of riding on the error and being silently dropped here.
+ * Partial also keeps them spelled `| undefined` rather than merely optional,
+ * which is what §8 asks for: the failure paths set them from a failure that may
+ * have carried no response — and, for field, no locatable field — at all, and
+ * such a field is to be absent from the entry rather than logged empty.
  */
-export interface Outcome {
-	readonly acceptedPermissions?: string | undefined;
+export interface Outcome extends Partial<ApiDiagnostics> {
 	readonly decision: "approved" | "error" | "skipped";
 	readonly endpoint?: string;
-	readonly errorMessage?: string | undefined;
 	readonly errorName?: string;
 	readonly field?: string | undefined;
 	readonly httpStatus: number;
-	readonly rateLimitRemaining?: string | undefined;
-	readonly rateLimitReset?: string | undefined;
 	readonly reason?: Reason;
-	readonly requestId?: string | undefined;
 	readonly status?: number;
 }
 
