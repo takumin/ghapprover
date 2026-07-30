@@ -7,7 +7,7 @@
 node = "24.18.1"
 pnpm = "11.17.0"
 # maintenance
-pinact = "4.1.0"
+pinact = "4.1.1"
 # lint
 # Pinned to the same aqua packages as the sibling rsdebstrap repository. The
 # explicit `aqua:` backend keeps the package identity stable even if the mise
