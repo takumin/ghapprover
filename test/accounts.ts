@@ -56,5 +56,12 @@ export const APP_BOT: GithubAccount = { id: 201, login: "ghapprover[bot]", type:
 
 /** The repository owner the payload fixtures are built around. */
 export const OCTOCAT: GithubAccount = { id: 77, login: "octocat", type: "User" };
+/**
+ * The organization every §3.1 org-branch case is owned by: the unit suite that drives
+ * classifyPrincipal and the delivery suites that serve the membership lookup it defers to have to
+ * mean the same account by it, and the membership URL those routes are planned on is built from
+ * this login rather than repeating it.
+ */
+export const ORG: GithubAccount = { id: 88, login: "acme", type: "Organization" };
 /** An ordinary user: not allowlisted, not an owner, and not the App's own bot. */
 export const HUMAN: GithubAccount = { id: 301, login: "human", type: "User" };

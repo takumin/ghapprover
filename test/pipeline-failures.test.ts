@@ -22,7 +22,6 @@ import {
 	COMMITS_SUFFIX,
 	DELIVERY_ID,
 	HEAD_SHA,
-	ORG,
 	SECRET,
 	TOKEN_URL,
 	buildPayload,
@@ -32,6 +31,7 @@ import {
 	pullsUrl,
 } from "./delivery";
 import { describe, expect, it, vi } from "vitest";
+import { ORG } from "./accounts";
 import type { PlannedRoute } from "./fetch-stub";
 
 /** What the auth library says about that key, and what §8's errorMessage exists to carry into the entry. */

@@ -4,7 +4,7 @@
  * near-miss case exists because trust is decided on the (id, login) pair, never the login alone.
  */
 
-import { AUTOFIX_CI, OCTOCAT, RENOVATE, RENOVATE_WRONG_ID, allowedBot } from "./accounts";
+import { AUTOFIX_CI, OCTOCAT, ORG, RENOVATE, RENOVATE_WRONG_ID, allowedBot } from "./accounts";
 import type { GithubAccount, OrgMembership } from "../src/types";
 import { classifyPrincipal, isOwnerMembership } from "../src/decision";
 import { describe, expect, it } from "vitest";
@@ -12,7 +12,6 @@ import { describe, expect, it } from "vitest";
 /** The owner's login under a different account: §3.1 pins the personal-repo owner's id too. */
 const OCTOCAT_WRONG_ID: GithubAccount = { id: 78, login: "octocat", type: "User" };
 const OTHER_USER: GithubAccount = { id: 55, login: "someone-else", type: "User" };
-const ORG_OWNER: GithubAccount = { id: 88, login: "acme", type: "Organization" };
 const DEPENDABOT = allowedBot("dependabot[bot]");
 /** Deliberately not on the allowlist: a bot GitHub ships, which §3.1 still rejects. */
 const GITHUB_ACTIONS: GithubAccount = { id: 41_898_282, login: "github-actions[bot]", type: "Bot" };
@@ -46,7 +45,7 @@ const CLASSIFY_CASES = [
 	{
 		expected: { kind: "org-membership", login: "octocat", org: "acme" },
 		name: "a user on an org repository",
-		owner: ORG_OWNER,
+		owner: ORG,
 		user: OCTOCAT,
 	},
 	{
@@ -58,7 +57,7 @@ const CLASSIFY_CASES = [
 	{
 		expected: { kind: "trusted" },
 		name: "dependabot on an org repository",
-		owner: ORG_OWNER,
+		owner: ORG,
 		user: DEPENDABOT,
 	},
 	{
@@ -88,7 +87,7 @@ const CLASSIFY_CASES = [
 	{
 		expected: { kind: "untrusted" },
 		name: "github-actions even on an org repository",
-		owner: ORG_OWNER,
+		owner: ORG,
 		user: GITHUB_ACTIONS,
 	},
 	{
@@ -100,7 +99,7 @@ const CLASSIFY_CASES = [
 	{
 		expected: { kind: "org-membership", login: "renovate[bot]", org: "acme" },
 		name: "a User named like renovate on an org repository",
-		owner: ORG_OWNER,
+		owner: ORG,
 		user: RENOVATE_TYPE_USER,
 	},
 	{

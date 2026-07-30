@@ -7,8 +7,8 @@
  */
 
 import { HTTP_OK, installFetchMock } from "./fetch-stub";
+import { ORG, RENOVATE, RENOVATE_WRONG_ID, WEB_FLOW_USER } from "./accounts";
 import {
-	ORG,
 	OTHER_STRANGER,
 	STRANGER,
 	buildPayload,
@@ -21,7 +21,6 @@ import {
 	membershipUrl,
 	postSigned,
 } from "./delivery";
-import { RENOVATE, RENOVATE_WRONG_ID, WEB_FLOW_USER } from "./accounts";
 import { describe, expect, it } from "vitest";
 import { MAX_VERIFIABLE_COMMITS } from "../src/allowlist";
 

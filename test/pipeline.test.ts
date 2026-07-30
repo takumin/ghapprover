@@ -10,7 +10,6 @@ import {
 	COMMITS_SUFFIX,
 	DELIVERY_ID,
 	HEAD_SHA,
-	ORG,
 	OWN_APPROVAL,
 	REPO_ID,
 	TOKEN_URL,
@@ -29,7 +28,7 @@ import {
 	reviewPostRoute,
 	reviewsRouteFor,
 } from "./delivery";
-import { AUTOFIX_CI, RENOVATE, WEB_FLOW_USER } from "./accounts";
+import { AUTOFIX_CI, ORG, RENOVATE, WEB_FLOW_USER } from "./accounts";
 import {
 	HTTP_OK,
 	HTTP_UNPROCESSABLE_ENTITY,

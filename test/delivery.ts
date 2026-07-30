@@ -6,9 +6,9 @@
  * is a route that can disagree with itself about what the pipeline actually calls.
  */
 
+import { APP_BOT, ORG } from "./accounts";
 import { BASE, HTTP_NOT_FOUND, HTTP_OK, PULL_NUMBER, jsonRoute, tokenRoute } from "./fetch-stub";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
-import { APP_BOT } from "./accounts";
 import type { GithubAccount } from "../src/types";
 import type { PlannedRoute } from "./fetch-stub";
 import { expect } from "vitest";
@@ -28,12 +28,12 @@ const INSTALL_TOKEN = "install-token";
 const APP_SLUG = "ghapprover";
 export const TOKEN_URL = `${BASE}/app/installations/${INSTALLATION_ID}/access_tokens`;
 export const APP_URL = `${BASE}/app`;
-export const membershipUrl = (login: string): string => `${BASE}/orgs/acme/memberships/${login}`;
+export const membershipUrl = (login: string): string =>
+	`${BASE}/orgs/${ORG.login}/memberships/${login}`;
 export const COMMITS_SUFFIX = "/commits?per_page=100";
 const REVIEWS_SUFFIX = "/reviews?per_page=100";
 
 const OWNER: GithubAccount = { id: 7, login: "octo", type: "User" };
-export const ORG: GithubAccount = { id: 88, login: "acme", type: "Organization" };
 export const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User" };
 export const OTHER_STRANGER: GithubAccount = { id: 998, login: "eve", type: "User" };
 export const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT };
