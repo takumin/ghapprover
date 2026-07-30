@@ -6,7 +6,7 @@
  * is a route that can disagree with itself about what the pipeline actually calls.
  */
 
-import { APP_BOT, ORG } from "./accounts";
+import { APP_BOT, OCTO, ORG } from "./accounts";
 import {
 	APP_URL,
 	BASE,
@@ -43,7 +43,7 @@ export const membershipUrl = (login: string): string =>
 export const COMMITS_SUFFIX = "/commits?per_page=100";
 const REVIEWS_SUFFIX = "/reviews?per_page=100";
 
-const OWNER: GithubAccount = { id: 7, login: "octo", type: "User" };
+const OWNER = OCTO;
 export const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User" };
 export const OTHER_STRANGER: GithubAccount = { id: 998, login: "eve", type: "User" };
 export const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT };

@@ -57,6 +57,12 @@ export const APP_BOT: GithubAccount = { id: 201, login: "ghapprover[bot]", type:
 /** The repository owner the payload fixtures are built around. */
 export const OCTOCAT: GithubAccount = { id: 77, login: "octocat", type: "User" };
 /**
+ * The owner of the `octo/hello` fixture repository both route-helper families build their calls
+ * against (delivery.ts, github-routes.ts): the delivery suites approve its pull request and the
+ * endpoint suites serve it as a commit and review author, so the two must mean one account by it.
+ */
+export const OCTO: GithubAccount = { id: 7, login: "octo", type: "User" };
+/**
  * The organization every §3.1 org-branch case is owned by: the unit suite that drives
  * classifyPrincipal and the delivery suites that serve the membership lookup it defers to have to
  * mean the same account by it, and the membership URL those routes are planned on is built from

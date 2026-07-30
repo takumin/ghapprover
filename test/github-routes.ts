@@ -8,6 +8,7 @@
 import { APP_URL, BASE, HTTP_OK, PULL_NUMBER, jsonRoute, tokenRoute, tokenUrl } from "./fetch-stub";
 import type { ApprovalTarget, RepoRef } from "../src/github";
 import type { GithubClient } from "../src/client";
+import { OCTO } from "./accounts";
 import type { PlannedRoute } from "./fetch-stub";
 import { createGithubClient } from "../src/client";
 import { privateKeyPemOnce } from "./app-key";
@@ -18,7 +19,7 @@ const INSTALLATION_ID = 12_345;
 export const TOKENS_URL = tokenUrl(INSTALLATION_ID);
 const MEMBERSHIP_URL = `${BASE}/orgs/octo/memberships/someone`;
 export const FULL_PAGE = 100;
-export const ACCOUNT = { id: 7, login: "octo", type: "User" };
+export const ACCOUNT = OCTO;
 
 export async function makeClient(): Promise<GithubClient> {
 	return createGithubClient(
