@@ -185,6 +185,6 @@ type ProjectionOf<Payload extends Subset, Subset> = Payload;
  * satisfy the modeled subset above — which is the type inferred from the schema,
  * so tightening the schema is what this check is applied to. If either side
  * drifts, this alias stops compiling. The runtime still validates fail closed
- * (src/payload.ts), because a verified signature proves origin, not shape.
+ * (src/pipeline.ts), because a verified signature proves origin, not shape.
  */
 export type PullRequestEventContract = ProjectionOf<PullRequestEvent, PullRequestEventPayload>;

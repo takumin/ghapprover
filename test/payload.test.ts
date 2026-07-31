@@ -1,5 +1,5 @@
 /**
- * Fail-closed payload validation (src/payload.ts, SPEC.md §3). The schema (src/types.ts) decides
+ * Fail-closed payload validation (src/pipeline.ts, SPEC.md §3). The schema (src/types.ts) decides
  * the shape rather than a hand-written narrowing, so the matrix below has to state three things:
  * what the schema accepts and normalizes, what shape of body it must refuse to model at all, and
  * — for every refusal — the dot path §8's `field` reports it as. The refusals are asserted on the
@@ -10,7 +10,7 @@
 import { HEAD_SHA, HUMAN, OWNER, REPOSITORY } from "./fixtures";
 import { describe, expect, it } from "vitest";
 import type { PullRequestEventPayload } from "../src/types";
-import { parsePullRequestEvent } from "../src/payload";
+import { parsePullRequestEvent } from "../src/pipeline";
 
 function expectedPayload(): PullRequestEventPayload {
 	return {

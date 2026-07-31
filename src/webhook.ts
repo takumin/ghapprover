@@ -8,6 +8,15 @@
 
 import { verify } from "@octokit/webhooks-methods";
 
+/**
+ * The header GitHub sends the digest in (SPEC.md §7). Named beside the check that
+ * reads it, so the entry point that pulls it off the request and the suites that
+ * sign a delivery take the header from the verification it feeds rather than each
+ * spelling it out — a header spelled twice is one that can be renamed on one side
+ * and leave the other silently verifying nothing.
+ */
+export const SIGNATURE_HEADER = "x-hub-signature-256";
+
 /** "sha256=" followed by exactly the 64 hex chars of an HMAC-SHA256 digest. */
 const SIGNATURE_PATTERN = /^sha256=[0-9a-f]{64}$/iu;
 
