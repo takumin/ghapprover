@@ -1,9 +1,13 @@
 /**
  * The SPEC.md §4 pipeline: everything a delivery goes through once its signature has been verified
- * and its body modeled — the §3 conditions in the order they must run, the trust lookups they
- * spend, and the approval itself — reduced to the outcome the entry point logs and answers with
- * (src/index.ts). What an outcome can say is the vocabulary in src/outcome.ts; this module is what
- * decides which one a delivery reaches.
+ * — the body modeled fail-closed (§3, §11), then the §3 conditions in the order they must run, the
+ * trust lookups they spend, and the approval itself — reduced to the outcome the entry point logs
+ * and answers with (src/index.ts). What an outcome can say is the vocabulary in src/outcome.ts; this
+ * module is what decides which one a delivery reaches. The modeling lives here rather than in a
+ * module of its own because it is §4's own first step on the verified body and its answer is read
+ * nowhere except immediately before the run below: the schema it defers to (src/types.ts) is what
+ * decides whether the delivery can be modeled at all, and the §3 checks it feeds are their own
+ * modules (src/decision.ts, src/commits.ts), free of I/O and unit-testable without the API (§12).
  */
 
 import type { AppCredentials, GithubClient } from "./client";
@@ -28,10 +32,56 @@ import {
 	listPullRequestCommits,
 	listPullRequestReviews,
 } from "./github";
+import { getDotPath, safeParse } from "valibot";
+import type { BaseIssue } from "valibot";
 import { GithubApiError } from "./api-error";
 import type { Outcome } from "./outcome";
 import { accountKey } from "./account";
 import { createGithubClient } from "./client";
+import { pullRequestEventSchema } from "./types";
+
+/**
+ * The modeled payload, or no payload and SPEC.md §8's `field`: the dot path of the first field that
+ * failed validation. The path alone — the issue also carries the value that failed, which is
+ * webhook payload content and never leaves this module (§8 warning, §11).
+ */
+interface PayloadValidation {
+	readonly field?: string | undefined;
+	readonly payload?: PullRequestEventPayload | undefined;
+}
+
+/* An issue at the root — a body that is not an object at all has no field to name — has no dot
+ * path, and becomes an absent `field` rather than one logged empty (SPEC.md §8). */
+function issueField(issue: BaseIssue<unknown>): string | undefined {
+	return getDotPath(issue) ?? undefined;
+}
+
+/* The whole body, or no payload at all when it does not match the modeled shape — a missing or
+ * malformed installation being the one divergence the schema absorbs rather than rejects (SPEC.md
+ * §9). The first issue is the one reported: the schema states its fields in a fixed order, so which
+ * field a given malformed body names does not vary between deliveries. */
+function parsePullRequestEvent(payload: unknown): PayloadValidation {
+	const result = safeParse(pullRequestEventSchema, payload);
+	if (result.success) {
+		return { payload: result.output };
+	}
+	return { field: issueField(result.issues[0]) };
+}
+
+/**
+ * The delivery body itself, which is what the entry point actually holds: whether it is JSON at all
+ * is a fact about the body's validity, so it is settled here rather than at the seam that reads it.
+ * A body that is not JSON is not the modeled shape either, and names no field: there is no document
+ * to locate one in (SPEC.md §8).
+ */
+function parsePullRequestEventBody(body: string): PayloadValidation {
+	try {
+		const parsed: unknown = JSON.parse(body);
+		return parsePullRequestEvent(parsed);
+	} catch {
+		return {};
+	}
+}
 
 async function evaluateTrust(
 	client: GithubClient,
@@ -182,4 +232,5 @@ async function runPipeline(
 	}
 }
 
-export { runPipeline };
+export { parsePullRequestEvent, parsePullRequestEventBody, runPipeline };
+export type { PayloadValidation };

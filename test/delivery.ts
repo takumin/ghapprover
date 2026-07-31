@@ -17,6 +17,7 @@ import {
 	commitsRoute,
 	installTokenRoute,
 	livePullRequestRoute,
+	privateKeyPemOnce,
 	reviewPostRoute,
 	reviewsRoute,
 } from "./github-api";
@@ -27,7 +28,7 @@ import type { GithubAccount } from "~src/types";
 import { HTTP_OK } from "~src/http-status";
 import type { MockInstance } from "vitest";
 import type { PlannedRoute } from "./fetch-stub";
-import { privateKeyPemOnce } from "./app-key";
+import { SIGNATURE_HEADER } from "~src/webhook";
 import { sign } from "@octokit/webhooks-methods";
 
 /** One byte past the cap the Worker enforces, taken from the cap itself (SPEC.md §9). */
@@ -130,7 +131,7 @@ function unsignedDeliveryHeaders(eventName = "pull_request"): Record<string, str
 /** The three headers GitHub sends on every delivery; cases vary the signature and the event. */
 function deliveryHeaders(signature: string, eventName = "pull_request"): Record<string, string> {
 	const headers = unsignedDeliveryHeaders(eventName);
-	return Object.assign(headers, { "x-hub-signature-256": signature });
+	return Object.assign(headers, { [SIGNATURE_HEADER]: signature });
 }
 /** The POST a delivery arrives as, however the case arrived at its headers. */
 function deliveryRequest(body: string, headers: Readonly<Record<string, string>>): Request {

@@ -6,14 +6,13 @@
  * Deliveries and redeliverable (§9).
  */
 
+import { SIGNATURE_HEADER, verifyWebhookSignature } from "./webhook";
 import { deliveryFields, logOutcome, recordPayload } from "./log";
 import { errorOutcome, internalErrorOutcome, skippedOutcome } from "./outcome";
+import { parsePullRequestEventBody, runPipeline } from "./pipeline";
 import type { AppCredentials } from "./client";
 import type { LogFields } from "./log";
 import type { Outcome } from "./outcome";
-import { parsePullRequestEventBody } from "./payload";
-import { runPipeline } from "./pipeline";
-import { verifyWebhookSignature } from "./webhook";
 
 /**
  * GitHub caps webhook payloads at 25 MB, so anything larger is not a delivery
@@ -113,7 +112,7 @@ async function evaluateDelivery(request: Request, env: Env, log: LogFields): Pro
 	const verified = await verifyWebhookSignature(
 		env.GITHUB_WEBHOOK_SECRET,
 		body,
-		request.headers.get("x-hub-signature-256"),
+		request.headers.get(SIGNATURE_HEADER),
 	);
 	if (!verified) {
 		return errorOutcome("invalid-signature");

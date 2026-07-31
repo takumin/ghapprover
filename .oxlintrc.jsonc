@@ -51,8 +51,8 @@
 			{ "enforceConst": true, "ignore": [0, 1, -1], "ignoreArrayIndexes": true },
 		],
 		// `undefined` is how absence is spelled throughout: the SPEC §8 diagnostics
-		// an outcome does not carry (src/pipeline.ts), the validation result with no
-		// field to name (src/payload.ts), and every "no problem found" a §3 check
+		// an outcome does not carry (src/outcome.ts), the validation result with no
+		// field to name (src/pipeline.ts), and every "no problem found" a §3 check
 		// answers with. `null` cannot stand in for it -- `null` is a value the GitHub
 		// payloads really carry, which is what unicorn/no-null below now enforces.
 		"eslint/no-undefined": "off",
@@ -72,12 +72,10 @@
 		// which is the shape every pass-through helper here is written in.
 		"eslint/require-await": "error",
 		// The import group, in the order oxlint sorts it:
-		// - no-named-export and prefer-default-export each contradict
-		//   no-default-export, which the restriction category keeps on: the first
-		//   pair as errors leaves a module nothing it may export, and the second
-		//   orders the single-export modules to write the default export the
-		//   enabled rule bans. The named shape is also what lets SPEC §12's
-		//   decision logic be unit-tested without mocking the GitHub API.
+		// - no-named-export contradicts no-default-export, which the restriction
+		//   category keeps on: as errors the pair leaves a module nothing it may
+		//   export. The named shape is also what lets SPEC §12's decision logic be
+		//   unit-tested without mocking the GitHub API.
 		// - exports-last and group-exports together give every module one trailing
 		//   export block: a declaration is private unless the block at the bottom
 		//   names it, so the public surface is read off one statement rather than
@@ -89,13 +87,22 @@
 		//   that cannot avoid a default export (src/index.ts, vitest.config.mts)
 		//   carry a line exemption rather than the rule being switched off for
 		//   whole files.
+		// - prefer-default-export fires only on a module with a single export, and
+		//   asks for the default export no-default-export bans, so with that rule
+		//   standing it reads as "no module may have exactly one export". That is
+		//   the shape this codebase already wants: a lone export is either a value
+		//   the consumer restates because the module never offered it, or a module
+		//   that only ever travels with its single caller. Keeping it an error is
+		//   what stops the next one from being added silently -- and what makes
+		//   the constraint permanent, since a refactor that leaves a module one
+		//   export has to resolve it rather than land.
 		"import/exports-last": "error",
 		// Reports nothing against the extensionless imports this codebase writes, so
 		// it is carried as a guard on that style rather than switched off.
 		"import/extensions": "error",
 		"import/group-exports": "error",
 		"import/no-named-export": "off",
-		"import/prefer-default-export": "off",
+		"import/prefer-default-export": "error",
 		// Bans async/await outright, while the enabled
 		// typescript/promise-function-async requires every promise-returning
 		// function to be async: as errors the pair leaves no legal way to return a
