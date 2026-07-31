@@ -391,12 +391,17 @@ flowchart TD
   safely re-executed via manual redelivery (the approval process is idempotent as
   described in §6).
 - **The App slug is fetched once per isolate**, not once per delivery: the slug is fixed
-  for the lifetime of a deployment, so the `<slug>[bot]` login derived from it is kept in
-  memory (never persisted, as in §7) and every later delivery reaching step 6 spends
-  neither one of the 50 subrequests the Free plan allows nor one call against the API rate
-  limit on re-reading a constant. Only a successful fetch is kept: a stored failure would
-  be served to every delivery that isolate goes on to handle, turning one refused call
-  into a deployment that approves nothing until the isolate is recycled. A stale entry
+  for the lifetime of a deployment, so what is kept in memory (never persisted, as in §7)
+  is the lookup itself rather than only the `<slug>[bot]` login it derives, and every
+  later delivery reaching step 6 spends neither one of the 50 subrequests the Free plan
+  allows nor one call against the API rate limit on re-reading a constant. Holding the
+  lookup rather than its result is what makes the count one per isolate rather than one
+  per cold start: deliveries that arrive while the first fetch is still in flight join
+  that call instead of each issuing its own, which is the only way two concurrent
+  deliveries into a fresh isolate cost one `GET /app`. A rejection is not retained: a
+  stored failure would be served to every delivery that isolate goes on to handle,
+  turning one refused call into a deployment that approves nothing until the isolate is
+  recycled, so a failed lookup is dropped and the next delivery fetches again. A stale entry
   needs the App to be renamed under a live isolate, and what it costs is bounded — the
   duplication check stops matching the App's own reviews, so a duplicate approval is
   posted for the current head, which §6 already states has no safety impact. It cannot

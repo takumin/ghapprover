@@ -98,25 +98,18 @@ async function contractCall<Schema extends GenericSchema>(
 }
 
 /*
- * The derived login, held for the isolate rather than for the delivery (SPEC.md §4): the slug is
- * fixed for the lifetime of a deployment, so every delivery after the first spends neither a
- * subrequest nor a rate-limit call re-reading a constant. Only a success is written, so a
- * transient failure is retried by the next delivery instead of being served to all of them.
+ * The lookup rather than only the login it derives, held for the isolate (SPEC.md §4): the slug is
+ * fixed for the deployment, so a delivery after the first spends neither a subrequest nor a
+ * rate-limit call re-reading a constant, and one arriving while that call is still in flight joins
+ * it rather than issuing a second. A rejection is not retained: the next delivery retries instead.
  */
 // oxlint-disable-next-line eslint/init-declarations -- the initializer spelling this absence is what unicorn/no-useless-undefined reports
-let cachedBotLogin: string | undefined;
+let cachedBotLogin: Promise<string> | undefined;
 
-/**
- * GET /app — the App's own bot-user login, which is "<slug>[bot]" for the
- * non-empty slug the endpoint returns (SPEC.md §3 cond. 5). The suffix is a
- * GitHub naming convention, so deriving the login belongs to this module
- * rather than to the caller that matches reviews against it. The call is made
- * once per isolate (SPEC.md §4); what a stale entry can cost is argued there.
- */
-async function fetchAppBotLogin(client: GithubClient): Promise<string> {
-	if (cachedBotLogin !== undefined) {
-		return cachedBotLogin;
-	}
+/** GET /app itself, uncached: the login is "<slug>[bot]" for the non-empty slug the endpoint returns
+ * (SPEC.md §3 cond. 5). The suffix is a GitHub naming convention, so deriving the login belongs to
+ * this module rather than to the caller that matches reviews against it. */
+async function requestAppBotLogin(client: GithubClient): Promise<string> {
 	const endpoint = "GET /app";
 	const { slug } = await contractCall(
 		endpoint,
@@ -126,16 +119,29 @@ async function fetchAppBotLogin(client: GithubClient): Promise<string> {
 		},
 		appSchema,
 	);
-	cachedBotLogin = `${slug}[bot]`;
-	return cachedBotLogin;
+	return `${slug}[bot]`;
 }
 
-/**
- * Empties the cache above. Exported for the suites alone: the cache is module state, so it
- * outlives the case that filled it and would hand the next one a login it never planned a route
- * for — and being module state, no argument to fetchAppBotLogin can reach it. A deployment has
- * nothing to call this from; an isolate that wants the slug again is a new isolate.
- */
+/** The one GET /app of the isolate (SPEC.md §4); what a stale entry can cost is argued there. The promise is
+ * installed before it is ever awaited, so concurrent deliveries on a cold isolate join the lookup in flight; the
+ * failure path clears by identity, dropping the entry this call awaited and never a newer one already installed. */
+async function fetchAppBotLogin(client: GithubClient): Promise<string> {
+	const pending = (cachedBotLogin ??= requestAppBotLogin(client));
+	try {
+		return await pending;
+	} catch (error) {
+		if (cachedBotLogin === pending) {
+			cachedBotLogin = undefined;
+		}
+		throw error;
+	}
+}
+
+/** Empties the cache above, whether it holds a settled lookup or one still in flight. Exported for
+ * the suites alone: the cache is module state, so it outlives the case that filled it and would hand
+ * the next one a login it never planned a route for — and being module state, no argument to
+ * fetchAppBotLogin can reach it. A deployment has nothing to call this from; an isolate that wants
+ * the slug again is a new isolate. */
 function resetAppBotLogin(): void {
 	cachedBotLogin = undefined;
 }

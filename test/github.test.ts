@@ -61,16 +61,12 @@ function reviewBody(commitId: string): Record<string, unknown> {
 beforeEach(resetAppBotLogin);
 
 describe("fetchAppBotLogin()", () => {
-	it(
-		"returns the bot login for the slug without issuing an installation token",
-		{ timeout: 5000 },
-		async () => {
-			expect.hasAssertions();
-			const mock = installFetchMock([appRoute()]);
-			await expect(fetchAppBotLogin(await makeClient())).resolves.toBe(APP_BOT.login);
-			mock.assertDone();
-		},
-	);
+	it("returns the bot login without issuing an installation token", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const mock = installFetchMock([appRoute()]);
+		await expect(fetchAppBotLogin(await makeClient())).resolves.toBe(APP_BOT.login);
+		mock.assertDone();
+	});
 
 	it("throws GithubApiError when the slug is missing", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
@@ -92,7 +88,18 @@ describe("fetchAppBotLogin() caching", () => {
 		expect(mock.requests).toHaveLength(1);
 	});
 
-	/* Only a success is cached: a stored failure would be served to every later delivery too. */
+	/* The window a cache of the resolved login leaves open: both calls are started before either is
+	 * awaited, so what closes it is holding the lookup itself rather than what it returns. */
+	it("shares one lookup with a concurrent call", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const mock = installFetchMock([appRoute()]);
+		const client = await makeClient();
+		const logins = await Promise.all([fetchAppBotLogin(client), fetchAppBotLogin(client)]);
+		expect(logins).toStrictEqual([APP_BOT.login, APP_BOT.login]);
+		expect(mock.requests).toHaveLength(1);
+	});
+
+	/* A rejection is not retained: a stored failure would be served to every later delivery too. */
 	it("fetches again after a failed call", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const mock = installFetchMock([appRoute({}), appRoute()]);
@@ -180,12 +187,8 @@ describe("fetchOrgMembership()", () => {
 				HTTP_OK,
 			),
 		]);
-		await expect(
-			fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login),
-		).resolves.toStrictEqual({
-			role: "admin",
-			state: "active",
-		});
+		const membership = fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login);
+		await expect(membership).resolves.toStrictEqual({ role: "admin", state: "active" });
 		mock.assertDone();
 	});
 
@@ -195,9 +198,8 @@ describe("fetchOrgMembership()", () => {
 			installTokenRoute(),
 			membershipRoute(HUMAN, { message: "no" }, HTTP_NOT_FOUND),
 		]);
-		await expect(
-			fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login),
-		).resolves.toBeUndefined();
+		const membership = fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login);
+		await expect(membership).resolves.toBeUndefined();
 	});
 
 	it("throws with the status on 403", { timeout: 5000 }, async () => {
@@ -238,9 +240,8 @@ describe("listPullRequestReviews()", () => {
 			installTokenRoute(),
 			linkedRoute({ payload: [dismissed], url: pullUrl(REVIEWS_SUFFIX) }),
 		]);
-		await expect(
-			listPullRequestReviews(await makeClient(), REPO, PULL_NUMBER),
-		).resolves.toStrictEqual([{ commit_id: null, state: "DISMISSED", user: null }]);
+		const reviews = await listPullRequestReviews(await makeClient(), REPO, PULL_NUMBER);
+		expect(reviews).toStrictEqual([{ commit_id: null, state: "DISMISSED", user: null }]);
 		mock.assertDone();
 	});
 });
@@ -271,9 +272,8 @@ describe("createApprovalReview()", () => {
 	it("returns created on 200 and posts commit_id with APPROVE", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const mock = installFetchMock([installTokenRoute(), reviewPostRoute(HTTP_OK)]);
-		await expect(createApprovalReview(await makeClient(), approvalTarget())).resolves.toBe(
-			"created",
-		);
+		const created = await createApprovalReview(await makeClient(), approvalTarget());
+		expect(created).toBe("created");
 		const posted = requestByUrl(mock, pullUrl("/reviews"));
 		expect(posted).toMatchObject({ body: '{"commit_id":"head-sha","event":"APPROVE"}' });
 		expect(posted.headers["content-type"]).toMatch(/application\/json/u);
