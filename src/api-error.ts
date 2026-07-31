@@ -19,7 +19,7 @@ const NETWORK_FAILURE_STATUS = 0;
  * than five fields because they are read off one failed request together and
  * absent together when it received no response.
  */
-export interface ApiDiagnostics {
+interface ApiDiagnostics {
 	readonly acceptedPermissions: string | undefined;
 	readonly errorMessage: string | undefined;
 	readonly rateLimitRemaining: string | undefined;
@@ -54,7 +54,7 @@ interface ApiFailure {
  * than in that message, errorMessage among them: it is the *originating*
  * error's message, which is the one thing the fixed one cannot restate.
  */
-export class GithubApiError extends Error {
+class GithubApiError extends Error {
 	public readonly diagnostics: ApiDiagnostics;
 	public readonly endpoint: string;
 	public readonly status: number;
@@ -77,12 +77,12 @@ export class GithubApiError extends Error {
  * is attributed to and which failure a call tolerates — so the identity a failure is raised under
  * and the one it is matched on cannot be spelled differently.
  */
-export interface EndpointStatus {
+interface EndpointStatus {
 	readonly endpoint: string;
 	readonly status: number;
 }
 
-export function shapeError(origin: EndpointStatus): GithubApiError {
+function shapeError(origin: EndpointStatus): GithubApiError {
 	return new GithubApiError({
 		diagnostics: NO_DIAGNOSTICS,
 		endpoint: origin.endpoint,
@@ -146,7 +146,7 @@ function diagnosticsOf(error: RequestError): ApiDiagnostics {
  * skip instead of the loud configuration failure §9 requires. A transport failure (status 0) and a
  * failure this module passed through unmapped are neither, so both answer false.
  */
-export function isFailureOn(error: unknown, on: EndpointStatus): boolean {
+function isFailureOn(error: unknown, on: EndpointStatus): boolean {
 	if (!(error instanceof GithubApiError)) {
 		return false;
 	}
@@ -194,7 +194,7 @@ function requestFailureError(endpoint: string, error: RequestError): GithubApiEr
  * status, and anything unrecognized (e.g. an auth configuration failure) is
  * passed through for the handler's internal-error path (SPEC.md §9).
  */
-export function toApiError(endpoint: string, error: unknown): Error {
+function toApiError(endpoint: string, error: unknown): Error {
 	if (error instanceof GithubApiError) {
 		return error;
 	}
@@ -211,3 +211,6 @@ export function toApiError(endpoint: string, error: unknown): Error {
 	}
 	return transportError(endpoint, NO_DIAGNOSTICS);
 }
+
+export { GithubApiError, isFailureOn, shapeError, toApiError };
+export type { ApiDiagnostics, EndpointStatus };

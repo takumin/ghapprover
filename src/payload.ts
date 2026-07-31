@@ -16,7 +16,7 @@ import { pullRequestEventSchema } from "./types";
  * failed validation. The path alone — the issue also carries the value that failed, which is
  * webhook payload content and never leaves this module (§8 warning, §11).
  */
-export interface PayloadValidation {
+interface PayloadValidation {
 	readonly field?: string | undefined;
 	readonly payload: PullRequestEventPayload | null;
 }
@@ -31,7 +31,7 @@ function issueField(issue: BaseIssue<unknown>): string | undefined {
  * installation being the one divergence the schema absorbs rather than rejects (SPEC.md §9). The
  * first issue is the one reported: the schema states its fields in a fixed order, so which field
  * a given malformed body names does not vary between deliveries. */
-export function parsePullRequestEvent(payload: unknown): PayloadValidation {
+function parsePullRequestEvent(payload: unknown): PayloadValidation {
 	const result = safeParse(pullRequestEventSchema, payload);
 	if (result.success) {
 		return { payload: result.output };
@@ -45,7 +45,7 @@ export function parsePullRequestEvent(payload: unknown): PayloadValidation {
  * A body that is not JSON is not the modeled shape either, and names no field: there is no document
  * to locate one in (SPEC.md §8).
  */
-export function parsePullRequestEventBody(body: string): PayloadValidation {
+function parsePullRequestEventBody(body: string): PayloadValidation {
 	try {
 		const parsed: unknown = JSON.parse(body);
 		return parsePullRequestEvent(parsed);
@@ -53,3 +53,6 @@ export function parsePullRequestEventBody(body: string): PayloadValidation {
 		return { payload: null };
 	}
 }
+
+export { parsePullRequestEvent, parsePullRequestEventBody };
+export type { PayloadValidation };
