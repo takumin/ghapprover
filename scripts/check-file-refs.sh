@@ -12,16 +12,34 @@ set -eu
 
 cd "$(git rev-parse --show-toplevel)"
 
-# Spelled as an alternation, and with `[.]` rather than `\.`, so that this line
-# does not match the pattern it defines: `src` here is followed by `|` and
-# `scripts/` by `[`, neither of which a real path can be.
-pattern='(src|test)/[0-9A-Za-z._-]+[.]ts|scripts/[0-9A-Za-z._-]+[.]sh'
+# Matches a whole path token rather than one ending in a fixed extension. An
+# extension-anchored `+` backtracks, so a `.tsx` path used to yield the `.ts`
+# prefix of itself and be reported as missing. POSIX ERE has no lookahead, but
+# `+` and `*` stop on their own at the first character outside the class, which
+# is exactly the path boundary wanted; a dot must be followed by more of the
+# name, so a path ending a sentence keeps the period out. awk below then keeps
+# only the extensions this check covers.
+#
+# The alternation puts `|` or `)` after each directory name instead of `/`, so
+# this line still does not match the pattern it defines.
+pattern='(src|test|scripts)/[0-9A-Za-z_-]+([.][0-9A-Za-z_-]+)*'
 
 # `git grep` supplies the file set (tracked files only) and skips binaries with
 # -I, so lock files and generated blobs never reach awk. awk then walks each
 # reported line for every occurrence, since one line can name several files.
 git grep --no-color -I -n -E -e "${pattern}" \
 	| awk -v pattern="${pattern}" '
+		# Only src/*.ts, test/*.ts and scripts/*.sh are in scope. The token
+		# already ends at the path boundary, so this compares the whole
+		# extension: `.tsx` is a different extension, not a match.
+		function covered(path,   dir, want) {
+			dir = substr(path, 1, index(path, "/") - 1)
+			want = ".ts"
+			if (dir == "scripts") {
+				want = ".sh"
+			}
+			return substr(path, length(path) - length(want) + 1) == want
+		}
 		function resolves(path,   ignored, status) {
 			if (!(path in cache)) {
 				# getline returns -1 when the file cannot be opened, and 0 at
@@ -45,7 +63,7 @@ git grep --no-color -I -n -E -e "${pattern}" \
 			consumed = 0
 			while (match(text, pattern)) {
 				path = substr(text, RSTART, RLENGTH)
-				if (!resolves(path)) {
+				if (covered(path) && !resolves(path)) {
 					printf "%s:%s:%d: reference to missing file %s\n", \
 						file, lineno, consumed + RSTART, path
 					dangling = 1
