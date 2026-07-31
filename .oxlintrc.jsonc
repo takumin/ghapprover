@@ -157,8 +157,6 @@
 					// one failure type the package types for us (src/api-error.ts).
 					"Octokit",
 					"RequestError",
-					// valibot's validation issue, read for its dot path alone (src/payload.ts).
-					"BaseIssue",
 					// Ours, but not readonly-able: GithubApiError extends Error, whose own
 					// name/message/stack are writable and are not ours to freeze.
 					"GithubApiError",

@@ -33,7 +33,6 @@ import {
 	listPullRequestReviews,
 } from "./github";
 import { getDotPath, safeParse } from "valibot";
-import type { BaseIssue } from "valibot";
 import { GithubApiError } from "./api-error";
 import type { Outcome } from "./outcome";
 import { accountKey } from "./account";
@@ -50,12 +49,6 @@ interface PayloadValidation {
 	readonly payload?: PullRequestEventPayload | undefined;
 }
 
-/* An issue at the root — a body that is not an object at all has no field to name — has no dot
- * path, and becomes an absent `field` rather than one logged empty (SPEC.md §8). */
-function issueField(issue: BaseIssue<unknown>): string | undefined {
-	return getDotPath(issue) ?? undefined;
-}
-
 /* The whole body, or no payload at all when it does not match the modeled shape — a missing or
  * malformed installation being the one divergence the schema absorbs rather than rejects (SPEC.md
  * §9). The first issue is the one reported: the schema states its fields in a fixed order, so which
@@ -65,7 +58,9 @@ function parsePullRequestEvent(payload: unknown): PayloadValidation {
 	if (result.success) {
 		return { payload: result.output };
 	}
-	return { field: issueField(result.issues[0]) };
+	/* An issue at the root — a body that is not an object at all has no field to name — has no dot
+	 * path, and becomes an absent `field` rather than one logged empty (SPEC.md §8). */
+	return { field: getDotPath(result.issues[0]) ?? undefined };
 }
 
 /**
