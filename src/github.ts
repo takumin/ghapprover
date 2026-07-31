@@ -133,8 +133,12 @@ async function listPullRequestItems<Schema extends GenericSchema>(
 			repo: repo.repo,
 		}),
 	);
-	/* Item shape errors surface after a successful page, so they carry 200. */
-	return items.map((item) => parseContract(itemSchema, item, { endpoint, status: HTTP_OK }));
+	/* Item shape errors surface after a successful page, so they carry 200. The item is taken as
+	 * `unknown` rather than as the shape octokit types it: nothing here has checked that shape yet,
+	 * and the schema below is what decides it. */
+	return items.map((item: unknown) =>
+		parseContract(itemSchema, item, { endpoint, status: HTTP_OK }),
+	);
 }
 
 /** All PR commits via Link-header pagination (SPEC.md §3.2); the 250-commit cap is enforced upstream by precheckCommitCount. */

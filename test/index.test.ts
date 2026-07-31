@@ -44,7 +44,7 @@ describe("request routing", () => {
 			name: "POST outside the webhook path",
 			url: "http://example.com/other",
 		},
-	])("returns 404 for $name", async ({ init, url }) => {
+	] as const)("returns 404 for $name", async ({ init, url }) => {
 		expect.hasAssertions();
 		installFetchMock([]);
 		await expectError(await dispatch(new Request(url, init)), "not-found", HTTP_NOT_FOUND);
@@ -66,7 +66,7 @@ describe("request routing", () => {
 			headers: {},
 			name: "without a delivery id header",
 		},
-	])("logs the not-found decision $name", async ({ expected, headers }) => {
+	] as const)("logs the not-found decision $name", async ({ expected, headers }) => {
 		expect.hasAssertions();
 		const logSpy = captureLog();
 		installFetchMock([]);
@@ -115,11 +115,18 @@ describe("event scoping", () => {
  * alone: the value that failed is payload content structured logs never carry (§8 warning), so
  * each row states the entry whole. A body that is not JSON locates no field, and names none. */
 const INVALID_ENTRY = { decision: "error", deliveryId: DELIVERY_ID, reason: "invalid-payload" };
-function namingField(field: string): Record<string, string> {
+function namingField(field: string): Readonly<Record<string, string>> {
 	const entry: Record<string, string> = { field };
 	return Object.assign(entry, INVALID_ENTRY);
 }
-const INVALID_PAYLOADS = [
+
+interface InvalidPayloadCase {
+	readonly body: string;
+	readonly entry: Readonly<Record<string, string>>;
+	readonly name: string;
+}
+
+const INVALID_PAYLOADS: readonly InvalidPayloadCase[] = [
 	{ body: "{not json", entry: INVALID_ENTRY, name: "a body that is not JSON" },
 	{ body: '{"action":"opened"}', entry: namingField("pull_request"), name: "no pull_request" },
 	{

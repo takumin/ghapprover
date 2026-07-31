@@ -62,7 +62,7 @@ describe("pull request state", () => {
 			overrides: { headRepo: { id: REPOSITORY.id + 1 } },
 			reason: "head-repo-forked",
 		},
-	])("skips $name without dispatching a single call", async ({ overrides, reason }) => {
+	] as const)("skips $name without dispatching a single call", async ({ overrides, reason }) => {
 		expect.hasAssertions();
 		const session = installFetchMock([]);
 		const response = await postSigned(buildPayload(overrides));

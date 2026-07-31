@@ -119,7 +119,7 @@ const OVERLONG_MESSAGE = "boom ".repeat(MAX_ERROR_MESSAGE_CHARS);
 function commitsFailureRoute(
 	payload: unknown,
 	status: number,
-	headers?: Record<string, string>,
+	headers?: Readonly<Record<string, string>>,
 ): PlannedRoute {
 	return jsonRoute({
 		headers,

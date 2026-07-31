@@ -17,7 +17,7 @@ import { vi } from "vitest";
 export interface PlannedRoute {
 	readonly body: string;
 	/** Extra response headers (e.g. link); the JSON content-type is implied. */
-	readonly headers?: Record<string, string> | undefined;
+	readonly headers?: Readonly<Record<string, string>> | undefined;
 	readonly method: string;
 	/** How a status-0 route rejects: a network TypeError (default) or an expired timeout signal. */
 	readonly rejectAs?: "timeout";
@@ -27,7 +27,7 @@ export interface PlannedRoute {
 }
 export interface RecordedRequest {
 	readonly body: string;
-	readonly headers: Record<string, string>;
+	readonly headers: Readonly<Record<string, string>>;
 	readonly method: string;
 	/** The signal the dispatch carried, to assert the delivery budget reaches every call. */
 	readonly signal: AbortSignal | undefined;
@@ -104,11 +104,11 @@ export function installFetchMock(routes: readonly PlannedRoute[]): FetchMockSess
 }
 
 export function jsonRoute(route: {
-	headers?: Record<string, string> | undefined;
-	method: string;
-	payload: unknown;
-	status: number;
-	url: string;
+	readonly headers?: Readonly<Record<string, string>> | undefined;
+	readonly method: string;
+	readonly payload: unknown;
+	readonly status: number;
+	readonly url: string;
 }): PlannedRoute {
 	return {
 		body: JSON.stringify(route.payload),

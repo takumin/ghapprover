@@ -33,7 +33,7 @@ describe("commit conditions", () => {
 	it.each([
 		{ commits: 0, name: "is zero", reason: "no-commits" },
 		{ commits: MAX_VERIFIABLE_COMMITS + 1, name: "exceeds the cap", reason: "too-many-commits" },
-	])(
+	] as const)(
 		"skips when the declared commit count $name, with no api call",
 		async ({ commits, reason }) => {
 			expect.hasAssertions();
@@ -62,7 +62,7 @@ describe("commit verification", () => {
 			name: "a commit from an untrusted author",
 			reason: "untrusted-commit",
 		},
-	])("skips $name", async ({ commit, reason }) => {
+	] as const)("skips $name", async ({ commit, reason }) => {
 		expect.hasAssertions();
 		const session = installFetchMock([installTokenRoute(), commitsRoute([commitItem(commit)])]);
 		const response = await postSigned(buildPayload());
