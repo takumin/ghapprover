@@ -44,7 +44,7 @@ describe("request routing", () => {
 			name: "POST outside the webhook path",
 			url: "http://example.com/other",
 		},
-	])("returns 404 for $name", async ({ init, url }) => {
+	])("returns 404 for $name", { timeout: 5000 }, async ({ init, url }) => {
 		expect.hasAssertions();
 		installFetchMock([]);
 		await expectError(await dispatch(new Request(url, init)), "not-found", HTTP_NOT_FOUND);
@@ -66,7 +66,7 @@ describe("request routing", () => {
 			headers: {},
 			name: "without a delivery id header",
 		},
-	])("logs the not-found decision $name", async ({ expected, headers }) => {
+	])("logs the not-found decision $name", { timeout: 5000 }, async ({ expected, headers }) => {
 		expect.hasAssertions();
 		const logSpy = captureLog();
 		installFetchMock([]);
@@ -76,14 +76,14 @@ describe("request routing", () => {
 });
 
 describe("signature verification", () => {
-	it("rejects a request without a signature header", async () => {
+	it("rejects a request without a signature header", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		installFetchMock([]);
 		const request = deliveryRequest(buildPayload(), unsignedDeliveryHeaders());
 		await expectError(await dispatch(request), "invalid-signature", HTTP_UNAUTHORIZED);
 	});
 
-	it("rejects a signature over a tampered body", async () => {
+	it("rejects a signature over a tampered body", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		installFetchMock([]);
 		const signature = await sign(SECRET, buildPayload());
@@ -96,14 +96,14 @@ describe("signature verification", () => {
 });
 
 describe("event scoping", () => {
-	it("skips a ping event without parsing the body", async () => {
+	it("skips a ping event without parsing the body", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		installFetchMock([]);
 		const response = await postSigned("zen text, deliberately not JSON", "ping");
 		await expectSkipped(response, "event-out-of-scope");
 	});
 
-	it("skips a non-target action", async () => {
+	it("skips a non-target action", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		installFetchMock([]);
 		const response = await postSigned(buildPayload({ action: "closed" }));
@@ -130,7 +130,7 @@ const INVALID_PAYLOADS = [
 ];
 
 describe("payload validation", () => {
-	it.each(INVALID_PAYLOADS)("errors on $name", async ({ body, entry }) => {
+	it.each(INVALID_PAYLOADS)("errors on $name", { timeout: 5000 }, async ({ body, entry }) => {
 		expect.hasAssertions();
 		const logSpy = captureLog();
 		installFetchMock([]);
@@ -138,7 +138,7 @@ describe("payload validation", () => {
 		expect(logSpy).toHaveBeenCalledWith(entry);
 	});
 
-	it("errors when the installation is absent", async () => {
+	it("errors when the installation is absent", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([]);
 		const response = await postSigned(buildPayload({ installation: null }));
@@ -186,15 +186,19 @@ async function postSignedChunked(body: string): Promise<Response> {
 }
 
 describe("request body limits", () => {
-	it("rejects a Content-Length above the 25 MB webhook cap before reading the body", async () => {
-		expect.hasAssertions();
-		const session = installFetchMock([]);
-		const response = await postSignedWithLength(buildPayload(), OVERSIZED_BODY_BYTES);
-		await expectError(response, "payload-too-large", HTTP_PAYLOAD_TOO_LARGE);
-		expect(session.requests).toHaveLength(0);
-	});
+	it(
+		"rejects a Content-Length above the 25 MB webhook cap before reading the body",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const session = installFetchMock([]);
+			const response = await postSignedWithLength(buildPayload(), OVERSIZED_BODY_BYTES);
+			await expectError(response, "payload-too-large", HTTP_PAYLOAD_TOO_LARGE);
+			expect(session.requests).toHaveLength(0);
+		},
+	);
 
-	it("processes a delivery whose Content-Length is within the cap", async () => {
+	it("processes a delivery whose Content-Length is within the cap", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		installFetchMock(happyRoutes());
 		const body = buildPayload();
@@ -204,20 +208,24 @@ describe("request body limits", () => {
 
 	/* The case the declared length cannot cover: an unauthenticated caller streams a body past
 	 * the cap, and without the byte count the Worker would buffer and hash all of it. */
-	it("rejects a chunked body past the cap, which declares no Content-Length", async () => {
-		expect.hasAssertions();
-		const session = installFetchMock([]);
-		await expectError(
-			await dispatch(oversizedChunkedRequest()),
-			"payload-too-large",
-			HTTP_PAYLOAD_TOO_LARGE,
-		);
-		expect(session.requests).toHaveLength(0);
-	});
+	it(
+		"rejects a chunked body past the cap, which declares no Content-Length",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const session = installFetchMock([]);
+			await expectError(
+				await dispatch(oversizedChunkedRequest()),
+				"payload-too-large",
+				HTTP_PAYLOAD_TOO_LARGE,
+			);
+			expect(session.requests).toHaveLength(0);
+		},
+	);
 
 	/* The signature is computed over the whole body, so an approval here is what proves the
 	 * chunked read reassembles it exactly rather than merely bounding it. */
-	it("processes a chunked delivery within the cap", async () => {
+	it("processes a chunked delivery within the cap", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		installFetchMock(happyRoutes());
 		await expectApproved(await postSignedChunked(buildPayload()));
@@ -241,24 +249,28 @@ describe("unreadable deliveries", () => {
 	 * catch-all this delivery would answer with the runtime's 500 and log nothing at all. The
 	 * entry carries the §8 pair for a failure that is nobody's endpoint: the class name, and the
 	 * message that says which failure of that class it was. */
-	it("errors with the thrown class and message when the body cannot be read", async () => {
-		expect.hasAssertions();
-		const logSpy = captureLog();
-		const session = installFetchMock([]);
-		await expectError(
-			await dispatch(requestWithFailingBody()),
-			"internal-error",
-			HTTP_INTERNAL_ERROR,
-		);
-		expect(logSpy).toHaveBeenCalledWith(
-			expect.objectContaining({
-				decision: "error",
-				deliveryId: DELIVERY_ID,
-				errorMessage: "connection reset",
-				errorName: "TypeError",
-				reason: "internal-error",
-			}),
-		);
-		session.assertDone();
-	});
+	it(
+		"errors with the thrown class and message when the body cannot be read",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const logSpy = captureLog();
+			const session = installFetchMock([]);
+			await expectError(
+				await dispatch(requestWithFailingBody()),
+				"internal-error",
+				HTTP_INTERNAL_ERROR,
+			);
+			expect(logSpy).toHaveBeenCalledWith(
+				expect.objectContaining({
+					decision: "error",
+					deliveryId: DELIVERY_ID,
+					errorMessage: "connection reset",
+					errorName: "TypeError",
+					reason: "internal-error",
+				}),
+			);
+			session.assertDone();
+		},
+	);
 });

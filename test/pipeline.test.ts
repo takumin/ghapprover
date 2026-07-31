@@ -62,17 +62,21 @@ describe("pull request state", () => {
 			overrides: { headRepo: { id: REPOSITORY.id + 1 } },
 			reason: "head-repo-forked",
 		},
-	])("skips $name without dispatching a single call", async ({ overrides, reason }) => {
-		expect.hasAssertions();
-		const session = installFetchMock([]);
-		const response = await postSigned(buildPayload(overrides));
-		await expectSkipped(response, reason);
-		expect(session.requests).toHaveLength(0);
-	});
+	])(
+		"skips $name without dispatching a single call",
+		{ timeout: 5000 },
+		async ({ overrides, reason }) => {
+			expect.hasAssertions();
+			const session = installFetchMock([]);
+			const response = await postSigned(buildPayload(overrides));
+			await expectSkipped(response, reason);
+			expect(session.requests).toHaveLength(0);
+		},
+	);
 });
 
 describe("owner approval flow", () => {
-	it("approves the owner's pull request", async () => {
+	it("approves the owner's pull request", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const session = installFetchMock(happyRoutes());
 		const response = await postSigned(buildPayload());
@@ -82,21 +86,25 @@ describe("owner approval flow", () => {
 		session.assertDone();
 	});
 
-	it("splits the app jwt and the installation token across endpoints", async () => {
-		expect.hasAssertions();
-		const session = installFetchMock(happyRoutes());
-		await postSigned(buildPayload());
-		expect(requestByUrl(session, TOKEN_URL).headers["authorization"]).toMatch(JWT_PATTERN);
-		expect(requestByUrl(session, APP_URL).headers["authorization"]).toMatch(JWT_PATTERN);
-		expect(requestByUrl(session, pullUrl(COMMITS_SUFFIX)).headers["authorization"]).toBe(
-			`token ${TOKEN}`,
-		);
-		expect(requestByUrl(session, pullUrl("/reviews")).headers["authorization"]).toBe(
-			`token ${TOKEN}`,
-		);
-	});
+	it(
+		"splits the app jwt and the installation token across endpoints",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const session = installFetchMock(happyRoutes());
+			await postSigned(buildPayload());
+			expect(requestByUrl(session, TOKEN_URL).headers["authorization"]).toMatch(JWT_PATTERN);
+			expect(requestByUrl(session, APP_URL).headers["authorization"]).toMatch(JWT_PATTERN);
+			expect(requestByUrl(session, pullUrl(COMMITS_SUFFIX)).headers["authorization"]).toBe(
+				`token ${TOKEN}`,
+			);
+			expect(requestByUrl(session, pullUrl("/reviews")).headers["authorization"]).toBe(
+				`token ${TOKEN}`,
+			);
+		},
+	);
 
-	it("emits one structured decision log", async () => {
+	it("emits one structured decision log", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const logSpy = captureLog();
 		installFetchMock(happyRoutes());
@@ -115,20 +123,24 @@ describe("owner approval flow", () => {
 });
 
 describe("author trust", () => {
-	it("approves an org owner author with a single membership lookup", async () => {
-		expect.hasAssertions();
-		const session = installFetchMock([
-			installTokenRoute(),
-			membershipAdminRoute(OWNER),
-			...pipelineRoutes({ commits: [commitItem()], owner: ORG, reviews: [] }),
-			reviewPostRoute(HTTP_OK, ORG),
-		]);
-		const response = await postSigned(buildPayload({ repoOwner: ORG }));
-		await expectApproved(response);
-		session.assertDone();
-	});
+	it(
+		"approves an org owner author with a single membership lookup",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const session = installFetchMock([
+				installTokenRoute(),
+				membershipAdminRoute(OWNER),
+				...pipelineRoutes({ commits: [commitItem()], owner: ORG, reviews: [] }),
+				reviewPostRoute(HTTP_OK, ORG),
+			]);
+			const response = await postSigned(buildPayload({ repoOwner: ORG }));
+			await expectApproved(response);
+			session.assertDone();
+		},
+	);
 
-	it("skips when the membership lookup returns 404", async () => {
+	it("skips when the membership lookup returns 404", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([installTokenRoute(), membershipMissingRoute(OWNER)]);
 		const response = await postSigned(buildPayload({ repoOwner: ORG }));
@@ -136,7 +148,7 @@ describe("author trust", () => {
 		session.assertDone();
 	});
 
-	it("approves an allowlisted renovate bot author", async () => {
+	it("approves an allowlisted renovate bot author", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
@@ -156,27 +168,31 @@ describe("author trust", () => {
  * GitHub-signed): without the allowlist entry this commit makes the PR permanently
  * unapprovable, which is exactly the PR ghapprover exists to approve (SPEC.md §3.1). */
 describe("autofix.ci commits", () => {
-	it("approves a renovate pull request carrying an autofix.ci commit", async () => {
-		expect.hasAssertions();
-		const session = installFetchMock([
-			installTokenRoute(),
-			...pipelineRoutes({
-				commits: [
-					commitItem({ author: RENOVATE, committer: WEB_FLOW_USER }),
-					commitItem({ author: AUTOFIX_CI, committer: WEB_FLOW_USER }),
-				],
-				reviews: [],
-			}),
-			reviewPostRoute(HTTP_OK),
-		]);
-		const response = await postSigned(buildPayload({ commits: 2, user: RENOVATE }));
-		await expectApproved(response);
-		session.assertDone();
-	});
+	it(
+		"approves a renovate pull request carrying an autofix.ci commit",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const session = installFetchMock([
+				installTokenRoute(),
+				...pipelineRoutes({
+					commits: [
+						commitItem({ author: RENOVATE, committer: WEB_FLOW_USER }),
+						commitItem({ author: AUTOFIX_CI, committer: WEB_FLOW_USER }),
+					],
+					reviews: [],
+				}),
+				reviewPostRoute(HTTP_OK),
+			]);
+			const response = await postSigned(buildPayload({ commits: 2, user: RENOVATE }));
+			await expectApproved(response);
+			session.assertDone();
+		},
+	);
 });
 
 describe("duplicate approval check", () => {
-	it("skips when its own approval already exists", async () => {
+	it("skips when its own approval already exists", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
@@ -191,7 +207,7 @@ describe("duplicate approval check", () => {
 });
 
 describe("live state checks", () => {
-	it("skips when the head moved", async () => {
+	it("skips when the head moved", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
@@ -206,7 +222,7 @@ describe("live state checks", () => {
 		session.assertDone();
 	});
 
-	it("skips when the review post is rejected", async () => {
+	it("skips when the review post is rejected", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),

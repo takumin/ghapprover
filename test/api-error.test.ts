@@ -32,7 +32,7 @@ import { GithubApiError } from "~src/api-error";
 /* A failure with no response has no §8 headers to report, so its own message is the whole of what
  * it can say about itself — which is why both cases below assert it (SPEC.md §8). */
 describe("transport failure mapping", () => {
-	it("wraps network failures with status 0", async () => {
+	it("wraps network failures with status 0", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		installFetchMock([jsonRoute({ method: "GET", payload: {}, status: 0, url: APP_URL })]);
 		const promise = fetchAppBotLogin(await makeClient());
@@ -44,7 +44,7 @@ describe("transport failure mapping", () => {
 		});
 	});
 
-	it("wraps an expired timeout signal with status 0", async () => {
+	it("wraps an expired timeout signal with status 0", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		installFetchMock([{ body: "", method: "GET", rejectAs: "timeout", status: 0, url: APP_URL }]);
 		const promise = fetchAppBotLogin(await makeClient());
@@ -62,34 +62,38 @@ describe("transport failure mapping", () => {
  * builds says nothing the endpoint and status do not — so both the response headers and the
  * originating message are carried on the error rather than dropped at the mapping. */
 describe("failure diagnostics", () => {
-	it("carries the response headers and the originating message of a refused call", async () => {
-		expect.hasAssertions();
-		installFetchMock([
-			jsonRoute({
-				headers: REFUSAL_HEADERS,
-				method: "GET",
-				payload: { message: "API rate limit exceeded" },
+	it(
+		"carries the response headers and the originating message of a refused call",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			installFetchMock([
+				jsonRoute({
+					headers: REFUSAL_HEADERS,
+					method: "GET",
+					payload: { message: "API rate limit exceeded" },
+					status: HTTP_FORBIDDEN,
+					url: APP_URL,
+				}),
+			]);
+			const promise = fetchAppBotLogin(await makeClient());
+			await expect(promise).rejects.toMatchObject({
+				diagnostics: {
+					acceptedPermissions: "pull_requests=write",
+					errorMessage: "API rate limit exceeded",
+					rateLimitRemaining: "0",
+					rateLimitReset: "1770000000",
+					requestId: "F1E2:3D4C",
+				},
+				endpoint: APP_ENDPOINT,
 				status: HTTP_FORBIDDEN,
-				url: APP_URL,
-			}),
-		]);
-		const promise = fetchAppBotLogin(await makeClient());
-		await expect(promise).rejects.toMatchObject({
-			diagnostics: {
-				acceptedPermissions: "pull_requests=write",
-				errorMessage: "API rate limit exceeded",
-				rateLimitRemaining: "0",
-				rateLimitReset: "1770000000",
-				requestId: "F1E2:3D4C",
-			},
-			endpoint: APP_ENDPOINT,
-			status: HTTP_FORBIDDEN,
-		});
-	});
+			});
+		},
+	);
 
 	/* A 200 whose body does not match the contract is this Worker's own verdict, not GitHub's: no
 	 * originating error to quote, and a response that was never a failure to read headers off. */
-	it("carries nothing for a failure the worker raises itself", async () => {
+	it("carries nothing for a failure the worker raises itself", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		installFetchMock([appRoute({})]);
 		const promise = fetchAppBotLogin(await makeClient());
@@ -101,40 +105,48 @@ describe("failure diagnostics", () => {
 });
 
 describe("token request attribution", () => {
-	it("does not mistake a token-issuance 404 for a missing membership", async () => {
-		expect.hasAssertions();
-		installFetchMock([
-			jsonRoute({
-				method: "POST",
-				payload: { message: "Not Found" },
+	it(
+		"does not mistake a token-issuance 404 for a missing membership",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			installFetchMock([
+				jsonRoute({
+					method: "POST",
+					payload: { message: "Not Found" },
+					status: HTTP_NOT_FOUND,
+					url: TOKEN_URL,
+				}),
+			]);
+			const promise = fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login);
+			await expect(promise).rejects.toBeInstanceOf(GithubApiError);
+			await expect(promise).rejects.toMatchObject({
+				endpoint: TOKEN_ENDPOINT,
 				status: HTTP_NOT_FOUND,
-				url: TOKEN_URL,
-			}),
-		]);
-		const promise = fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login);
-		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
-		await expect(promise).rejects.toMatchObject({
-			endpoint: TOKEN_ENDPOINT,
-			status: HTTP_NOT_FOUND,
-		});
-	});
+			});
+		},
+	);
 
-	it("does not attribute a repository named like the token path to token issuance", async () => {
-		expect.hasAssertions();
-		const repo = { owner: REPO.owner, repo: "access_tokens" };
-		installFetchMock([
-			installTokenRoute(),
-			jsonRoute({
-				method: "POST",
-				payload: { message: "boom" },
+	it(
+		"does not attribute a repository named like the token path to token issuance",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const repo = { owner: REPO.owner, repo: "access_tokens" };
+			installFetchMock([
+				installTokenRoute(),
+				jsonRoute({
+					method: "POST",
+					payload: { message: "boom" },
+					status: HTTP_INTERNAL_ERROR,
+					url: pullUrl("/reviews", repo.owner, repo.repo),
+				}),
+			]);
+			const promise = createApprovalReview(await makeClient(), approvalTarget(repo));
+			await expect(promise).rejects.toMatchObject({
+				endpoint: REVIEW_POST_ENDPOINT,
 				status: HTTP_INTERNAL_ERROR,
-				url: pullUrl("/reviews", repo.owner, repo.repo),
-			}),
-		]);
-		const promise = createApprovalReview(await makeClient(), approvalTarget(repo));
-		await expect(promise).rejects.toMatchObject({
-			endpoint: REVIEW_POST_ENDPOINT,
-			status: HTTP_INTERNAL_ERROR,
-		});
-	});
+			});
+		},
+	);
 });

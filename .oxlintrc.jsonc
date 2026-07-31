@@ -143,9 +143,6 @@
 				// errors the pair would leave a suite no way to name its test
 				// functions.
 				"vitest/no-importing-vitest-globals": "off",
-				// Demands an explicit timeout argument on every test. The suites run
-				// in-process against stubs, so they rely on the default instead.
-				"vitest/require-test-timeout": "off",
 			},
 		},
 	],

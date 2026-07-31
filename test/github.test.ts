@@ -54,14 +54,18 @@ function reviewBody(commitId: string): Record<string, unknown> {
 }
 
 describe("fetchAppBotLogin()", () => {
-	it("returns the bot login for the slug without issuing an installation token", async () => {
-		expect.hasAssertions();
-		const mock = installFetchMock([appRoute()]);
-		await expect(fetchAppBotLogin(await makeClient())).resolves.toBe(APP_BOT.login);
-		mock.assertDone();
-	});
+	it(
+		"returns the bot login for the slug without issuing an installation token",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const mock = installFetchMock([appRoute()]);
+			await expect(fetchAppBotLogin(await makeClient())).resolves.toBe(APP_BOT.login);
+			mock.assertDone();
+		},
+	);
 
-	it("throws GithubApiError when the slug is missing", async () => {
+	it("throws GithubApiError when the slug is missing", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		installFetchMock([appRoute({ id: 1 })]);
 		const promise = fetchAppBotLogin(await makeClient());
@@ -71,7 +75,7 @@ describe("fetchAppBotLogin()", () => {
 });
 
 describe("listPullRequestCommits() pagination", () => {
-	it("follows the link header across two pages", async () => {
+	it("follows the link header across two pages", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const firstUrl = pullUrl(COMMITS_SUFFIX);
 		const secondUrl = pullUrl(`${COMMITS_SUFFIX}${NEXT_PAGE}`);
@@ -89,7 +93,7 @@ describe("listPullRequestCommits() pagination", () => {
 });
 
 describe("listPullRequestCommits() mapping", () => {
-	it("maps fields and stops on a page without a link header", async () => {
+	it("maps fields and stops on a page without a link header", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const webCommit = {
 			author: null,
@@ -122,7 +126,7 @@ describe("listPullRequestCommits() mapping", () => {
 		mock.assertDone();
 	});
 
-	it("throws GithubApiError on a malformed commit item", async () => {
+	it("throws GithubApiError on a malformed commit item", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		installFetchMock([
 			installTokenRoute(),
@@ -138,7 +142,7 @@ describe("listPullRequestCommits() mapping", () => {
 });
 
 describe("fetchOrgMembership()", () => {
-	it("maps an active admin membership", async () => {
+	it("maps an active admin membership", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const mock = installFetchMock([
 			installTokenRoute(),
@@ -157,7 +161,7 @@ describe("fetchOrgMembership()", () => {
 		mock.assertDone();
 	});
 
-	it("returns null on 404", async () => {
+	it("returns null on 404", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		installFetchMock([
 			installTokenRoute(),
@@ -168,7 +172,7 @@ describe("fetchOrgMembership()", () => {
 		).resolves.toBeNull();
 	});
 
-	it("throws with the status on 403", async () => {
+	it("throws with the status on 403", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		installFetchMock([
 			installTokenRoute(),
@@ -181,7 +185,7 @@ describe("fetchOrgMembership()", () => {
 });
 
 describe("listPullRequestReviews()", () => {
-	it("follows the link header until the last page", async () => {
+	it("follows the link header until the last page", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const firstUrl = pullUrl(REVIEWS_SUFFIX);
 		const secondUrl = pullUrl(`${REVIEWS_SUFFIX}${NEXT_PAGE}`);
@@ -199,7 +203,7 @@ describe("listPullRequestReviews()", () => {
 		expect(mock.requests.map((seen) => seen.url)).toStrictEqual([TOKEN_URL, firstUrl, secondUrl]);
 	});
 
-	it("maps null user and null commit_id", async () => {
+	it("maps null user and null commit_id", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const dismissed = { commit_id: null, state: "DISMISSED", submitted_at: "ignored", user: null };
 		const mock = installFetchMock([
@@ -214,7 +218,7 @@ describe("listPullRequestReviews()", () => {
 });
 
 describe("fetchPullRequest()", () => {
-	it("maps only the contract fields", async () => {
+	it("maps only the contract fields", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const mock = installFetchMock([
 			installTokenRoute(),
@@ -236,7 +240,7 @@ describe("fetchPullRequest()", () => {
 });
 
 describe("createApprovalReview()", () => {
-	it("returns created on 200 and posts commit_id with APPROVE", async () => {
+	it("returns created on 200 and posts commit_id with APPROVE", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const mock = installFetchMock([installTokenRoute(), reviewPostRoute(HTTP_OK)]);
 		await expect(createApprovalReview(await makeClient(), approvalTarget())).resolves.toBe(
@@ -247,7 +251,7 @@ describe("createApprovalReview()", () => {
 		expect(posted.headers["content-type"]).toMatch(/application\/json/u);
 	});
 
-	it("returns rejected on 422", async () => {
+	it("returns rejected on 422", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		installFetchMock([installTokenRoute(), reviewPostRoute(HTTP_UNPROCESSABLE_ENTITY)]);
 		await expect(createApprovalReview(await makeClient(), approvalTarget())).resolves.toBe(
@@ -255,7 +259,7 @@ describe("createApprovalReview()", () => {
 		);
 	});
 
-	it("throws GithubApiError on 500", async () => {
+	it("throws GithubApiError on 500", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		installFetchMock([installTokenRoute(), reviewPostRoute(HTTP_INTERNAL_ERROR)]);
 		const promise = createApprovalReview(await makeClient(), approvalTarget());
