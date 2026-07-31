@@ -197,15 +197,15 @@ async function expectReply(response: Response, expected: ExpectedReply): Promise
  * reason, which is why that one alone is named at the call.
  */
 export async function expectApproved(response: Response): Promise<void> {
-	return expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
+	await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
 }
 export async function expectSkipped(response: Response, reason: string): Promise<void> {
-	return expectReply(response, { body: { decision: "skipped", reason }, status: HTTP_OK });
+	await expectReply(response, { body: { decision: "skipped", reason }, status: HTTP_OK });
 }
 export async function expectError(
 	response: Response,
 	reason: string,
 	status: number,
 ): Promise<void> {
-	return expectReply(response, { body: { decision: "error", reason }, status });
+	await expectReply(response, { body: { decision: "error", reason }, status });
 }

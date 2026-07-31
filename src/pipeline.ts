@@ -158,7 +158,8 @@ async function evaluateApproval(
 	if (payload.installation === undefined || payload.installation === null) {
 		return errorOutcome("missing-installation");
 	}
-	return approveWhenConditionsHold(payload, credentials, payload.installation.id);
+	const outcome = await approveWhenConditionsHold(payload, credentials, payload.installation.id);
+	return outcome;
 }
 /**
  * The pipeline, with the one failure its own calls raise mapped onto an outcome (SPEC.md §9): every
