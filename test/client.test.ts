@@ -21,11 +21,17 @@ import {
 	makeClient,
 	pullUrl,
 } from "./github-api";
-import { PAGE_SIZE, fetchAppBotLogin, listPullRequestCommits } from "~src/github";
-import { describe, expect, it } from "vitest";
+import { PAGE_SIZE, fetchAppBotLogin, listPullRequestCommits, resetAppBotLogin } from "~src/github";
+import { beforeEach, describe, expect, it } from "vitest";
 import { installFetchMock, requestByUrl } from "./fetch-stub";
 import { PULL_NUMBER } from "./fixtures";
 import type { RecordedRequest } from "./fetch-stub";
+
+/* GET /app is what two of the cases below drive the client through, and its login is cached for
+ * the isolate (SPEC.md §4): without emptying it the second of them would dispatch nothing and
+ * assert on the request the first one made. The state is the module's, so the hook is the file's. */
+// oxlint-disable-next-line vitest/no-hooks, vitest/require-top-level-describe -- see above
+beforeEach(resetAppBotLogin);
 
 describe("client authentication", () => {
 	it(

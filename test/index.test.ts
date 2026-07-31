@@ -32,9 +32,16 @@ import {
 	HTTP_PAYLOAD_TOO_LARGE,
 	HTTP_UNAUTHORIZED,
 } from "~src/http-status";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { installFetchMock } from "./fetch-stub";
+import { resetAppBotLogin } from "~src/github";
 import { sign } from "@octokit/webhooks-methods";
+
+/* The full runs below plan the routes a whole delivery consumes, and the App login is cached for
+ * the isolate (SPEC.md §4): emptied here so each of them is the run its plan describes rather than
+ * one silently short a call an earlier case made. The state is the module's, so is the hook. */
+// oxlint-disable-next-line vitest/no-hooks, vitest/require-top-level-describe -- see above
+beforeEach(resetAppBotLogin);
 
 /* SPEC.md §8: the version id comes off the binding rather than the request, so no rejection is
  * early enough to lack it. Stated once here, leaving each case below to name its own fields. */

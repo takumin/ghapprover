@@ -97,13 +97,26 @@ async function contractCall<Schema extends GenericSchema>(
 	return parseContract(schema, response.data, { endpoint, status: response.status });
 }
 
+/*
+ * The derived login, held for the isolate rather than for the delivery (SPEC.md §4): the slug is
+ * fixed for the lifetime of a deployment, so every delivery after the first spends neither a
+ * subrequest nor a rate-limit call re-reading a constant. Only a success is written, so a
+ * transient failure is retried by the next delivery instead of being served to all of them.
+ */
+// oxlint-disable-next-line eslint/init-declarations -- the initializer spelling this absence is what unicorn/no-useless-undefined reports
+let cachedBotLogin: string | undefined;
+
 /**
  * GET /app — the App's own bot-user login, which is "<slug>[bot]" for the
  * non-empty slug the endpoint returns (SPEC.md §3 cond. 5). The suffix is a
  * GitHub naming convention, so deriving the login belongs to this module
- * rather than to the caller that matches reviews against it.
+ * rather than to the caller that matches reviews against it. The call is made
+ * once per isolate (SPEC.md §4); what a stale entry can cost is argued there.
  */
 async function fetchAppBotLogin(client: GithubClient): Promise<string> {
+	if (cachedBotLogin !== undefined) {
+		return cachedBotLogin;
+	}
 	const endpoint = "GET /app";
 	const { slug } = await contractCall(
 		endpoint,
@@ -113,7 +126,18 @@ async function fetchAppBotLogin(client: GithubClient): Promise<string> {
 		},
 		appSchema,
 	);
-	return `${slug}[bot]`;
+	cachedBotLogin = `${slug}[bot]`;
+	return cachedBotLogin;
+}
+
+/**
+ * Empties the cache above. Exported for the suites alone: the cache is module state, so it
+ * outlives the case that filled it and would hand the next one a login it never planned a route
+ * for — and being module state, no argument to fetchAppBotLogin can reach it. A deployment has
+ * nothing to call this from; an isolate that wants the slug again is a new isolate.
+ */
+function resetAppBotLogin(): void {
+	cachedBotLogin = undefined;
 }
 
 /** The two paginated per-PR list endpoints; both take the same parameters and differ only in the item shape. */
@@ -265,5 +289,6 @@ export {
 	fetchPullRequest,
 	listPullRequestCommits,
 	listPullRequestReviews,
+	resetAppBotLogin,
 };
 export type { ApprovalTarget, RepoRef };

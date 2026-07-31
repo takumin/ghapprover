@@ -42,8 +42,9 @@ import {
 	fetchPullRequest,
 	listPullRequestCommits,
 	listPullRequestReviews,
+	resetAppBotLogin,
 } from "~src/github";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { installFetchMock, requestByUrl } from "./fetch-stub";
 import { GithubApiError } from "~src/api-error";
 
@@ -52,6 +53,12 @@ const SECOND_PAGE_COUNT = 37;
 function reviewBody(commitId: string): Record<string, unknown> {
 	return { commit_id: commitId, state: "APPROVED", user: OWNER };
 }
+
+/* The derived login is cached for the isolate (SPEC.md §4), so it outlives the case that filled
+ * it: a case served a login no route of its own answered is one that passes without making the
+ * call it is about. The state is the module's, which is why the hook is the file's. */
+// oxlint-disable-next-line vitest/no-hooks, vitest/require-top-level-describe -- see above
+beforeEach(resetAppBotLogin);
 
 describe("fetchAppBotLogin()", () => {
 	it(
@@ -71,6 +78,27 @@ describe("fetchAppBotLogin()", () => {
 		const promise = fetchAppBotLogin(await makeClient());
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({ endpoint: APP_ENDPOINT, status: HTTP_OK });
+	});
+});
+
+/* SPEC.md §4: the slug is fixed for the deployment, so what the cache is asserted on is the call
+ * it removes — one GET /app for however many deliveries the isolate goes on to serve. */
+describe("fetchAppBotLogin() caching", () => {
+	it("derives the login once for the isolate", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const mock = installFetchMock([appRoute()]);
+		await expect(fetchAppBotLogin(await makeClient())).resolves.toBe(APP_BOT.login);
+		await expect(fetchAppBotLogin(await makeClient())).resolves.toBe(APP_BOT.login);
+		expect(mock.requests).toHaveLength(1);
+	});
+
+	/* Only a success is cached: a stored failure would be served to every later delivery too. */
+	it("fetches again after a failed call", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const mock = installFetchMock([appRoute({}), appRoute()]);
+		await expect(fetchAppBotLogin(await makeClient())).rejects.toBeInstanceOf(GithubApiError);
+		await expect(fetchAppBotLogin(await makeClient())).resolves.toBe(APP_BOT.login);
+		mock.assertDone();
 	});
 });
 
