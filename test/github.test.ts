@@ -42,28 +42,33 @@ import {
 	fetchPullRequest,
 	listPullRequestCommits,
 	listPullRequestReviews,
+	resetAppBotLogin,
 } from "~src/github";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { installFetchMock, requestByUrl } from "./fetch-stub";
 import { GithubApiError } from "~src/api-error";
 
 const SECOND_PAGE_COUNT = 37;
+/** The originating lookup and the joiner's retry of it: the two GET /app one failure costs. */
+const RETRIED_LOOKUP_CALLS = 2;
 
 function reviewBody(commitId: string): Record<string, unknown> {
 	return { commit_id: commitId, state: "APPROVED", user: OWNER };
 }
 
+/* The derived login is cached for the isolate (SPEC.md §4), so it outlives the case that filled
+ * it: a case served a login no route of its own answered is one that passes without making the
+ * call it is about. The state is the module's, which is why the hook is the file's. */
+// oxlint-disable-next-line vitest/no-hooks, vitest/require-top-level-describe -- see above
+beforeEach(resetAppBotLogin);
+
 describe("fetchAppBotLogin()", () => {
-	it(
-		"returns the bot login for the slug without issuing an installation token",
-		{ timeout: 5000 },
-		async () => {
-			expect.hasAssertions();
-			const mock = installFetchMock([appRoute()]);
-			await expect(fetchAppBotLogin(await makeClient())).resolves.toBe(APP_BOT.login);
-			mock.assertDone();
-		},
-	);
+	it("returns the bot login without issuing an installation token", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const mock = installFetchMock([appRoute()]);
+		await expect(fetchAppBotLogin(await makeClient())).resolves.toBe(APP_BOT.login);
+		mock.assertDone();
+	});
 
 	it("throws GithubApiError when the slug is missing", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
@@ -71,6 +76,51 @@ describe("fetchAppBotLogin()", () => {
 		const promise = fetchAppBotLogin(await makeClient());
 		await expect(promise).rejects.toBeInstanceOf(GithubApiError);
 		await expect(promise).rejects.toMatchObject({ endpoint: APP_ENDPOINT, status: HTTP_OK });
+	});
+});
+
+/* SPEC.md §4: the slug is fixed for the deployment, so what the cache is asserted on is the call
+ * it removes — one GET /app for however many deliveries the isolate goes on to serve. */
+describe("fetchAppBotLogin() caching", () => {
+	it("derives the login once for the isolate", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const mock = installFetchMock([appRoute()]);
+		await expect(fetchAppBotLogin(await makeClient())).resolves.toBe(APP_BOT.login);
+		await expect(fetchAppBotLogin(await makeClient())).resolves.toBe(APP_BOT.login);
+		expect(mock.requests).toHaveLength(1);
+	});
+
+	/* The window a cache of the resolved login leaves open: both calls are started before either is
+	 * awaited, so what closes it is holding the lookup itself rather than what it returns. */
+	it("shares one lookup with a concurrent call", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const mock = installFetchMock([appRoute()]);
+		const client = await makeClient();
+		const logins = await Promise.all([fetchAppBotLogin(client), fetchAppBotLogin(client)]);
+		expect(logins).toStrictEqual([APP_BOT.login, APP_BOT.login]);
+		expect(mock.requests).toHaveLength(1);
+	});
+
+	/* A rejection is not retained: a stored failure would be served to every later delivery too. */
+	it("fetches again after a failed call", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const mock = installFetchMock([appRoute({}), appRoute()]);
+		await expect(fetchAppBotLogin(await makeClient())).rejects.toBeInstanceOf(GithubApiError);
+		await expect(fetchAppBotLogin(await makeClient())).resolves.toBe(APP_BOT.login);
+		mock.assertDone();
+	});
+
+	/* The shared lookup carries the originating delivery's abort signal, so it can fail on a deadline
+	 * that was never the joiner's: the joiner spends its own budget on a second GET /app rather than
+	 * failing a delivery that still had time. */
+	it("retries on its own client when the shared lookup fails", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const mock = installFetchMock([appRoute({}), appRoute()]);
+		const client = await makeClient();
+		const [shared, joined] = [fetchAppBotLogin(client), fetchAppBotLogin(client)];
+		await expect(shared).rejects.toBeInstanceOf(GithubApiError);
+		await expect(joined).resolves.toBe(APP_BOT.login);
+		expect(mock.requests).toHaveLength(RETRIED_LOOKUP_CALLS);
 	});
 });
 
@@ -109,19 +159,10 @@ describe("listPullRequestCommits() mapping", () => {
 			}),
 		]);
 		const commits = await listPullRequestCommits(await makeClient(), REPO, PULL_NUMBER);
+		const commit = { verification: { verified: true } };
 		expect(commits).toStrictEqual([
-			{
-				author: OWNER,
-				commit: { verification: { verified: true } },
-				committer: OWNER,
-				sha: "sha-a",
-			},
-			{
-				author: null,
-				commit: { verification: { verified: true } },
-				committer: OWNER,
-				sha: "sha-web",
-			},
+			{ author: OWNER, commit, committer: OWNER, sha: "sha-a" },
+			{ author: null, commit, committer: OWNER, sha: "sha-web" },
 		]);
 		mock.assertDone();
 	});
@@ -144,20 +185,10 @@ describe("listPullRequestCommits() mapping", () => {
 describe("fetchOrgMembership()", () => {
 	it("maps an active admin membership", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
-		const mock = installFetchMock([
-			installTokenRoute(),
-			membershipRoute(
-				HUMAN,
-				{ organization_url: "ignored", role: "admin", state: "active" },
-				HTTP_OK,
-			),
-		]);
-		await expect(
-			fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login),
-		).resolves.toStrictEqual({
-			role: "admin",
-			state: "active",
-		});
+		const active = { organization_url: "ignored", role: "admin", state: "active" };
+		const mock = installFetchMock([installTokenRoute(), membershipRoute(HUMAN, active, HTTP_OK)]);
+		const membership = fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login);
+		await expect(membership).resolves.toStrictEqual({ role: "admin", state: "active" });
 		mock.assertDone();
 	});
 
@@ -167,9 +198,8 @@ describe("fetchOrgMembership()", () => {
 			installTokenRoute(),
 			membershipRoute(HUMAN, { message: "no" }, HTTP_NOT_FOUND),
 		]);
-		await expect(
-			fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login),
-		).resolves.toBeUndefined();
+		const membership = fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login);
+		await expect(membership).resolves.toBeUndefined();
 	});
 
 	it("throws with the status on 403", { timeout: 5000 }, async () => {
@@ -210,9 +240,8 @@ describe("listPullRequestReviews()", () => {
 			installTokenRoute(),
 			linkedRoute({ payload: [dismissed], url: pullUrl(REVIEWS_SUFFIX) }),
 		]);
-		await expect(
-			listPullRequestReviews(await makeClient(), REPO, PULL_NUMBER),
-		).resolves.toStrictEqual([{ commit_id: null, state: "DISMISSED", user: null }]);
+		const reviews = await listPullRequestReviews(await makeClient(), REPO, PULL_NUMBER);
+		expect(reviews).toStrictEqual([{ commit_id: null, state: "DISMISSED", user: null }]);
 		mock.assertDone();
 	});
 });
@@ -243,9 +272,8 @@ describe("createApprovalReview()", () => {
 	it("returns created on 200 and posts commit_id with APPROVE", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const mock = installFetchMock([installTokenRoute(), reviewPostRoute(HTTP_OK)]);
-		await expect(createApprovalReview(await makeClient(), approvalTarget())).resolves.toBe(
-			"created",
-		);
+		const created = await createApprovalReview(await makeClient(), approvalTarget());
+		expect(created).toBe("created");
 		const posted = requestByUrl(mock, pullUrl("/reviews"));
 		expect(posted).toMatchObject({ body: '{"commit_id":"head-sha","event":"APPROVE"}' });
 		expect(posted.headers["content-type"]).toMatch(/application\/json/u);

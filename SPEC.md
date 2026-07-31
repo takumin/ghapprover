@@ -381,14 +381,40 @@ flowchart TD
   org repository with a non-bot author), commit list (up to 3 pages), membership checks
   (one per further distinct non-bot commit author/committer, memoized within the delivery,
   §3.1), the App slug fetch (`GET /app`, §3 condition 5 — the one call authenticated with
-  the App JWT rather than an installation token (§7), and the one needing no permission at
-  all), existing reviews (paginated), the live PR fetch, and the review POST — typically
-  under 10 calls for PRs authored by the owner or an allowed bot. The calls run in that
-  order, with one exception: the App slug fetch and the reviews list are issued
-  concurrently, since neither takes an argument the other produces and both feed only the
-  duplication check. Being synchronous means the outcome is recorded as-is in GitHub's
-  Recent Deliveries, and failures can be safely re-executed via manual redelivery (the
-  approval process is idempotent as described in §6).
+  the App JWT rather than an installation token (§7), the one needing no permission at all,
+  and the one made once per isolate rather than once per delivery, below), existing reviews
+  (paginated), the live PR fetch, and the review POST — typically under 10 calls for PRs
+  authored by the owner or an allowed bot. The calls run in that order, with one exception:
+  the App slug fetch and the reviews list are issued concurrently, since neither takes an
+  argument the other produces and both feed only the duplication check. Being synchronous
+  means the outcome is recorded as-is in GitHub's Recent Deliveries, and failures can be
+  safely re-executed via manual redelivery (the approval process is idempotent as
+  described in §6).
+- **The App slug is fetched once per isolate**, not once per delivery: the slug is fixed
+  for the lifetime of a deployment, so what is kept in memory (never persisted, as in §7)
+  is the lookup itself rather than only the `<slug>[bot]` login it derives, and every
+  later delivery reaching step 6 spends neither one of the 50 subrequests the Free plan
+  allows nor one call against the API rate limit on re-reading a constant. Holding the
+  lookup rather than its result is what makes the count one per isolate rather than one
+  per cold start: deliveries that arrive while the first fetch is still in flight join
+  that call instead of each issuing its own, which is the only way two concurrent
+  deliveries into a fresh isolate cost one `GET /app`. What a joiner does not inherit is
+  the budget the shared call is bounded by: that call carries the abort signal of the
+  delivery that originated it (below), so an originator near the end of its own deadline
+  can fail a lookup a later delivery is still waiting on. A joiner that sees the shared
+  lookup fail therefore drops it and attempts once more on its own client, spending the
+  deadline that is actually its own; the originator does not retry, having already spent
+  its own on that call, and one retry is the bound — a second failure is the delivery's.
+  So the cache still cannot turn a delivery that would have succeeded into one that
+  fails: it removes calls, never a delivery's own budget. A rejection is not retained: a
+  stored failure would be served to every delivery that isolate goes on to handle,
+  turning one refused call into a deployment that approves nothing until the isolate is
+  recycled, so a failed lookup is dropped and the next delivery fetches again. A stale entry
+  needs the App to be renamed under a live isolate, and what it costs is bounded — the
+  duplication check stops matching the App's own reviews, so a duplicate approval is
+  posted for the current head, which §6 already states has no safety impact. It cannot
+  produce an approval the §3 conditions would refuse, because nothing but that check reads
+  the login
 - **One deadline bounds the whole delivery**: a single wall-clock budget for the delivery
   as a whole, set below GitHub's 10-second webhook timeout. It is created with the client
   and installed on every dispatch, so everything that client spends time on draws on it —

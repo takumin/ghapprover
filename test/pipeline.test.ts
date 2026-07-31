@@ -44,8 +44,16 @@ import {
 	postSigned,
 } from "./delivery";
 import { HTTP_OK, HTTP_UNPROCESSABLE_ENTITY } from "~src/http-status";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { installFetchMock, requestByUrl } from "./fetch-stub";
+import { resetAppBotLogin } from "~src/github";
+
+/* A case here is one delivery, which is what the routes it plans are written as — so the login
+ * cached for the isolate (SPEC.md §4) is emptied between them, leaving each case to consume the
+ * GET /app its own plan carries; what the cache saves is asserted below, on two deliveries. The
+ * state is the module's, which is why the hook is the file's rather than each describe's. */
+// oxlint-disable-next-line vitest/no-hooks, vitest/require-top-level-describe -- see above
+beforeEach(resetAppBotLogin);
 
 /* SPEC.md §4 step 2: the state conditions are decided on the payload alone, so each of them
  * settles the delivery before the client is built — which is what the request count asserts. */
@@ -205,6 +213,21 @@ describe("duplicate approval check", () => {
 		const response = await postSigned(buildPayload());
 		await expectSkipped(response, "already-approved");
 		session.assertDone();
+	});
+});
+
+/* What the cache buys, stated where a delivery is what runs: the second delivery reaches the same
+ * duplication check and approves, having spent no call on a slug the first one already read
+ * (SPEC.md §4). Its plan still carries the route, so what the case asserts is that nothing asked
+ * for it — a run that did would consume it and pass unnoticed. */
+describe("app slug caching", () => {
+	it("approves a second delivery without a second GET /app", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		installFetchMock(happyRoutes());
+		await expectApproved(await postSigned(buildPayload()));
+		const session = installFetchMock(happyRoutes());
+		await expectApproved(await postSigned(buildPayload()));
+		expect(session.requests.map((seen) => seen.url)).not.toContain(APP_URL);
 	});
 });
 
