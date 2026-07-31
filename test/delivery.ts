@@ -38,11 +38,18 @@ const WEBHOOK_URL = "http://example.com/webhook";
 const SECRET = "test-secret";
 const DELIVERY_ID = "delivery-42";
 
+/* The deployed version the Worker runs as (SPEC.md §5, §8). It reaches the delivery as a binding
+ * rather than through the request, so it is part of the env every case is dispatched against and
+ * the suites name only the id, which is the field the entry carries. */
+const VERSION_ID = "8f2c1d34-0000-4000-8000-000000000042";
+const VERSION_METADATA = { id: VERSION_ID, tag: "v42", timestamp: "2026-07-31T00:00:00.000Z" };
+
 const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT };
 
 /** The env a delivery runs against; a case about the configuration itself overrides the one secret it is about. */
 async function makeEnv(overrides: Partial<Env> = {}): Promise<Env> {
 	const env: Env = {
+		CF_VERSION_METADATA: VERSION_METADATA,
 		GITHUB_APP_ID: APP_ID,
 		GITHUB_APP_PRIVATE_KEY: await privateKeyPemOnce(),
 		GITHUB_WEBHOOK_SECRET: SECRET,
@@ -206,6 +213,7 @@ export {
 	OWN_APPROVAL,
 	SECRET,
 	UNCHECKED_SIGNATURE,
+	VERSION_ID,
 	WEBHOOK_URL,
 	buildPayload,
 	captureLog,

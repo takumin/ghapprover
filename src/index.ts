@@ -151,7 +151,7 @@ async function evaluateOrFail(request: Request, env: Env, log: LogFields): Promi
 }
 /** The one terminal frame: every request leaves through exactly one log entry and one response. */
 async function handleWebhook(request: Request, env: Env): Promise<Response> {
-	const log = deliveryFields(request);
+	const log = deliveryFields(request, env);
 	const outcome = await evaluateOrFail(request, env, log);
 	logOutcome(log, outcome);
 	return respond(outcome);

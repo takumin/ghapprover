@@ -440,6 +440,12 @@ the information needed for evaluation comes from the following.
 
 - To change the allowed bots, edit the constant and redeploy. The configuration is
   version-controlled in Git, and no path exists to rewrite the approval conditions at runtime
+- What this section rules out is configuration the evaluation reads, not bindings as such. The
+  one binding declared besides the secrets of §7 — `CF_VERSION_METADATA`, which Cloudflare
+  populates with the deployed version's id, tag, and upload timestamp — is neither: no §3
+  decision consults it, and it is fixed for the lifetime of a deployment, so nothing about it
+  can vary an approval. It records the identity of the deployment doing the reading, which is
+  precisely what putting the approval conditions in code leaves a log entry unable to say (§8)
 - The allowlist matches the Mend-hosted Renovate app's bot user. Self-hosted Renovate
   deployments run under a different login (their own app slug, or a PAT user of type
   `User`) and are not matched by design
@@ -484,7 +490,8 @@ the information needed for evaluation comes from the following.
 
 Emit at least the following to structured logs (Workers Logs):
 
-- `deliveryId` (X-GitHub-Delivery), `repo`, `prNumber`, `action`, `headSha`
+- `deliveryId` (X-GitHub-Delivery), `versionId` (the deployed Worker version, §5), `repo`,
+  `prNumber`, `action`, `headSha`
 - `decision` (approved / skipped / error) and `reason`
 - the diagnostic fields the outcome carries (table below)
 
@@ -494,8 +501,16 @@ entries rejected before the body is looked at (`payload-too-large`, `invalid-sig
 it is the only identifier GitHub's Recent Deliveries shows for a failed delivery, and
 therefore the one an operator greps by. It is omitted rather than defaulted when the header
 is absent, which is the ordinary case for `not-found`: a request that never reached
-`POST /webhook` is usually not a GitHub delivery at all. The payload fields
-(`repo`, `prNumber`, `action`, `headSha`) appear only once the body has been parsed.
+`POST /webhook` is usually not a GitHub delivery at all. `versionId` is the id of the
+deployed Worker version, taken from the §5 binding, and answers the one question a changed
+outcome raises that no other field can: which build produced the entry. Every approval
+condition lives in the code — an `ALLOWED_BOTS` entry, a §3 check, the §4 delivery budget —
+so entries from either side of a deploy are otherwise indistinguishable, and the behaviour
+change that prompts the reading is exactly what leaves no trace in them. It depends on
+nothing the request carries, so unlike `deliveryId` it is unconditional: it is on every
+entry, including the ones rejected before the body is read and the ones that name no
+delivery at all. The payload fields (`repo`, `prNumber`, `action`, `headSha`) appear only
+once the body has been parsed.
 
 `reason` is drawn from a closed vocabulary. This is the list an operator greps, so it is
 exhaustive rather than illustrative:
