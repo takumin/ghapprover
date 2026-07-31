@@ -157,7 +157,7 @@ describe("fetchOrgMembership()", () => {
 		mock.assertDone();
 	});
 
-	it("returns null on 404", async () => {
+	it("returns no membership on 404", async () => {
 		expect.hasAssertions();
 		installFetchMock([
 			installTokenRoute(),
@@ -165,7 +165,7 @@ describe("fetchOrgMembership()", () => {
 		]);
 		await expect(
 			fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login),
-		).resolves.toBeNull();
+		).resolves.toBeUndefined();
 	});
 
 	it("throws with the status on 403", async () => {

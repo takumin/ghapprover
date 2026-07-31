@@ -72,11 +72,11 @@ function createTrustResolver(client: GithubClient, repoOwner: GithubAccount): Tr
 async function checkCommitCondition(
 	pullRequest: EventPullRequest,
 	call: { readonly client: GithubClient; readonly repo: RepoRef; readonly trust: TrustResolver },
-): Promise<CommitProblem | null> {
+): Promise<CommitProblem | undefined> {
 	const { client, repo, trust } = call;
 	/* Ahead of the fetch: what the declared count alone settles costs no subrequest to decide. */
 	const declaredProblem = precheckCommitCount(pullRequest.commits);
-	if (declaredProblem !== null) {
+	if (declaredProblem !== undefined) {
 		return declaredProblem;
 	}
 	const commits = await listPullRequestCommits(client, repo, pullRequest.number);
@@ -134,7 +134,7 @@ async function approveWhenConditionsHold(
 		return skippedOutcome("author-not-trusted");
 	}
 	const commitProblem = await checkCommitCondition(pullRequest, { client, repo, trust });
-	if (commitProblem !== null) {
+	if (commitProblem !== undefined) {
 		return skippedOutcome(commitProblem);
 	}
 	return approvePullRequest(client, {
@@ -152,10 +152,12 @@ async function evaluateApproval(
 		return skippedOutcome("event-out-of-scope");
 	}
 	const stateProblem = checkPullRequestState(payload.pull_request, payload.repository);
-	if (stateProblem !== null) {
+	if (stateProblem !== undefined) {
 		return skippedOutcome(stateProblem);
 	}
-	if (payload.installation === undefined || payload.installation === null) {
+	/* Truthiness rather than a comparison per spelling: absent, `null`, and malformed all reach here
+	 * as an installation that is not there (src/types.ts), and the value is an object when it is. */
+	if (!payload.installation) {
 		return errorOutcome("missing-installation");
 	}
 	return approveWhenConditionsHold(payload, credentials, payload.installation.id);

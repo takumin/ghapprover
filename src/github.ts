@@ -150,14 +150,14 @@ export async function listPullRequestCommits(
 	);
 }
 
-/** GET /orgs/{org}/memberships/{username}; a 404 means "not a member" → null (SPEC.md §9). */
+/** GET /orgs/{org}/memberships/{username}; a 404 means "not a member" → no membership (SPEC.md §9). */
 export async function fetchOrgMembership(
 	client: GithubClient,
 	org: string,
 	username: string,
-): Promise<OrgMembership | null> {
+): Promise<OrgMembership | undefined> {
 	const endpoint = "GET /orgs/{org}/memberships/{username}";
-	return answering({ endpoint, status: HTTP_NOT_FOUND }, null, async () =>
+	return answering({ endpoint, status: HTTP_NOT_FOUND }, undefined, async () =>
 		contractCall(
 			endpoint,
 			async () => client.request(endpoint, { org, username }),

@@ -44,18 +44,22 @@ function commit(overrides: CommitOverrides = {}): PullRequestCommit {
 
 interface CommitCase {
 	readonly entry: PullRequestCommit;
-	readonly expected: string | null;
+	readonly expected: string | undefined;
 	readonly name: string;
 }
 
 const COMMIT_CASES: readonly CommitCase[] = [
-	{ entry: commit(), expected: null, name: "a verified trusted commit" },
+	{ entry: commit(), expected: undefined, name: "a verified trusted commit" },
 	{
 		entry: commit({ author: BOB, committer: BOB }),
-		expected: null,
+		expected: undefined,
 		name: "the author doubling as committer",
 	},
-	{ entry: commit({ committer: WEB_FLOW_USER }), expected: null, name: "a web-flow committer" },
+	{
+		entry: commit({ committer: WEB_FLOW_USER }),
+		expected: undefined,
+		name: "a web-flow committer",
+	},
 	{
 		entry: commit({ committer: WEB_FLOW_LOOKALIKE }),
 		expected: "untrusted-commit",
@@ -111,14 +115,14 @@ const COMMIT_CASES: readonly CommitCase[] = [
 
 interface CommitCountCase {
 	readonly declared: number;
-	readonly expected: string | null;
+	readonly expected: string | undefined;
 	readonly fetched: number;
 }
 
 const COMMIT_COUNT_CASES: readonly CommitCountCase[] = [
 	{ declared: 2, expected: "commit-count-mismatch", fetched: 1 },
 	{ declared: 1, expected: "commit-count-mismatch", fetched: 2 },
-	{ declared: 2, expected: null, fetched: 2 },
+	{ declared: 2, expected: undefined, fetched: 2 },
 ];
 
 /* The principals are derived from mapped accounts: an unmapped author or committer is settled by
@@ -165,8 +169,8 @@ describe("commit principal collection", () => {
 describe("commit count precheck", () => {
 	it.each([
 		{ declared: 0, expected: "no-commits" },
-		{ declared: 1, expected: null },
-		{ declared: MAX_VERIFIABLE_COMMITS, expected: null },
+		{ declared: 1, expected: undefined },
+		{ declared: MAX_VERIFIABLE_COMMITS, expected: undefined },
 		{ declared: MAX_VERIFIABLE_COMMITS + 1, expected: "too-many-commits" },
 	])("returns $expected for $declared declared commits", ({ declared, expected }) => {
 		expect.hasAssertions();

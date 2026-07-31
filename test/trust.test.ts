@@ -121,7 +121,7 @@ describe("org owner membership", () => {
 		{ expected: true, membership: ACTIVE_ADMIN, name: "an active admin" },
 		{ expected: false, membership: ACTIVE_MEMBER, name: "an active regular member" },
 		{ expected: false, membership: PENDING_ADMIN, name: "a pending admin" },
-		{ expected: false, membership: null, name: "a missing membership (404)" },
+		{ expected: false, membership: undefined, name: "a missing membership (404)" },
 	])("returns $expected for $name", ({ expected, membership }) => {
 		expect.hasAssertions();
 		expect(isOwnerMembership(membership)).toBe(expected);
