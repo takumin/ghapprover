@@ -5,8 +5,8 @@
  */
 
 import { AUTOFIX_CI, HUMAN, ORG, OWNER, RENOVATE, RENOVATE_WRONG_ID, allowedBot } from "./fixtures";
-import type { GithubAccount, OrgMembership } from "../src/types";
-import { classifyPrincipal, isOwnerMembership } from "../src/decision";
+import type { GithubAccount, OrgMembership } from "~src/types";
+import { classifyPrincipal, isOwnerMembership } from "~src/decision";
 import { describe, expect, it } from "vitest";
 
 /** The owner's login under a different account: §3.1 pins the personal-repo owner's id too. */

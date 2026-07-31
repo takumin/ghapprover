@@ -21,7 +21,7 @@ import {
 	makeClient,
 	pullUrl,
 } from "./github-api";
-import { PAGE_SIZE, fetchAppBotLogin, listPullRequestCommits } from "../src/github";
+import { PAGE_SIZE, fetchAppBotLogin, listPullRequestCommits } from "~src/github";
 import { describe, expect, it } from "vitest";
 import { installFetchMock, requestByUrl } from "./fetch-stub";
 import { PULL_NUMBER } from "./fixtures";

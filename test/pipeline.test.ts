@@ -42,7 +42,7 @@ import {
 	pipelineRoutes,
 	postSigned,
 } from "./delivery";
-import { HTTP_OK, HTTP_UNPROCESSABLE_ENTITY } from "../src/http-status";
+import { HTTP_OK, HTTP_UNPROCESSABLE_ENTITY } from "~src/http-status";
 import { describe, expect, it } from "vitest";
 import { installFetchMock, requestByUrl } from "./fetch-stub";
 

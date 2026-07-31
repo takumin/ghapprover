@@ -22,12 +22,12 @@ import {
 	makeClient,
 	pullUrl,
 } from "./github-api";
-import { HTTP_INTERNAL_ERROR, HTTP_NOT_FOUND } from "../src/http-status";
+import { HTTP_INTERNAL_ERROR, HTTP_NOT_FOUND } from "~src/http-status";
 import { HUMAN, ORG } from "./fixtures";
-import { createApprovalReview, fetchAppBotLogin, fetchOrgMembership } from "../src/github";
+import { createApprovalReview, fetchAppBotLogin, fetchOrgMembership } from "~src/github";
 import { describe, expect, it } from "vitest";
 import { installFetchMock, jsonRoute } from "./fetch-stub";
-import { GithubApiError } from "../src/api-error";
+import { GithubApiError } from "~src/api-error";
 
 /* A failure with no response has no §8 headers to report, so its own message is the whole of what
  * it can say about itself — which is why both cases below assert it (SPEC.md §8). */
