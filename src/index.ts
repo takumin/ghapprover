@@ -52,7 +52,8 @@ async function evaluateBody(body: string, env: Env, log: LogFields): Promise<Out
 		return errorOutcome("invalid-payload", { field });
 	}
 	recordPayload(log, payload);
-	return runPipeline(payload, appCredentials(env));
+	const outcome = await runPipeline(payload, appCredentials(env));
+	return outcome;
 }
 /** True only for a Content-Length that parses and exceeds the cap; anything else goes to the read. */
 function exceedsBodyLimit(header: string | null): boolean {
@@ -98,7 +99,8 @@ async function readBoundedBody(request: Request): Promise<string | null> {
 	if (stream === null) {
 		return "";
 	}
-	return readCappedStream(stream);
+	const body = await readCappedStream(stream);
+	return body;
 }
 /** SPEC.md §4 step 1 and §9: verify the signature and scope the event before parsing the body. */
 async function evaluateDelivery(request: Request, env: Env, log: LogFields): Promise<Outcome> {
@@ -157,6 +159,7 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 // oxlint-disable-next-line import/no-default-export -- the Workers runtime takes its handler as the module's default export
 export default {
 	async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
-		return handleWebhook(request, env);
+		const response = await handleWebhook(request, env);
+		return response;
 	},
 } satisfies ExportedHandler<Env>;
