@@ -56,6 +56,10 @@ function responseHeaders(route: PlannedRoute): Record<string, string> {
 	return headers;
 }
 
+/* The pending list is taken from, not read: a matched route is spliced out so it is served once,
+ * which is what leaves an unconsumed one for the session to assert on afterwards. The mutation is
+ * the point, so this parameter is the one here that cannot be readonly. */
+// oxlint-disable-next-line typescript/prefer-readonly-parameter-types -- the pending list is consumed in place; see above
 function takeRoute(pending: PlannedRoute[], request: Request): PlannedRoute {
 	const index = pending.findIndex(
 		(route) => route.method === request.method && route.url === request.url,
