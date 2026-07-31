@@ -4,6 +4,9 @@
 		"lib": ["es2022"],
 		"module": "es2022",
 		"moduleResolution": "Bundler",
+		"paths": {
+			"~src/*": ["./src/*"]
+		},
 		"types": ["./worker-configuration.d.ts"],
 		"resolveJsonModule": true,
 		"noEmit": true,

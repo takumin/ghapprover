@@ -36,9 +36,9 @@ const DELIVERY_TIMEOUT_MS = 6000;
 const GithubOctokit = Octokit.plugin(paginateRest);
 
 /** Per-delivery client with App auth and Link-header pagination wired in. */
-export type GithubClient = InstanceType<typeof GithubOctokit>;
+type GithubClient = InstanceType<typeof GithubOctokit>;
 
-export interface AppCredentials {
+interface AppCredentials {
 	/** GitHub App ID (or client ID), the `iss` claim of the App JWT. */
 	readonly appId: string;
 	/** GitHub App private key PEM, converted to PKCS#8 (SPEC.md §7). */
@@ -61,10 +61,7 @@ export interface AppCredentials {
  * process-wide by installation id, so overlapping deliveries can share the
  * first one's token request and therefore its deadline (accepted, SPEC.md §9).
  */
-export function createGithubClient(
-	credentials: AppCredentials,
-	installationId: number,
-): GithubClient {
+function createGithubClient(credentials: AppCredentials, installationId: number): GithubClient {
 	const client = new GithubOctokit({
 		auth: {
 			appId: credentials.appId,
@@ -84,3 +81,6 @@ export function createGithubClient(
 	});
 	return client;
 }
+
+export { createGithubClient };
+export type { AppCredentials, GithubClient };

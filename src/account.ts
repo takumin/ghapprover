@@ -20,11 +20,11 @@ interface AccountRef {
  * callers that cache principals key on it too — an account reusing a trusted login would otherwise
  * inherit that trust and defeat the id pinning. Injective, because a numeric id cannot contain the
  * separator. */
-export function accountKey(account: AccountRef): string {
+function accountKey(account: AccountRef): string {
 	return `${account.id}:${account.login}`;
 }
 /** The same account: the key comparison above, so no caller spells that comparison out itself. */
-export function isSameAccount(one: AccountRef, other: AccountRef): boolean {
+function isSameAccount(one: AccountRef, other: AccountRef): boolean {
 	return accountKey(one) === accountKey(other);
 }
 
@@ -35,7 +35,7 @@ export function isSameAccount(one: AccountRef, other: AccountRef): boolean {
  * GitHub-native Dependabot, and the autofix.ci app; self-hosted lookalikes run
  * under different logins/ids and are rejected by design.
  */
-export const ALLOWED_BOTS: readonly AccountRef[] = [
+const ALLOWED_BOTS: readonly AccountRef[] = [
 	{ id: 29_139_614, login: "renovate[bot]" },
 	{ id: 49_699_333, login: "dependabot[bot]" },
 	{ id: 114_827_586, login: "autofix-ci[bot]" },
@@ -47,7 +47,7 @@ export const ALLOWED_BOTS: readonly AccountRef[] = [
  * (src/commits.ts); genuine web-flow commits are always GitHub-signed, which the verification
  * check enforces (SPEC.md §3.2).
  */
-export const WEB_FLOW: AccountRef = { id: 19_864_447, login: "web-flow" };
+const WEB_FLOW: AccountRef = { id: 19_864_447, login: "web-flow" };
 
 /* The allowlist as the keys it is compared against, derived once at module scope: it is an in-code
  * constant (SPEC.md §5) and is compared against on every delivery, so deriving it per call is work
@@ -55,10 +55,12 @@ export const WEB_FLOW: AccountRef = { id: 19_864_447, login: "web-flow" };
 const ALLOWED_BOT_KEYS: ReadonlySet<string> = new Set(ALLOWED_BOTS.map((bot) => accountKey(bot)));
 
 /** SPEC.md §3.1: on the allowlist, matched as the pair — the same login under another id is not. */
-export function isAllowedBot(account: AccountRef): boolean {
+function isAllowedBot(account: AccountRef): boolean {
 	return ALLOWED_BOT_KEYS.has(accountKey(account));
 }
 /** SPEC.md §3.2: the web-flow account itself, matched as the pair for the same reason. */
-export function isWebFlow(account: AccountRef): boolean {
+function isWebFlow(account: AccountRef): boolean {
 	return isSameAccount(account, WEB_FLOW);
 }
+
+export { ALLOWED_BOTS, WEB_FLOW, accountKey, isAllowedBot, isSameAccount, isWebFlow };

@@ -25,7 +25,7 @@ import { verifyWebhookSignature } from "./webhook";
  * literal of its own — a literal would keep passing as a body within the cap if
  * this changed.
  */
-export const MAX_BODY_BYTES = 26_214_400;
+const MAX_BODY_BYTES = 26_214_400;
 
 function respond(outcome: Outcome): Response {
 	const { decision, httpStatus: status, reason } = outcome;
@@ -48,11 +48,12 @@ function appCredentials(env: Env): AppCredentials {
  */
 async function evaluateBody(body: string, env: Env, log: LogFields): Promise<Outcome> {
 	const { field, payload } = parsePullRequestEventBody(body);
-	if (payload === null) {
+	if (!payload) {
 		return errorOutcome("invalid-payload", { field });
 	}
 	recordPayload(log, payload);
-	return runPipeline(payload, appCredentials(env));
+	const outcome = await runPipeline(payload, appCredentials(env));
+	return outcome;
 }
 /** True only for a Content-Length that parses and exceeds the cap; anything else goes to the read. */
 function exceedsBodyLimit(header: string | null): boolean {
@@ -63,34 +64,34 @@ function exceedsBodyLimit(header: string | null): boolean {
 	return Number.isFinite(declared) && declared > MAX_BODY_BYTES;
 }
 /**
- * The stream decoded as text, or null as soon as it passes the cap — the count is
+ * The stream decoded as text, or nothing as soon as it passes the cap — the count is
  * what actually bounds the read, so it stops there instead of after the fact, and
  * returning from the loop cancels the stream rather than draining the rest.
  * Decoding matches Request.text(): invalid UTF-8 becomes U+FFFD, which then fails
  * the HMAC, so the bound is all that changes about how the body is read.
  */
-async function readCappedStream(stream: ReadableStream<Uint8Array>): Promise<string | null> {
+async function readCappedStream(stream: ReadableStream<Uint8Array>): Promise<string | undefined> {
 	const decoder = new TextDecoder();
 	let read = 0;
 	let body = "";
 	for await (const chunk of stream) {
 		read += chunk.byteLength;
 		if (read > MAX_BODY_BYTES) {
-			return null;
+			return undefined;
 		}
 		body += decoder.decode(chunk, { stream: true });
 	}
 	return body + decoder.decode();
 }
 /**
- * The delivery body, or null when it exceeds the cap (SPEC.md §9). A declared length
+ * The delivery body, or nothing when it exceeds the cap (SPEC.md §9). A declared length
  * over the cap is rejected before a byte is buffered, but it cannot be the bound: it
  * is absent on a chunked upload, and the same unauthenticated caller decides whether
  * to send it at all. The byte count is the bound; this header only saves the read.
  */
-async function readBoundedBody(request: Request): Promise<string | null> {
+async function readBoundedBody(request: Request): Promise<string | undefined> {
 	if (exceedsBodyLimit(request.headers.get("content-length"))) {
-		return null;
+		return undefined;
 	}
 	/* Request.body is ReadableStream<any> in the Workers types; the runtime yields chunks
 	 * of bytes, which is what the cap counts and the decoder consumes. */
@@ -98,12 +99,15 @@ async function readBoundedBody(request: Request): Promise<string | null> {
 	if (stream === null) {
 		return "";
 	}
-	return readCappedStream(stream);
+	const body = await readCappedStream(stream);
+	return body;
 }
 /** SPEC.md §4 step 1 and §9: verify the signature and scope the event before parsing the body. */
 async function evaluateDelivery(request: Request, env: Env, log: LogFields): Promise<Outcome> {
 	const body = await readBoundedBody(request);
-	if (body === null) {
+	/* Compared rather than tested for truth: an empty body is a body, and it still has to be
+	 * signature-verified and parsed like any other. */
+	if (body === undefined) {
 		return errorOutcome("payload-too-large");
 	}
 	const verified = await verifyWebhookSignature(
@@ -154,9 +158,12 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 	return respond(outcome);
 }
 
+export { MAX_BODY_BYTES };
+
 // oxlint-disable-next-line import/no-default-export -- the Workers runtime takes its handler as the module's default export
 export default {
 	async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
-		return handleWebhook(request, env);
+		const response = await handleWebhook(request, env);
+		return response;
 	},
 } satisfies ExportedHandler<Env>;

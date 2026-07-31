@@ -51,9 +51,10 @@
 			{ "enforceConst": true, "ignore": [0, 1, -1], "ignoreArrayIndexes": true },
 		],
 		// `undefined` is how absence is spelled throughout: the SPEC §8 diagnostics
-		// an outcome does not carry (src/pipeline.ts), and the validation result
-		// with no field to name (src/payload.ts). `null` cannot stand in for it --
-		// `null` is a value the GitHub payloads really carry.
+		// an outcome does not carry (src/pipeline.ts), the validation result with no
+		// field to name (src/payload.ts), and every "no problem found" a §3 check
+		// answers with. `null` cannot stand in for it -- `null` is a value the GitHub
+		// payloads really carry, which is what unicorn/no-null below now enforces.
 		"eslint/no-undefined": "off",
 		// Nursery rules worth having. No enabled category carries them, so each is
 		// named individually.
@@ -61,15 +62,15 @@
 		"eslint/no-useless-assignment": "error",
 		// Not the duplicate of typescript/require-await the name suggests: this one
 		// also reports an `async` function that returns a promise without awaiting
-		// it, which is the shape most of the async helpers in src/ have. It cannot
-		// be an error while two enabled rules stand: typescript/promise-function-async
-		// requires a promise-returning helper to be async, and typescript/return-await
-		// (in-try-catch) forbids the `return await` that would appease this rule
-		// outside a try/catch — together the three would leave a pass-through helper
-		// no legal spelling at all. The type-aware rule, which reports only a
-		// function with nothing async about it at all, is left on by category to
-		// carry the check.
-		"eslint/require-await": "off",
+		// it, so a pass-through helper has to await the call it forwards and the
+		// promise is settled inside the frame that made it — the try/catch in
+		// src/github.ts only catches what it awaits. Two enabled rules rule out the
+		// obvious spellings: typescript/promise-function-async requires a
+		// promise-returning helper to be async, and typescript/return-await
+		// (in-try-catch) forbids `return await` outside a try/catch. What passes all
+		// three is the intermediate variable — `const x = await f(); return x;` —
+		// which is the shape every pass-through helper here is written in.
+		"eslint/require-await": "error",
 		// The import group, in the order oxlint sorts it:
 		// - no-named-export and prefer-default-export each contradict
 		//   no-default-export, which the restriction category keeps on: the first
@@ -77,19 +78,22 @@
 		//   orders the single-export modules to write the default export the
 		//   enabled rule bans. The named shape is also what lets SPEC §12's
 		//   decision logic be unit-tested without mocking the GitHub API.
-		// - exports-last and group-exports reject export-at-declaration, the shape
-		//   every module here is written in: satisfying them restates every public
-		//   declaration in a trailing export block without changing anything a
-		//   rule could catch afterwards.
+		// - exports-last and group-exports together give every module one trailing
+		//   export block: a declaration is private unless the block at the bottom
+		//   names it, so the public surface is read off one statement rather than
+		//   gathered from the `export` keywords scattered through the file. The
+		//   two rules count value and type exports apart, so a module that exports
+		//   both states them as `export { … }` and `export type { … }` — which is
+		//   also the spelling import/consistent-type-specifier-style requires.
 		// - no-default-export bans the Workers entrypoint, so the two declarations
 		//   that cannot avoid a default export (src/index.ts, vitest.config.mts)
 		//   carry a line exemption rather than the rule being switched off for
 		//   whole files.
-		"import/exports-last": "off",
+		"import/exports-last": "error",
 		// Reports nothing against the extensionless imports this codebase writes, so
 		// it is carried as a guard on that style rather than switched off.
 		"import/extensions": "error",
-		"import/group-exports": "off",
+		"import/group-exports": "error",
 		"import/no-named-export": "off",
 		"import/prefer-default-export": "off",
 		// Bans async/await outright, while the enabled
@@ -157,30 +161,38 @@
 				],
 			},
 		],
-		// GitHub's webhook payloads and REST responses really carry `null`, and the
-		// frozen contract (src/types.ts) models that absence as `null` rather than
-		// converting it -- `undefined` is already spoken for as the parse-failure
-		// sentinel (see eslint/no-undefined above), so the two cannot be collapsed.
-		// Banning the literal would leave no way to spell the shape the API sends,
-		// in src or in the fixtures that stand in for it.
-		"unicorn/no-null": "off",
+		// `null` is what GitHub sends, not how this codebase says absence: the frozen
+		// contract (src/types.ts) still types the payload fields that really carry it
+		// as nullable, and reading such a field against `null` stays legal (the rule's
+		// default checkStrictEquality: false). What the rule bans is writing the
+		// literal ourselves, which is what keeps a value that came off the wire apart
+		// from an absence this code decided on -- those are spelled `undefined`
+		// throughout (see eslint/no-undefined above). Off for the fixtures, below.
+		"unicorn/no-null": "error",
 	},
 	"overrides": [
 		{
 			"files": ["vitest.config.mts", "test/**/*.ts"],
 			"plugins": ["vitest"],
 			"rules": {
-				// The tests import from `../src`.
-				"import/no-relative-parent-imports": "off",
 				// vitest globals are not enabled (see vitest.config.mts), so the
 				// suites import `describe`/`it`/`expect` explicitly — the spelling
 				// the enabled vitest/prefer-importing-vitest-globals requires; as
 				// errors the pair would leave a suite no way to name its test
 				// functions.
 				"vitest/no-importing-vitest-globals": "off",
-				// Demands an explicit timeout argument on every test. The suites run
-				// in-process against stubs, so they rely on the default instead.
-				"vitest/require-test-timeout": "off",
+			},
+		},
+		// Scoped to the suites alone rather than folded into the block above, which
+		// also covers vitest.config.mts: nothing in that file has a wire format to
+		// spell, so it stays under the rule.
+		{
+			"files": ["test/**/*.ts"],
+			"rules": {
+				// The fixtures spell the wire format GitHub actually sends, and those
+				// payloads really carry `null`; a fixture cannot exercise the nullable
+				// contract branches without constructing the value itself.
+				"unicorn/no-null": "off",
 			},
 		},
 	],
