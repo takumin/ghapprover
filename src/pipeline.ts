@@ -165,7 +165,7 @@ async function evaluateApproval(
  * endpoint in src/github.ts throws GithubApiError, so this is where that contract is read. Anything
  * else thrown travels on to the entry point's catch-all, which owns §9's "any other thrown failure".
  */
-export async function runPipeline(
+async function runPipeline(
 	payload: PullRequestEventPayload,
 	credentials: AppCredentials,
 ): Promise<Outcome> {
@@ -178,3 +178,5 @@ export async function runPipeline(
 		throw error;
 	}
 }
+
+export { runPipeline };

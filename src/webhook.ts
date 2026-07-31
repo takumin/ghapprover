@@ -17,7 +17,7 @@ const SIGNATURE_PATTERN = /^sha256=[0-9a-f]{64}$/iu;
  * any crypto work. Never throws: verification failures of any kind yield
  * false, which the handler maps to 401 (SPEC.md §9).
  */
-export async function verifyWebhookSignature(
+async function verifyWebhookSignature(
 	secret: string,
 	body: string,
 	signatureHeader: string | null,
@@ -31,3 +31,5 @@ export async function verifyWebhookSignature(
 		return false;
 	}
 }
+
+export { verifyWebhookSignature };

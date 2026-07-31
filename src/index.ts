@@ -25,7 +25,7 @@ import { verifyWebhookSignature } from "./webhook";
  * literal of its own — a literal would keep passing as a body within the cap if
  * this changed.
  */
-export const MAX_BODY_BYTES = 26_214_400;
+const MAX_BODY_BYTES = 26_214_400;
 
 function respond(outcome: Outcome): Response {
 	const { decision, httpStatus: status, reason } = outcome;
@@ -153,6 +153,8 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 	logOutcome(log, outcome);
 	return respond(outcome);
 }
+
+export { MAX_BODY_BYTES };
 
 // oxlint-disable-next-line import/no-default-export -- the Workers runtime takes its handler as the module's default export
 export default {

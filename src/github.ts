@@ -24,9 +24,9 @@ import { safeParse } from "valibot";
 
 /* The page size every list call asks for. Exported for the suites, which plan their routes on the
  * query it produces rather than on a page size of their own. */
-export const PAGE_SIZE = 100;
+const PAGE_SIZE = 100;
 
-export interface RepoRef {
+interface RepoRef {
 	readonly owner: string;
 	readonly repo: string;
 }
@@ -103,7 +103,7 @@ async function contractCall<Schema extends GenericSchema>(
  * GitHub naming convention, so deriving the login belongs to this module
  * rather than to the caller that matches reviews against it.
  */
-export async function fetchAppBotLogin(client: GithubClient): Promise<string> {
+async function fetchAppBotLogin(client: GithubClient): Promise<string> {
 	const endpoint = "GET /app";
 	const { slug } = await contractCall(endpoint, async () => client.request(endpoint), appSchema);
 	return `${slug}[bot]`;
@@ -138,7 +138,7 @@ async function listPullRequestItems<Schema extends GenericSchema>(
 }
 
 /** All PR commits via Link-header pagination (SPEC.md §3.2); the 250-commit cap is enforced upstream by precheckCommitCount. */
-export async function listPullRequestCommits(
+async function listPullRequestCommits(
 	client: GithubClient,
 	repo: RepoRef,
 	pullNumber: number,
@@ -151,7 +151,7 @@ export async function listPullRequestCommits(
 }
 
 /** GET /orgs/{org}/memberships/{username}; a 404 means "not a member" → null (SPEC.md §9). */
-export async function fetchOrgMembership(
+async function fetchOrgMembership(
 	client: GithubClient,
 	org: string,
 	username: string,
@@ -167,7 +167,7 @@ export async function fetchOrgMembership(
 }
 
 /** All PR reviews via Link-header pagination (SPEC.md §3 cond. 5). */
-export async function listPullRequestReviews(
+async function listPullRequestReviews(
 	client: GithubClient,
 	repo: RepoRef,
 	pullNumber: number,
@@ -180,7 +180,7 @@ export async function listPullRequestReviews(
 }
 
 /** GET /repos/{owner}/{repo}/pulls/{n} for the live TOCTOU check (SPEC.md §3.3). */
-export async function fetchPullRequest(
+async function fetchPullRequest(
 	client: GithubClient,
 	repo: RepoRef,
 	pullNumber: number,
@@ -199,7 +199,7 @@ export async function fetchPullRequest(
 }
 
 /** The pull request and head commit one approval review is anchored to, and the caller's §3.3 live check compares against. */
-export interface ApprovalTarget {
+interface ApprovalTarget {
 	readonly commitId: string;
 	readonly pullNumber: number;
 	readonly repo: RepoRef;
@@ -209,7 +209,7 @@ export interface ApprovalTarget {
  * POST an APPROVE review anchored to commitId; a 422 means the PR was closed
  * or merged in the meantime and is treated as a skip (SPEC.md §9).
  */
-export async function createApprovalReview(
+async function createApprovalReview(
 	client: GithubClient,
 	target: ApprovalTarget,
 ): Promise<"created" | "rejected"> {
@@ -232,3 +232,14 @@ export async function createApprovalReview(
 		},
 	);
 }
+
+export {
+	PAGE_SIZE,
+	createApprovalReview,
+	fetchAppBotLogin,
+	fetchOrgMembership,
+	fetchPullRequest,
+	listPullRequestCommits,
+	listPullRequestReviews,
+};
+export type { ApprovalTarget, RepoRef };
