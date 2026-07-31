@@ -15,8 +15,8 @@ pinact = "4.1.1"
 "aqua:reviewdog/reviewdog" = "0.21.0"
 "aqua:editorconfig-checker/editorconfig-checker" = "3.8.0"
 "aqua:rhysd/actionlint" = "1.7.12"
-# Consumed by `actionlint -shellcheck shellcheck` to lint workflow `run:` blocks;
-# there are no shell scripts here, so it is not a reviewdog runner of its own.
+# A reviewdog runner of its own over scripts/, and consumed by
+# `actionlint -shellcheck shellcheck` to lint workflow `run:` blocks.
 "aqua:koalaman/shellcheck" = "0.11.0"
 "aqua:suzuki-shunsuke/ghalint" = "1.5.6"
 "aqua:zizmorcore/zizmor" = "1.28.0"
@@ -113,6 +113,16 @@ run = [{ task = "reviewdog-run", env = { REVIEWDOG_RUNNER = "editorconfig-checke
 [tasks."reviewdog:actionlint"]
 description = "reviewdog: actionlint"
 run = [{ task = "reviewdog-run", env = { REVIEWDOG_RUNNER = "actionlint" } }]
+
+[tasks."reviewdog:shellcheck"]
+description = "reviewdog: shellcheck"
+run = [{ task = "reviewdog-run", env = { REVIEWDOG_RUNNER = "shellcheck" } }]
+
+# No `depends = ["setup"]`: the check is a shell script over tracked files, so
+# the matrix marks the shard as needing no node_modules.
+[tasks."reviewdog:file-refs"]
+description = "reviewdog: comment file references"
+run = [{ task = "reviewdog-run", env = { REVIEWDOG_RUNNER = "file-refs" } }]
 
 [tasks."reviewdog:ghalint-run"]
 description = "reviewdog: ghalint run"
