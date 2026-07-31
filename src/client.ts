@@ -36,9 +36,9 @@ const DELIVERY_TIMEOUT_MS = 6000;
 const GithubOctokit = Octokit.plugin(paginateRest);
 
 /** Per-delivery client with App auth and Link-header pagination wired in. */
-export type GithubClient = InstanceType<typeof GithubOctokit>;
+type GithubClient = InstanceType<typeof GithubOctokit>;
 
-export interface AppCredentials {
+interface AppCredentials {
 	/** GitHub App ID (or client ID), the `iss` claim of the App JWT. */
 	readonly appId: string;
 	/** GitHub App private key PEM, converted to PKCS#8 (SPEC.md §7). */
@@ -61,10 +61,7 @@ export interface AppCredentials {
  * process-wide by installation id, so overlapping deliveries can share the
  * first one's token request and therefore its deadline (accepted, SPEC.md §9).
  */
-export function createGithubClient(
-	credentials: AppCredentials,
-	installationId: number,
-): GithubClient {
+function createGithubClient(credentials: AppCredentials, installationId: number): GithubClient {
 	const client = new GithubOctokit({
 		auth: {
 			appId: credentials.appId,
@@ -75,8 +72,15 @@ export function createGithubClient(
 		request: { signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS) },
 		userAgent: USER_AGENT,
 	});
+	/* The one parameter here that is written into rather than read, and the hook contract is what
+	 * writes it: octokit hands each dispatch its own options and takes the header back off them.
+	 * Exempted per line rather than by name — the type it arrives as resolves to none. */
+	// oxlint-disable-next-line typescript/prefer-readonly-parameter-types -- the before-request hook pins the header by writing into the options octokit hands it
 	client.hook.before("request", (options) => {
 		options.headers["x-github-api-version"] = API_VERSION;
 	});
 	return client;
 }
+
+export { createGithubClient };
+export type { AppCredentials, GithubClient };

@@ -41,13 +41,13 @@ import { createGithubClient } from "./client";
 import { pullRequestEventSchema } from "./types";
 
 /**
- * The modeled payload, or null with SPEC.md §8's `field`: the dot path of the first field that
+ * The modeled payload, or no payload and SPEC.md §8's `field`: the dot path of the first field that
  * failed validation. The path alone — the issue also carries the value that failed, which is
  * webhook payload content and never leaves this module (§8 warning, §11).
  */
-export interface PayloadValidation {
+interface PayloadValidation {
 	readonly field?: string | undefined;
-	readonly payload: PullRequestEventPayload | null;
+	readonly payload?: PullRequestEventPayload | undefined;
 }
 
 /* An issue at the root — a body that is not an object at all has no field to name — has no dot
@@ -56,16 +56,16 @@ function issueField(issue: BaseIssue<unknown>): string | undefined {
 	return getDotPath(issue) ?? undefined;
 }
 
-/* The whole body, or null when it does not match the modeled shape — a missing or malformed
- * installation being the one divergence the schema absorbs rather than rejects (SPEC.md §9). The
- * first issue is the one reported: the schema states its fields in a fixed order, so which field
- * a given malformed body names does not vary between deliveries. */
-export function parsePullRequestEvent(payload: unknown): PayloadValidation {
+/* The whole body, or no payload at all when it does not match the modeled shape — a missing or
+ * malformed installation being the one divergence the schema absorbs rather than rejects (SPEC.md
+ * §9). The first issue is the one reported: the schema states its fields in a fixed order, so which
+ * field a given malformed body names does not vary between deliveries. */
+function parsePullRequestEvent(payload: unknown): PayloadValidation {
 	const result = safeParse(pullRequestEventSchema, payload);
 	if (result.success) {
 		return { payload: result.output };
 	}
-	return { field: issueField(result.issues[0]), payload: null };
+	return { field: issueField(result.issues[0]) };
 }
 
 /**
@@ -74,12 +74,12 @@ export function parsePullRequestEvent(payload: unknown): PayloadValidation {
  * A body that is not JSON is not the modeled shape either, and names no field: there is no document
  * to locate one in (SPEC.md §8).
  */
-export function parsePullRequestEventBody(body: string): PayloadValidation {
+function parsePullRequestEventBody(body: string): PayloadValidation {
 	try {
 		const parsed: unknown = JSON.parse(body);
 		return parsePullRequestEvent(parsed);
 	} catch {
-		return { payload: null };
+		return {};
 	}
 }
 
@@ -122,11 +122,11 @@ function createTrustResolver(client: GithubClient, repoOwner: GithubAccount): Tr
 async function checkCommitCondition(
 	pullRequest: EventPullRequest,
 	call: { readonly client: GithubClient; readonly repo: RepoRef; readonly trust: TrustResolver },
-): Promise<CommitProblem | null> {
+): Promise<CommitProblem | undefined> {
 	const { client, repo, trust } = call;
 	/* Ahead of the fetch: what the declared count alone settles costs no subrequest to decide. */
 	const declaredProblem = precheckCommitCount(pullRequest.commits);
-	if (declaredProblem !== null) {
+	if (declaredProblem !== undefined) {
 		return declaredProblem;
 	}
 	const commits = await listPullRequestCommits(client, repo, pullRequest.number);
@@ -184,7 +184,7 @@ async function approveWhenConditionsHold(
 		return skippedOutcome("author-not-trusted");
 	}
 	const commitProblem = await checkCommitCondition(pullRequest, { client, repo, trust });
-	if (commitProblem !== null) {
+	if (commitProblem !== undefined) {
 		return skippedOutcome(commitProblem);
 	}
 	return approvePullRequest(client, {
@@ -202,20 +202,23 @@ async function evaluateApproval(
 		return skippedOutcome("event-out-of-scope");
 	}
 	const stateProblem = checkPullRequestState(payload.pull_request, payload.repository);
-	if (stateProblem !== null) {
+	if (stateProblem !== undefined) {
 		return skippedOutcome(stateProblem);
 	}
-	if (payload.installation === undefined || payload.installation === null) {
+	/* Truthiness rather than a comparison per spelling: absent, `null`, and malformed all reach here
+	 * as an installation that is not there (src/types.ts), and the value is an object when it is. */
+	if (!payload.installation) {
 		return errorOutcome("missing-installation");
 	}
-	return approveWhenConditionsHold(payload, credentials, payload.installation.id);
+	const outcome = await approveWhenConditionsHold(payload, credentials, payload.installation.id);
+	return outcome;
 }
 /**
  * The pipeline, with the one failure its own calls raise mapped onto an outcome (SPEC.md §9): every
  * endpoint in src/github.ts throws GithubApiError, so this is where that contract is read. Anything
  * else thrown travels on to the entry point's catch-all, which owns §9's "any other thrown failure".
  */
-export async function runPipeline(
+async function runPipeline(
 	payload: PullRequestEventPayload,
 	credentials: AppCredentials,
 ): Promise<Outcome> {
@@ -228,3 +231,6 @@ export async function runPipeline(
 		throw error;
 	}
 }
+
+export { parsePullRequestEvent, parsePullRequestEventBody, runPipeline };
+export type { PayloadValidation };

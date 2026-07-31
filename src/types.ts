@@ -62,18 +62,27 @@ declare global {
 /** A bare `{ id }` reference: the installation (SPEC.md §7) and the head repository (§3 cond. 2). */
 const idRefSchema = pipe(object({ id: number() }), readonly());
 
+/**
+ * Absence itself, so it can be handed to a schema combinator that takes a value: a bare
+ * `undefined` argument is not a spelling the lint gate leaves available
+ * (`unicorn/no-useless-undefined`), and `null` is not one this codebase writes
+ * (`unicorn/no-null`) — it is what GitHub sends, not how absence is said here.
+ */
+const ABSENT = undefined;
+
 /** A GitHub account (user, bot, or organization) as embedded in payloads; `type` is
  * "User" | "Bot" | "Organization", kept open because GitHub may add kinds. */
 const accountSchema = pipe(object({ id: number(), login: string(), type: string() }), readonly());
-export type GithubAccount = InferOutput<typeof accountSchema>;
+type GithubAccount = InferOutput<typeof accountSchema>;
 /** Null when the commit email or the review author does not map to a GitHub account. */
 const nullableAccountSchema = nullable(accountSchema);
 
-/* A deleted head repository is absent rather than malformed, so `null` and an absent key alike
- * validate to null (SPEC.md §3 condition 2), while a value of any other shape fails validation.
- * That is what keeps "the head repository is gone" — a skip — apart from "this body is not a
- * pull_request payload" — a 500. */
-const headRepoSchema = nullish(idRefSchema, null);
+/* A deleted head repository is absent rather than malformed, so the `null` GitHub sends and an
+ * absent key alike validate (SPEC.md §3 condition 2), while a value of any other shape fails
+ * validation. That is what keeps "the head repository is gone" — a skip — apart from "this body is
+ * not a pull_request payload" — a 500. Both spellings of absence are left as they arrived rather
+ * than normalized onto one: the reader tests for a repository, not for which of the two it was. */
+const headRepoSchema = nullish(idRefSchema);
 const headSchema = pipe(object({ repo: headRepoSchema, sha: string() }), readonly());
 
 const pullRequestSchema = pipe(
@@ -89,7 +98,7 @@ const pullRequestSchema = pipe(
 	}),
 	readonly(),
 );
-export type EventPullRequest = InferOutput<typeof pullRequestSchema>;
+type EventPullRequest = InferOutput<typeof pullRequestSchema>;
 
 const repositorySchema = pipe(
 	object({
@@ -101,7 +110,7 @@ const repositorySchema = pipe(
 	}),
 	readonly(),
 );
-export type EventRepository = InferOutput<typeof repositorySchema>;
+type EventRepository = InferOutput<typeof repositorySchema>;
 
 /* Absent and malformed alike leave the payload valid with no installation (SPEC.md §9): such a
  * delivery fails as missing-installation, which says the App is misconfigured, rather than as
@@ -109,10 +118,10 @@ export type EventRepository = InferOutput<typeof repositorySchema>;
  * settles the malformed half, `optional` the absent one — and `optional` without a default,
  * because a default would make the key required in the inferred type and so break the
  * projection check below against a payload definition where it is optional. */
-const installationSchema = optional(fallback(nullable(idRefSchema), null));
+const installationSchema = optional(fallback(nullish(idRefSchema), ABSENT));
 
 /** The `pull_request` webhook payload subset (SPEC.md §3, §4). */
-export const pullRequestEventSchema = pipe(
+const pullRequestEventSchema = pipe(
 	object({
 		action: string(),
 		installation: installationSchema,
@@ -121,26 +130,26 @@ export const pullRequestEventSchema = pipe(
 	}),
 	readonly(),
 );
-export type PullRequestEventPayload = InferOutput<typeof pullRequestEventSchema>;
+type PullRequestEventPayload = InferOutput<typeof pullRequestEventSchema>;
 
 /* GET /app subset (SPEC.md §3 cond. 5): the App's bot login is "<slug>[bot]", so an empty slug
  * would derive the login "[bot]" and match reviews by no one. The non-emptiness is part of the
  * shape rather than a check at the call site, so the one schema states what the response must be. */
 const slugSchema = pipe(string(), nonEmpty());
-export const appSchema = pipe(object({ slug: slugSchema }), readonly());
+const appSchema = pipe(object({ slug: slugSchema }), readonly());
 
 /** `GET /repos/{owner}/{repo}/pulls/{n}` subset for the live check (SPEC.md §3.3). */
 const liveHeadSchema = pipe(object({ sha: string() }), readonly());
-export const livePullRequestSchema = pipe(
+const livePullRequestSchema = pipe(
 	object({ draft: boolean(), head: liveHeadSchema, state: string() }),
 	readonly(),
 );
-export type LivePullRequest = InferOutput<typeof livePullRequestSchema>;
+type LivePullRequest = InferOutput<typeof livePullRequestSchema>;
 
 /** `GET /repos/{owner}/{repo}/pulls/{n}/commits` item subset (SPEC.md §3.2). */
 const verificationSchema = pipe(object({ verified: boolean() }), readonly());
 const commitDetailSchema = pipe(object({ verification: nullable(verificationSchema) }), readonly());
-export const pullRequestCommitSchema = pipe(
+const pullRequestCommitSchema = pipe(
 	object({
 		author: nullableAccountSchema,
 		commit: commitDetailSchema,
@@ -149,11 +158,11 @@ export const pullRequestCommitSchema = pipe(
 	}),
 	readonly(),
 );
-export type PullRequestCommit = InferOutput<typeof pullRequestCommitSchema>;
+type PullRequestCommit = InferOutput<typeof pullRequestCommitSchema>;
 
 /** `GET /repos/{owner}/{repo}/pulls/{n}/reviews` item subset (SPEC.md §3 cond. 5). */
 const commitIdSchema = nullable(string());
-export const pullRequestReviewSchema = pipe(
+const pullRequestReviewSchema = pipe(
 	object({
 		commit_id: commitIdSchema,
 		/** "APPROVED" | "DISMISSED" | "CHANGES_REQUESTED" | "COMMENTED" | ... */
@@ -162,10 +171,10 @@ export const pullRequestReviewSchema = pipe(
 	}),
 	readonly(),
 );
-export type PullRequestReview = InferOutput<typeof pullRequestReviewSchema>;
+type PullRequestReview = InferOutput<typeof pullRequestReviewSchema>;
 
 /** `GET /orgs/{org}/memberships/{username}` subset (SPEC.md §3.1). */
-export const orgMembershipSchema = pipe(
+const orgMembershipSchema = pipe(
 	object({
 		/** "admin" | "member" | "billing_manager" */
 		role: string(),
@@ -174,7 +183,7 @@ export const orgMembershipSchema = pipe(
 	}),
 	readonly(),
 );
-export type OrgMembership = InferOutput<typeof orgMembershipSchema>;
+type OrgMembership = InferOutput<typeof orgMembershipSchema>;
 
 /** Resolves only when Payload is assignable to Subset; used as a compile-time assertion. */
 type ProjectionOf<Payload extends Subset, Subset> = Payload;
@@ -187,4 +196,24 @@ type ProjectionOf<Payload extends Subset, Subset> = Payload;
  * drifts, this alias stops compiling. The runtime still validates fail closed
  * (src/pipeline.ts), because a verified signature proves origin, not shape.
  */
-export type PullRequestEventContract = ProjectionOf<PullRequestEvent, PullRequestEventPayload>;
+type PullRequestEventContract = ProjectionOf<PullRequestEvent, PullRequestEventPayload>;
+
+export {
+	appSchema,
+	livePullRequestSchema,
+	orgMembershipSchema,
+	pullRequestCommitSchema,
+	pullRequestEventSchema,
+	pullRequestReviewSchema,
+};
+export type {
+	EventPullRequest,
+	EventRepository,
+	GithubAccount,
+	LivePullRequest,
+	OrgMembership,
+	PullRequestCommit,
+	PullRequestEventContract,
+	PullRequestEventPayload,
+	PullRequestReview,
+};

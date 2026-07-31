@@ -11,12 +11,12 @@ import type { Outcome } from "./outcome";
 import type { PullRequestEventPayload } from "./types";
 
 /** SPEC.md §8 flat log entry, accumulating fields as they become known per delivery. */
-export type LogFields = Record<string, number | string>;
+type LogFields = Record<string, number | string>;
 
 /* SPEC.md §8: X-GitHub-Delivery is the only identifier GitHub's Recent Deliveries shows for a
  * failed delivery, so it is what an operator carries into the logs. It is known from the headers
  * alone, which is why every entry starts from this rather than from an empty field set. */
-export function deliveryFields(request: Request): LogFields {
+function deliveryFields(request: Request): LogFields {
 	const log: LogFields = {};
 	const deliveryId = request.headers.get("x-github-delivery");
 	if (deliveryId !== null) {
@@ -25,7 +25,7 @@ export function deliveryFields(request: Request): LogFields {
 	return log;
 }
 
-export function recordPayload(log: LogFields, payload: PullRequestEventPayload): void {
+function recordPayload(log: LogFields, payload: PullRequestEventPayload): void {
 	log["action"] = payload.action;
 	log["headSha"] = payload.pull_request.head.sha;
 	log["prNumber"] = payload.pull_request.number;
@@ -54,7 +54,7 @@ type NoneOf<Field extends never> = Field;
  * a failure path would simply never be logged — an observability gap no type error
  * or test failure would surface.
  */
-export type AllOutcomeFieldsLogged = NoneOf<
+type AllOutcomeFieldsLogged = NoneOf<
 	Exclude<
 		keyof Outcome,
 		"decision" | "errorMessage" | "httpStatus" | (typeof OPTIONAL_LOG_FIELDS)[number]
@@ -69,9 +69,9 @@ export type AllOutcomeFieldsLogged = NoneOf<
  * (SPEC.md §12). Exported for the suite that drives the truncation, which builds
  * a message past the bound out of the bound itself.
  */
-export const MAX_ERROR_MESSAGE_CHARS = 512;
+const MAX_ERROR_MESSAGE_CHARS = 512;
 /** Exactly one structured log entry per handled webhook delivery (SPEC.md §8). */
-export function logOutcome(log: LogFields, outcome: Outcome): void {
+function logOutcome(log: LogFields, outcome: Outcome): void {
 	log["decision"] = outcome.decision;
 	for (const key of OPTIONAL_LOG_FIELDS) {
 		const value = outcome[key];
@@ -86,3 +86,6 @@ export function logOutcome(log: LogFields, outcome: Outcome): void {
 	// oxlint-disable-next-line eslint/no-console -- §8's one entry: `console` is the only sink a Worker has
 	console.log(log);
 }
+
+export { MAX_ERROR_MESSAGE_CHARS, deliveryFields, logOutcome, recordPayload };
+export type { AllOutcomeFieldsLogged, LogFields };

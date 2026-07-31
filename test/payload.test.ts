@@ -9,8 +9,8 @@
 
 import { HEAD_SHA, HUMAN, OWNER, REPOSITORY } from "./fixtures";
 import { describe, expect, it } from "vitest";
-import type { PullRequestEventPayload } from "../src/types";
-import { parsePullRequestEvent } from "../src/pipeline";
+import type { PullRequestEventPayload } from "~src/types";
+import { parsePullRequestEvent } from "~src/pipeline";
 
 function expectedPayload(): PullRequestEventPayload {
 	return {
@@ -28,27 +28,42 @@ function expectedPayload(): PullRequestEventPayload {
 	};
 }
 
-function merged(base: object, overrides: Record<string, unknown>): Record<string, unknown> {
+function merged(
+	base: object,
+	overrides: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
 	const target: Record<string, unknown> = {};
 	return Object.assign(target, base, overrides);
 }
 
-function pr(pullRequestOverrides: Record<string, unknown>): Record<string, unknown> {
+function pr(
+	pullRequestOverrides: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
 	const base = expectedPayload();
 	return merged(base, { pull_request: merged(base.pull_request, pullRequestOverrides) });
 }
 
-/* An absent installation is left absent and a malformed one is replaced with null, which the
+/* An absent installation is left absent and a malformed one is normalized to absent, which the
  * pipeline settles alike as missing-installation (SPEC.md §9) — neither invalidates the body. */
 const WITHOUT_INSTALLATION = {
 	action: "opened",
 	pull_request: expectedPayload().pull_request,
 	repository: expectedPayload().repository,
 };
-const NULL_INSTALLATION = merged(expectedPayload(), { installation: null });
+const ABSENT_INSTALLATION = merged(expectedPayload(), { installation: undefined });
+/* The two spellings of a gone head repository stay apart: `null` is what GitHub sent and is
+ * carried through as sent, an absent key stays an absent key. The reader tests for a repository
+ * rather than for which of the two it was (src/decision.ts). */
 const NULL_HEAD_REPO = pr({ head: { repo: null, sha: HEAD_SHA } });
+const ABSENT_HEAD_REPO = pr({ head: { sha: HEAD_SHA } });
 
-const PARSE_OK_CASES = [
+interface ParseOkCase {
+	readonly expected: unknown;
+	readonly name: string;
+	readonly payload: unknown;
+}
+
+const PARSE_OK_CASES: readonly ParseOkCase[] = [
 	{ expected: expectedPayload(), name: "a fully populated payload", payload: expectedPayload() },
 	{
 		expected: expectedPayload(),
@@ -57,23 +72,30 @@ const PARSE_OK_CASES = [
 	},
 	{ expected: WITHOUT_INSTALLATION, name: "installation absent", payload: WITHOUT_INSTALLATION },
 	{
-		expected: NULL_INSTALLATION,
+		expected: ABSENT_INSTALLATION,
 		name: "installation id not numeric",
 		payload: merged(expectedPayload(), { installation: { id: "12" } }),
 	},
 	{
-		expected: NULL_INSTALLATION,
+		expected: ABSENT_INSTALLATION,
 		name: "installation not an object",
 		payload: merged(expectedPayload(), { installation: "x" }),
 	},
 	{ expected: NULL_HEAD_REPO, name: "head repo null", payload: NULL_HEAD_REPO },
-	{ expected: NULL_HEAD_REPO, name: "head repo absent", payload: pr({ head: { sha: HEAD_SHA } }) },
+	{ expected: ABSENT_HEAD_REPO, name: "head repo absent", payload: ABSENT_HEAD_REPO },
 ];
 
 /* Every row states the path §8's `field` carries for it. A body that is not an object at all
  * fails at the root, which has no field to name, so those rows expect no path. An array is an
  * object as far as the schema is concerned, so it fails on the first key it is missing. */
-const MALFORMED_PAYLOADS = [
+interface MalformedCase {
+	/** SPEC.md §8's dot path, absent for a body that fails at the root. */
+	readonly field: string | undefined;
+	readonly name: string;
+	readonly payload: unknown;
+}
+
+const MALFORMED_PAYLOADS: readonly MalformedCase[] = [
 	{ field: undefined, name: "payload not an object", payload: "not-an-object" },
 	{ field: undefined, name: "payload null", payload: null },
 	{ field: "action", name: "payload an array", payload: [expectedPayload()] },
@@ -155,19 +177,23 @@ const MALFORMED_PAYLOADS = [
 ];
 
 describe("webhook payload validation", () => {
-	it("builds a new object instead of returning the input", () => {
+	it("builds a new object instead of returning the input", { timeout: 5000 }, () => {
 		expect.hasAssertions();
 		const payload = expectedPayload();
 		expect(parsePullRequestEvent(payload).payload).not.toBe(payload);
 	});
 
-	it.each(PARSE_OK_CASES)("accepts $name", ({ expected, payload }) => {
+	it.each(PARSE_OK_CASES)("accepts $name", { timeout: 5000 }, ({ expected, payload }) => {
 		expect.hasAssertions();
 		expect(parsePullRequestEvent(payload)).toStrictEqual({ payload: expected });
 	});
 
-	it.each(MALFORMED_PAYLOADS)("rejects $name, naming $field", ({ field, payload }) => {
-		expect.hasAssertions();
-		expect(parsePullRequestEvent(payload)).toStrictEqual({ field, payload: null });
-	});
+	it.each(MALFORMED_PAYLOADS)(
+		"rejects $name, naming $field",
+		{ timeout: 5000 },
+		({ field, payload }) => {
+			expect.hasAssertions();
+			expect(parsePullRequestEvent(payload)).toStrictEqual({ field });
+		},
+	);
 });

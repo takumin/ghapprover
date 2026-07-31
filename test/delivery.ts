@@ -23,25 +23,25 @@ import {
 } from "./github-api";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { expect, onTestFinished, vi } from "vitest";
-import worker, { MAX_BODY_BYTES } from "../src/index";
-import type { GithubAccount } from "../src/types";
-import { HTTP_OK } from "../src/http-status";
+import worker, { MAX_BODY_BYTES } from "~src/index";
+import type { GithubAccount } from "~src/types";
+import { HTTP_OK } from "~src/http-status";
 import type { MockInstance } from "vitest";
 import type { PlannedRoute } from "./fetch-stub";
-import { SIGNATURE_HEADER } from "../src/webhook";
+import { SIGNATURE_HEADER } from "~src/webhook";
 import { sign } from "@octokit/webhooks-methods";
 
 /** One byte past the cap the Worker enforces, taken from the cap itself (SPEC.md §9). */
-export const OVERSIZED_BODY_BYTES = MAX_BODY_BYTES + 1;
+const OVERSIZED_BODY_BYTES = MAX_BODY_BYTES + 1;
 
-export const WEBHOOK_URL = "http://example.com/webhook";
-export const SECRET = "test-secret";
-export const DELIVERY_ID = "delivery-42";
+const WEBHOOK_URL = "http://example.com/webhook";
+const SECRET = "test-secret";
+const DELIVERY_ID = "delivery-42";
 
-export const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT };
+const OWN_APPROVAL = { commit_id: HEAD_SHA, state: "APPROVED", user: APP_BOT };
 
 /** The env a delivery runs against; a case about the configuration itself overrides the one secret it is about. */
-export async function makeEnv(overrides: Partial<Env> = {}): Promise<Env> {
+async function makeEnv(overrides: Partial<Env> = {}): Promise<Env> {
 	const env: Env = {
 		GITHUB_APP_ID: APP_ID,
 		GITHUB_APP_PRIVATE_KEY: await privateKeyPemOnce(),
@@ -63,7 +63,7 @@ interface PayloadOverrides {
 	readonly user?: GithubAccount;
 }
 
-export function buildPayload(overrides: PayloadOverrides = {}): string {
+function buildPayload(overrides: PayloadOverrides = {}): string {
 	const {
 		action = "opened",
 		commits = 1,
@@ -99,7 +99,7 @@ interface PipelineRoutesOptions {
 }
 
 /** The GET routes every full pipeline run consumes after token issuance. */
-export function pipelineRoutes(options: PipelineRoutesOptions): PlannedRoute[] {
+function pipelineRoutes(options: PipelineRoutesOptions): PlannedRoute[] {
 	const { commits, liveSha = HEAD_SHA, owner = OWNER, reviews } = options;
 	return [
 		commitsRoute(commits, owner),
@@ -109,7 +109,7 @@ export function pipelineRoutes(options: PipelineRoutesOptions): PlannedRoute[] {
 	];
 }
 
-export function happyRoutes(): PlannedRoute[] {
+function happyRoutes(): PlannedRoute[] {
 	return [
 		installTokenRoute(),
 		...pipelineRoutes({ commits: [commitItem()], reviews: [] }),
@@ -117,7 +117,7 @@ export function happyRoutes(): PlannedRoute[] {
 	];
 }
 
-export async function dispatch(request: Request, env?: Env): Promise<Response> {
+async function dispatch(request: Request, env?: Env): Promise<Response> {
 	const ctx = createExecutionContext();
 	const response = await worker.fetch(request, env ?? (await makeEnv()), ctx);
 	await waitOnExecutionContext(ctx);
@@ -125,44 +125,37 @@ export async function dispatch(request: Request, env?: Env): Promise<Response> {
 }
 
 /** What GitHub sends besides the signature; stated apart from it for the case about a delivery carrying none. */
-export function unsignedDeliveryHeaders(eventName = "pull_request"): Record<string, string> {
+function unsignedDeliveryHeaders(eventName = "pull_request"): Record<string, string> {
 	return { "x-github-delivery": DELIVERY_ID, "x-github-event": eventName };
 }
 /** The three headers GitHub sends on every delivery; cases vary the signature and the event. */
-export function deliveryHeaders(
-	signature: string,
-	eventName = "pull_request",
-): Record<string, string> {
+function deliveryHeaders(signature: string, eventName = "pull_request"): Record<string, string> {
 	const headers = unsignedDeliveryHeaders(eventName);
 	return Object.assign(headers, { [SIGNATURE_HEADER]: signature });
 }
 /** The POST a delivery arrives as, however the case arrived at its headers. */
-export function deliveryRequest(body: string, headers: Record<string, string>): Request {
+function deliveryRequest(body: string, headers: Readonly<Record<string, string>>): Request {
 	return new Request(WEBHOOK_URL, { body, headers, method: "POST" });
 }
 /** The same POST correctly signed over its own body; a case adds the headers GitHub would have sent with it. */
-export async function signedDelivery(
+async function signedDelivery(
 	body: string,
-	extraHeaders: Record<string, string> = {},
+	extraHeaders: Readonly<Record<string, string>> = {},
 	eventName = "pull_request",
 ): Promise<Request> {
 	const headers = deliveryHeaders(await sign(SECRET, body), eventName);
 	return deliveryRequest(body, Object.assign(headers, extraHeaders));
 }
 /** For deliveries rejected before verification runs, so the digest is never reached. */
-export const UNCHECKED_SIGNATURE = "sha256=00";
+const UNCHECKED_SIGNATURE = "sha256=00";
 /* A streamed delivery body, which carries no Content-Length. duplex is required by the Fetch
  * spec for a stream body and is passed as an object literal because RequestInit omits it. */
-export function streamedDelivery(body: ReadableStream<Uint8Array>, signature: string): Request {
+function streamedDelivery(body: ReadableStream<Uint8Array>, signature: string): Request {
 	const init = { body, duplex: "half", headers: deliveryHeaders(signature), method: "POST" };
 	return new Request(WEBHOOK_URL, init);
 }
 
-export async function postSigned(
-	body: string,
-	eventName = "pull_request",
-	env?: Env,
-): Promise<Response> {
+async function postSigned(body: string, eventName = "pull_request", env?: Env): Promise<Response> {
 	return dispatch(await signedDelivery(body, {}, eventName), env);
 }
 
@@ -170,7 +163,7 @@ export async function postSigned(
  * and restored when the test finishes rather than by the test itself: a suite that asserted the
  * entry and forgot the restore would leak the spy into the next one, and the failure would land
  * wherever that happened to matter. Each caller is left stating only the entry it expects. */
-export function captureLog(): MockInstance<typeof console.log> {
+function captureLog(): MockInstance<typeof console.log> {
 	const spy = vi.spyOn(console, "log");
 	onTestFinished(() => {
 		spy.mockRestore();
@@ -179,7 +172,7 @@ export function captureLog(): MockInstance<typeof console.log> {
 }
 
 interface ExpectedReply {
-	readonly body: Record<string, string>;
+	readonly body: Readonly<Record<string, string>>;
 	readonly status: number;
 }
 
@@ -197,16 +190,36 @@ async function expectReply(response: Response, expected: ExpectedReply): Promise
  * a status §9 never gives it and still pass. An error is the one decision whose status varies by
  * reason, which is why that one alone is named at the call.
  */
-export async function expectApproved(response: Response): Promise<void> {
-	return expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
+async function expectApproved(response: Response): Promise<void> {
+	await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
 }
-export async function expectSkipped(response: Response, reason: string): Promise<void> {
-	return expectReply(response, { body: { decision: "skipped", reason }, status: HTTP_OK });
+async function expectSkipped(response: Response, reason: string): Promise<void> {
+	await expectReply(response, { body: { decision: "skipped", reason }, status: HTTP_OK });
 }
-export async function expectError(
-	response: Response,
-	reason: string,
-	status: number,
-): Promise<void> {
-	return expectReply(response, { body: { decision: "error", reason }, status });
+async function expectError(response: Response, reason: string, status: number): Promise<void> {
+	await expectReply(response, { body: { decision: "error", reason }, status });
 }
+
+export {
+	DELIVERY_ID,
+	OVERSIZED_BODY_BYTES,
+	OWN_APPROVAL,
+	SECRET,
+	UNCHECKED_SIGNATURE,
+	WEBHOOK_URL,
+	buildPayload,
+	captureLog,
+	deliveryHeaders,
+	deliveryRequest,
+	dispatch,
+	expectApproved,
+	expectError,
+	expectSkipped,
+	happyRoutes,
+	makeEnv,
+	pipelineRoutes,
+	postSigned,
+	signedDelivery,
+	streamedDelivery,
+	unsignedDeliveryHeaders,
+};

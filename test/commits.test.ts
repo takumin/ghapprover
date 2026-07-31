@@ -5,17 +5,17 @@
  * GitHub API (SPEC.md §12).
  */
 
-import type { GithubAccount, PullRequestCommit } from "../src/types";
+import type { GithubAccount, PullRequestCommit } from "~src/types";
 import {
 	MAX_VERIFIABLE_COMMITS,
 	checkCommit,
 	checkCommitCount,
 	commitPrincipals,
 	precheckCommitCount,
-} from "../src/commits";
+} from "~src/commits";
 import { WEB_FLOW_LOOKALIKE, WEB_FLOW_USER } from "./fixtures";
 import { describe, expect, it } from "vitest";
-import { accountKey } from "../src/account";
+import { accountKey } from "~src/account";
 
 const ALICE: GithubAccount = { id: 101, login: "alice", type: "User" };
 const BOB: GithubAccount = { id: 102, login: "bob", type: "User" };
@@ -44,18 +44,22 @@ function commit(overrides: CommitOverrides = {}): PullRequestCommit {
 
 interface CommitCase {
 	readonly entry: PullRequestCommit;
-	readonly expected: string | null;
+	readonly expected: string | undefined;
 	readonly name: string;
 }
 
 const COMMIT_CASES: readonly CommitCase[] = [
-	{ entry: commit(), expected: null, name: "a verified trusted commit" },
+	{ entry: commit(), expected: undefined, name: "a verified trusted commit" },
 	{
 		entry: commit({ author: BOB, committer: BOB }),
-		expected: null,
+		expected: undefined,
 		name: "the author doubling as committer",
 	},
-	{ entry: commit({ committer: WEB_FLOW_USER }), expected: null, name: "a web-flow committer" },
+	{
+		entry: commit({ committer: WEB_FLOW_USER }),
+		expected: undefined,
+		name: "a web-flow committer",
+	},
 	{
 		entry: commit({ committer: WEB_FLOW_LOOKALIKE }),
 		expected: "untrusted-commit",
@@ -111,14 +115,14 @@ const COMMIT_CASES: readonly CommitCase[] = [
 
 interface CommitCountCase {
 	readonly declared: number;
-	readonly expected: string | null;
+	readonly expected: string | undefined;
 	readonly fetched: number;
 }
 
 const COMMIT_COUNT_CASES: readonly CommitCountCase[] = [
 	{ declared: 2, expected: "commit-count-mismatch", fetched: 1 },
 	{ declared: 1, expected: "commit-count-mismatch", fetched: 2 },
-	{ declared: 2, expected: null, fetched: 2 },
+	{ declared: 2, expected: undefined, fetched: 2 },
 ];
 
 /* The principals are derived from mapped accounts: an unmapped author or committer is settled by
@@ -156,7 +160,7 @@ describe("commit principal collection", () => {
 			expected: [ALICE, ALICE_LOOKALIKE],
 			name: "both accounts when the committer only shares the author's login",
 		},
-	])("collects $name", ({ author, committer, expected }) => {
+	] as const)("collects $name", { timeout: 5000 }, ({ author, committer, expected }) => {
 		expect.hasAssertions();
 		expect(commitPrincipals(author, committer)).toStrictEqual(expected);
 	});
@@ -165,18 +169,23 @@ describe("commit principal collection", () => {
 describe("commit count precheck", () => {
 	it.each([
 		{ declared: 0, expected: "no-commits" },
-		{ declared: 1, expected: null },
-		{ declared: MAX_VERIFIABLE_COMMITS, expected: null },
+		{ declared: 1, expected: undefined },
+		{ declared: MAX_VERIFIABLE_COMMITS, expected: undefined },
 		{ declared: MAX_VERIFIABLE_COMMITS + 1, expected: "too-many-commits" },
-	])("returns $expected for $declared declared commits", ({ declared, expected }) => {
-		expect.hasAssertions();
-		expect(precheckCommitCount(declared)).toBe(expected);
-	});
+	] as const)(
+		"returns $expected for $declared declared commits",
+		{ timeout: 5000 },
+		({ declared, expected }) => {
+			expect.hasAssertions();
+			expect(precheckCommitCount(declared)).toBe(expected);
+		},
+	);
 });
 
 describe("fetched commit count", () => {
 	it.each(COMMIT_COUNT_CASES)(
 		"returns $expected for $fetched fetched of $declared declared",
+		{ timeout: 5000 },
 		({ declared, expected, fetched }) => {
 			expect.hasAssertions();
 			expect(checkCommitCount(fetched, declared)).toBe(expected);
@@ -185,8 +194,12 @@ describe("fetched commit count", () => {
 });
 
 describe("commit verification gate", () => {
-	it.each(COMMIT_CASES)("returns $expected for $name", async ({ entry, expected }) => {
-		expect.hasAssertions();
-		await expect(checkCommit(entry, isTrustedFixture)).resolves.toBe(expected);
-	});
+	it.each(COMMIT_CASES)(
+		"returns $expected for $name",
+		{ timeout: 5000 },
+		async ({ entry, expected }) => {
+			expect.hasAssertions();
+			await expect(checkCommit(entry, isTrustedFixture)).resolves.toBe(expected);
+		},
+	);
 });

@@ -17,8 +17,8 @@ import {
 	membershipUrl,
 } from "./github-api";
 import { describe, expect, it } from "vitest";
-import type { GithubAccount } from "../src/types";
-import { MAX_VERIFIABLE_COMMITS } from "../src/commits";
+import type { GithubAccount } from "~src/types";
+import { MAX_VERIFIABLE_COMMITS } from "~src/commits";
 import { installFetchMock } from "./fetch-stub";
 
 /* Two ordinary untrusted commit principals, stated here rather than with the shared account
@@ -33,8 +33,9 @@ describe("commit conditions", () => {
 	it.each([
 		{ commits: 0, name: "is zero", reason: "no-commits" },
 		{ commits: MAX_VERIFIABLE_COMMITS + 1, name: "exceeds the cap", reason: "too-many-commits" },
-	])(
+	] as const)(
 		"skips when the declared commit count $name, with no api call",
+		{ timeout: 5000 },
 		async ({ commits, reason }) => {
 			expect.hasAssertions();
 			const session = installFetchMock([]);
@@ -44,7 +45,7 @@ describe("commit conditions", () => {
 		},
 	);
 
-	it("skips on a commit count mismatch", async () => {
+	it("skips on a commit count mismatch", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([installTokenRoute(), commitsRoute([commitItem()])]);
 		const response = await postSigned(buildPayload({ commits: 2 }));
@@ -62,7 +63,7 @@ describe("commit verification", () => {
 			name: "a commit from an untrusted author",
 			reason: "untrusted-commit",
 		},
-	])("skips $name", async ({ commit, reason }) => {
+	] as const)("skips $name", { timeout: 5000 }, async ({ commit, reason }) => {
 		expect.hasAssertions();
 		const session = installFetchMock([installTokenRoute(), commitsRoute([commitItem(commit)])]);
 		const response = await postSigned(buildPayload());
@@ -70,20 +71,24 @@ describe("commit verification", () => {
 		session.assertDone();
 	});
 
-	it("stops before any principal lookup when the first commit is unverified", async () => {
-		expect.hasAssertions();
-		const session = installFetchMock([
-			installTokenRoute(),
-			membershipAdminRoute(OWNER),
-			commitsRoute(
-				[commitItem({ author: STRANGER, verified: false }), commitItem({ author: STRANGER })],
-				ORG,
-			),
-		]);
-		const response = await postSigned(buildPayload({ commits: 2, repoOwner: ORG }));
-		await expectSkipped(response, "unverified-commit");
-		session.assertDone();
-	});
+	it(
+		"stops before any principal lookup when the first commit is unverified",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const session = installFetchMock([
+				installTokenRoute(),
+				membershipAdminRoute(OWNER),
+				commitsRoute(
+					[commitItem({ author: STRANGER, verified: false }), commitItem({ author: STRANGER })],
+					ORG,
+				),
+			]);
+			const response = await postSigned(buildPayload({ commits: 2, repoOwner: ORG }));
+			await expectSkipped(response, "unverified-commit");
+			session.assertDone();
+		},
+	);
 });
 
 describe("principal trust resolution", () => {
@@ -91,30 +96,40 @@ describe("principal trust resolution", () => {
 	 * resolves renovate[bot] to trusted without a lookup; a commit author reusing that login
 	 * under another id must still be classified on its own, or the §3.1 id pinning is dead
 	 * weight — every check upstream of the cache already pins it. */
-	it("does not extend a trusted verdict to another id on the same login", async () => {
-		expect.hasAssertions();
-		const session = installFetchMock([
-			installTokenRoute(),
-			commitsRoute([commitItem({ author: RENOVATE_WRONG_ID, committer: WEB_FLOW_USER })]),
-		]);
-		const response = await postSigned(buildPayload({ user: RENOVATE }));
-		await expectSkipped(response, "untrusted-commit");
-		session.assertDone();
-	});
+	it(
+		"does not extend a trusted verdict to another id on the same login",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const session = installFetchMock([
+				installTokenRoute(),
+				commitsRoute([commitItem({ author: RENOVATE_WRONG_ID, committer: WEB_FLOW_USER })]),
+			]);
+			const response = await postSigned(buildPayload({ user: RENOVATE }));
+			await expectSkipped(response, "untrusted-commit");
+			session.assertDone();
+		},
+	);
 
 	/* SPEC.md §4: the subrequest budget is why lookups are lazy and sequential, so once one
 	 * principal settles the commit there is nothing a second lookup could change. */
-	it("stops resolving a commit's principals at the first untrusted one", async () => {
-		expect.hasAssertions();
-		const session = installFetchMock([
-			installTokenRoute(),
-			membershipAdminRoute(OWNER),
-			commitsRoute([commitItem({ author: STRANGER, committer: OTHER_STRANGER })], ORG),
-			membershipMissingRoute(STRANGER),
-		]);
-		const response = await postSigned(buildPayload({ repoOwner: ORG }));
-		await expectSkipped(response, "untrusted-commit");
-		expect(session.requests.map((entry) => entry.url)).not.toContain(membershipUrl(OTHER_STRANGER));
-		session.assertDone();
-	});
+	it(
+		"stops resolving a commit's principals at the first untrusted one",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const session = installFetchMock([
+				installTokenRoute(),
+				membershipAdminRoute(OWNER),
+				commitsRoute([commitItem({ author: STRANGER, committer: OTHER_STRANGER })], ORG),
+				membershipMissingRoute(STRANGER),
+			]);
+			const response = await postSigned(buildPayload({ repoOwner: ORG }));
+			await expectSkipped(response, "untrusted-commit");
+			expect(session.requests.map((entry) => entry.url)).not.toContain(
+				membershipUrl(OTHER_STRANGER),
+			);
+			session.assertDone();
+		},
+	);
 });

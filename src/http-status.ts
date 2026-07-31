@@ -5,9 +5,18 @@
  * is one that can be given a different name, or a different number, in each of them.
  */
 
-export const HTTP_OK = 200;
-export const HTTP_UNAUTHORIZED = 401;
-export const HTTP_NOT_FOUND = 404;
-export const HTTP_PAYLOAD_TOO_LARGE = 413;
-export const HTTP_UNPROCESSABLE_ENTITY = 422;
-export const HTTP_INTERNAL_ERROR = 500;
+const HTTP_OK = 200;
+const HTTP_UNAUTHORIZED = 401;
+const HTTP_NOT_FOUND = 404;
+const HTTP_PAYLOAD_TOO_LARGE = 413;
+const HTTP_UNPROCESSABLE_ENTITY = 422;
+const HTTP_INTERNAL_ERROR = 500;
+
+export {
+	HTTP_INTERNAL_ERROR,
+	HTTP_NOT_FOUND,
+	HTTP_OK,
+	HTTP_PAYLOAD_TOO_LARGE,
+	HTTP_UNAUTHORIZED,
+	HTTP_UNPROCESSABLE_ENTITY,
+};

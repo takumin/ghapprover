@@ -5,9 +5,10 @@
  */
 
 import { AUTOFIX_CI, HUMAN, ORG, OWNER, RENOVATE, RENOVATE_WRONG_ID, allowedBot } from "./fixtures";
-import type { GithubAccount, OrgMembership } from "../src/types";
-import { classifyPrincipal, isOwnerMembership } from "../src/decision";
+import type { GithubAccount, OrgMembership } from "~src/types";
+import { classifyPrincipal, isOwnerMembership } from "~src/decision";
 import { describe, expect, it } from "vitest";
+import type { TrustEvaluation } from "~src/decision";
 
 /** The owner's login under a different account: §3.1 pins the personal-repo owner's id too. */
 const OWNER_WRONG_ID: GithubAccount = { id: 78, login: OWNER.login, type: "User" };
@@ -22,7 +23,14 @@ const ACTIVE_ADMIN: OrgMembership = { role: "admin", state: "active" };
 const ACTIVE_MEMBER: OrgMembership = { role: "member", state: "active" };
 const PENDING_ADMIN: OrgMembership = { role: "admin", state: "pending" };
 
-const CLASSIFY_CASES = [
+interface ClassifyCase {
+	readonly expected: TrustEvaluation;
+	readonly name: string;
+	readonly owner: GithubAccount;
+	readonly user: GithubAccount;
+}
+
+const CLASSIFY_CASES: readonly ClassifyCase[] = [
 	{
 		expected: "trusted",
 		name: "the personal repository owner",
@@ -110,10 +118,14 @@ const CLASSIFY_CASES = [
 ];
 
 describe("principal classification", () => {
-	it.each(CLASSIFY_CASES)("classifies $name as $expected", ({ expected, owner, user }) => {
-		expect.hasAssertions();
-		expect(classifyPrincipal(user, owner)).toBe(expected);
-	});
+	it.each(CLASSIFY_CASES)(
+		"classifies $name as $expected",
+		{ timeout: 5000 },
+		({ expected, owner, user }) => {
+			expect.hasAssertions();
+			expect(classifyPrincipal(user, owner)).toBe(expected);
+		},
+	);
 });
 
 describe("org owner membership", () => {
@@ -121,8 +133,8 @@ describe("org owner membership", () => {
 		{ expected: true, membership: ACTIVE_ADMIN, name: "an active admin" },
 		{ expected: false, membership: ACTIVE_MEMBER, name: "an active regular member" },
 		{ expected: false, membership: PENDING_ADMIN, name: "a pending admin" },
-		{ expected: false, membership: null, name: "a missing membership (404)" },
-	])("returns $expected for $name", ({ expected, membership }) => {
+		{ expected: false, membership: undefined, name: "a missing membership (404)" },
+	] as const)("returns $expected for $name", { timeout: 5000 }, ({ expected, membership }) => {
 		expect.hasAssertions();
 		expect(isOwnerMembership(membership)).toBe(expected);
 	});

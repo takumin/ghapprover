@@ -14,10 +14,10 @@
  */
 import { vi } from "vitest";
 
-export interface PlannedRoute {
+interface PlannedRoute {
 	readonly body: string;
 	/** Extra response headers (e.g. link); the JSON content-type is implied. */
-	readonly headers?: Record<string, string> | undefined;
+	readonly headers?: Readonly<Record<string, string>> | undefined;
 	readonly method: string;
 	/** How a status-0 route rejects: a network TypeError (default) or an expired timeout signal. */
 	readonly rejectAs?: "timeout";
@@ -25,15 +25,15 @@ export interface PlannedRoute {
 	readonly status: number;
 	readonly url: string;
 }
-export interface RecordedRequest {
+interface RecordedRequest {
 	readonly body: string;
-	readonly headers: Record<string, string>;
+	readonly headers: Readonly<Record<string, string>>;
 	readonly method: string;
 	/** The signal the dispatch carried, to assert the delivery budget reaches every call. */
 	readonly signal: AbortSignal | undefined;
 	readonly url: string;
 }
-export interface FetchMockSession {
+interface FetchMockSession {
 	readonly assertDone: () => void;
 	readonly requests: readonly RecordedRequest[];
 }
@@ -56,6 +56,10 @@ function responseHeaders(route: PlannedRoute): Record<string, string> {
 	return headers;
 }
 
+/* The pending list is taken from, not read: a matched route is spliced out so it is served once,
+ * which is what leaves an unconsumed one for the session to assert on afterwards. The mutation is
+ * the point, so this parameter is the one here that cannot be readonly. */
+// oxlint-disable-next-line typescript/prefer-readonly-parameter-types -- the pending list is consumed in place; see above
 function takeRoute(pending: PlannedRoute[], request: Request): PlannedRoute {
 	const index = pending.findIndex(
 		(route) => route.method === request.method && route.url === request.url,
@@ -74,7 +78,7 @@ function takeRoute(pending: PlannedRoute[], request: Request): PlannedRoute {
 	return route;
 }
 
-export function installFetchMock(routes: readonly PlannedRoute[]): FetchMockSession {
+function installFetchMock(routes: readonly PlannedRoute[]): FetchMockSession {
 	const pending = [...routes];
 	const requests: RecordedRequest[] = [];
 	const handler = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -103,12 +107,12 @@ export function installFetchMock(routes: readonly PlannedRoute[]): FetchMockSess
 	};
 }
 
-export function jsonRoute(route: {
-	headers?: Record<string, string> | undefined;
-	method: string;
-	payload: unknown;
-	status: number;
-	url: string;
+function jsonRoute(route: {
+	readonly headers?: Readonly<Record<string, string>> | undefined;
+	readonly method: string;
+	readonly payload: unknown;
+	readonly status: number;
+	readonly url: string;
 }): PlannedRoute {
 	return {
 		body: JSON.stringify(route.payload),
@@ -120,10 +124,13 @@ export function jsonRoute(route: {
 }
 
 /** The recorded request for a planned URL; absence is a test-setup failure, not an assertion. */
-export function requestByUrl(session: FetchMockSession, url: string): RecordedRequest {
+function requestByUrl(session: FetchMockSession, url: string): RecordedRequest {
 	const found = session.requests.find((entry) => entry.url === url);
 	if (found === undefined) {
 		throw new Error(`request not recorded: ${url}`);
 	}
 	return found;
 }
+
+export { installFetchMock, jsonRoute, requestByUrl };
+export type { FetchMockSession, PlannedRoute, RecordedRequest };

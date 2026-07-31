@@ -15,7 +15,7 @@ import { verify } from "@octokit/webhooks-methods";
  * spelling it out — a header spelled twice is one that can be renamed on one side
  * and leave the other silently verifying nothing.
  */
-export const SIGNATURE_HEADER = "x-hub-signature-256";
+const SIGNATURE_HEADER = "x-hub-signature-256";
 
 /** "sha256=" followed by exactly the 64 hex chars of an HMAC-SHA256 digest. */
 const SIGNATURE_PATTERN = /^sha256=[0-9a-f]{64}$/iu;
@@ -26,7 +26,7 @@ const SIGNATURE_PATTERN = /^sha256=[0-9a-f]{64}$/iu;
  * any crypto work. Never throws: verification failures of any kind yield
  * false, which the handler maps to 401 (SPEC.md §9).
  */
-export async function verifyWebhookSignature(
+async function verifyWebhookSignature(
 	secret: string,
 	body: string,
 	signatureHeader: string | null,
@@ -40,3 +40,5 @@ export async function verifyWebhookSignature(
 		return false;
 	}
 }
+
+export { SIGNATURE_HEADER, verifyWebhookSignature };
