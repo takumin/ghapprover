@@ -6,10 +6,10 @@
  * repository — a route built from its own literals can disagree with the call actually made, and
  * surfaces as the stub's "unplanned request" in whichever suite was not updated, which reads as a
  * routing bug rather than as a stale fixture. What one delivery does with these routes is in
- * test/delivery.ts; the stub that serves them is test/fetch-stub.ts. The App's own credentials —
- * its id and the private key every delivery is signed with — are part of that same App fixture, so
- * they are stated here together rather than in a module of their own that only ever travels with
- * this one.
+ * test/delivery.ts; the stub that serves them is test/fetch-stub.ts. The App's own credentials — its
+ * id and the private key its JWT is signed with (§7) — are part of that same App fixture, so they
+ * are stated here together rather than in a module of their own that only ever travels with this
+ * one.
  */
 
 import { APP_SLUG, HEAD_SHA, ORG, OWNER, PULL_NUMBER, REPOSITORY } from "./fixtures";
