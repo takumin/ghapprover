@@ -10,6 +10,7 @@ import {
 	OVERSIZED_BODY_BYTES,
 	SECRET,
 	UNCHECKED_SIGNATURE,
+	VERSION_ID,
 	WEBHOOK_URL,
 	buildPayload,
 	captureLog,
@@ -34,6 +35,13 @@ import {
 import { describe, expect, it } from "vitest";
 import { installFetchMock } from "./fetch-stub";
 import { sign } from "@octokit/webhooks-methods";
+
+/* SPEC.md §8: the version id comes off the binding rather than the request, so no rejection is
+ * early enough to lack it. Stated once here, leaving each case below to name its own fields. */
+function loggedEntry(fields: Readonly<Record<string, string>>): Record<string, string> {
+	const entry: Record<string, string> = { versionId: VERSION_ID };
+	return Object.assign(entry, fields);
+}
 
 describe("request routing", () => {
 	/** The two halves of the one route check: the method, and the path (SPEC.md §9). */
@@ -74,7 +82,7 @@ describe("request routing", () => {
 			const logSpy = captureLog();
 			installFetchMock([]);
 			await dispatch(new Request(WEBHOOK_URL, { headers, method: "GET" }));
-			expect(logSpy).toHaveBeenCalledWith(expected);
+			expect(logSpy).toHaveBeenCalledWith(loggedEntry(expected));
 		},
 	);
 });
@@ -146,7 +154,7 @@ describe("payload validation", () => {
 		const logSpy = captureLog();
 		installFetchMock([]);
 		await expectError(await postSigned(body), "invalid-payload", HTTP_INTERNAL_ERROR);
-		expect(logSpy).toHaveBeenCalledWith(entry);
+		expect(logSpy).toHaveBeenCalledWith(loggedEntry(entry));
 	});
 
 	it("errors when the installation is absent", { timeout: 5000 }, async () => {
@@ -202,9 +210,13 @@ describe("request body limits", () => {
 		{ timeout: 5000 },
 		async () => {
 			expect.hasAssertions();
+			const logSpy = captureLog();
 			const session = installFetchMock([]);
 			const response = await postSignedWithLength(buildPayload(), OVERSIZED_BODY_BYTES);
 			await expectError(response, "payload-too-large", HTTP_PAYLOAD_TOO_LARGE);
+			/* The rejection no payload field survives: the version id still does, having never
+			 * depended on the body this delivery was refused before reading (SPEC.md §8). */
+			expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({ versionId: VERSION_ID }));
 			expect(session.requests).toHaveLength(0);
 		},
 	);

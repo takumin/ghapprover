@@ -34,6 +34,7 @@ import {
 import {
 	DELIVERY_ID,
 	OWN_APPROVAL,
+	VERSION_ID,
 	buildPayload,
 	captureLog,
 	expectApproved,
@@ -117,6 +118,7 @@ describe("owner approval flow", () => {
 				headSha: HEAD_SHA,
 				prNumber: PULL_NUMBER,
 				repo: REPOSITORY.full_name,
+				versionId: VERSION_ID,
 			}),
 		);
 	});

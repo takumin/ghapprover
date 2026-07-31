@@ -15,13 +15,17 @@ type LogFields = Record<string, number | string>;
 
 /* SPEC.md §8: X-GitHub-Delivery is the only identifier GitHub's Recent Deliveries shows for a
  * failed delivery, so it is what an operator carries into the logs. It is known from the headers
- * alone, which is why every entry starts from this rather than from an empty field set. */
-function deliveryFields(request: Request): LogFields {
+ * alone, which is why every entry starts from this rather than from an empty field set. The
+ * deployed version id is known just as early — it is a binding, not anything the request carries —
+ * and is what says which build produced the entry, so the two are set together and both survive on
+ * a delivery rejected before its body is read. */
+function deliveryFields(request: Request, env: Env): LogFields {
 	const log: LogFields = {};
 	const deliveryId = request.headers.get("x-github-delivery");
 	if (deliveryId !== null) {
 		log["deliveryId"] = deliveryId;
 	}
+	log["versionId"] = env.CF_VERSION_METADATA.id;
 	return log;
 }
 

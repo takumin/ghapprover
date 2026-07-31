@@ -19,6 +19,7 @@ import {
 } from "./github-api";
 import {
 	DELIVERY_ID,
+	VERSION_ID,
 	buildPayload,
 	captureLog,
 	expectError,
@@ -193,6 +194,7 @@ describe("api failure diagnostics without a response", () => {
 				reason: "github-api-error",
 				repo: REPOSITORY.full_name,
 				status: 0,
+				versionId: VERSION_ID,
 			});
 			session.assertDone();
 		},

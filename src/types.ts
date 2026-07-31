@@ -33,13 +33,21 @@ import type { PullRequestEvent } from "@octokit/webhooks-types";
 
 declare global {
 	/**
-	 * Secrets provisioned with `wrangler secret put` (SPEC.md §7).
-	 * `wrangler types` only sees bindings declared in wrangler.jsonc, so the
-	 * secret names are merged here into the `Env` emitted by the generated
-	 * worker-configuration.d.ts (which must stay untouched: CI regenerates it
-	 * and fails on drift).
+	 * What the Workers runtime hands the entry point. `wrangler types` only sees
+	 * bindings declared in wrangler.jsonc, so the secrets of SPEC.md §7 — which
+	 * `wrangler secret put` provisions and the config never names — are merged here
+	 * into the `Env` emitted by the generated worker-configuration.d.ts (which must
+	 * stay untouched: CI regenerates it and fails on drift). The one binding the
+	 * config does declare is restated for the different reason given below.
 	 */
 	interface Env {
+		/**
+		 * The deployed Worker version (SPEC.md §5), whose id every log entry carries (§8).
+		 * Generated already, being declared in wrangler.jsonc; narrowed to readonly here so
+		 * that `Env` stays a value a delivery reads and never one it could write into, which
+		 * is what the three secrets below get from their own modifiers.
+		 */
+		readonly CF_VERSION_METADATA: Readonly<WorkerVersionMetadata>;
 		/** GitHub App ID (or client ID), the `iss` claim of the App JWT. */
 		readonly GITHUB_APP_ID: string;
 		/** GitHub App private key, PKCS#8 PEM (SPEC.md §7); the PKCS#1 PEM GitHub serves is rejected at runtime. */
@@ -50,8 +58,9 @@ declare global {
 
 	// eslint-disable-next-line typescript/no-namespace -- Cloudflare.Env is a namespace member declared by worker-configuration.d.ts; augmenting it has no module-syntax equivalent.
 	namespace Cloudflare {
-		/** Mirror of the secrets for `env` importers (`cloudflare:test` / `cloudflare:workers`). */
+		/** Mirror of the above for `env` importers (`cloudflare:test` / `cloudflare:workers`). */
 		interface Env {
+			readonly CF_VERSION_METADATA: Readonly<WorkerVersionMetadata>;
 			readonly GITHUB_APP_ID: string;
 			readonly GITHUB_APP_PRIVATE_KEY: string;
 			readonly GITHUB_WEBHOOK_SECRET: string;
