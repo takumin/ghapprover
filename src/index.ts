@@ -15,16 +15,20 @@ import type { LogFields } from "./log";
 import type { Outcome } from "./outcome";
 
 /**
- * GitHub caps webhook payloads at 25 MB, so anything larger is not a delivery
- * this Worker could act on. The HMAC covers the raw body, so the body must be
- * buffered before the caller can be authenticated (SPEC.md §4 step 1), and this
- * is the cap on what an unauthenticated caller on the public endpoint can make
- * the Worker hold in memory and hash. Exported for the suite that drives the
- * bound, which states the oversized body as one byte past it rather than as a
- * literal of its own — a literal would keep passing as a body within the cap if
- * this changed.
+ * 2 MiB: the largest payload this Worker will act on, not the 25 MB GitHub
+ * itself accepts. The HMAC covers the raw body, so the body must be buffered
+ * before the caller can be authenticated (SPEC.md §4 step 1), which makes this
+ * the cap on what an unauthenticated caller on the public endpoint can make the
+ * Worker hold in memory and hash — so it belongs at what a delivery needs rather
+ * than at what the contract permits. The number is headroom over the documented
+ * limits of a `pull_request` payload and not a measurement (SPEC.md §4), and it
+ * is a cap of this Worker's own: a body between it and GitHub's is refused with
+ * 413 though GitHub considers it valid (§9). Exported for the suite that drives
+ * the bound, which states the oversized body as one byte past it rather than as
+ * a literal of its own — a literal would keep passing as a body within the cap
+ * if this changed.
  */
-const MAX_BODY_BYTES = 26_214_400;
+const MAX_BODY_BYTES = 2_097_152;
 
 function respond(outcome: Outcome): Response {
 	const { decision, httpStatus: status, reason } = outcome;

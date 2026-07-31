@@ -1,6 +1,6 @@
 /**
  * Getting a delivery's raw bytes in hand, which is where src/index.ts sits between the route check
- * and the signature (SPEC.md §4 step 1): the 25 MB cap, refused on a declared Content-Length before
+ * and the signature (SPEC.md §4 step 1): the 2 MiB cap, refused on a declared Content-Length before
  * a byte is buffered and on the running byte count when a chunked upload declares none (§9), and
  * the catch-all that still answers once and logs once when the body stream fails mid-read (§8).
  * Every case here is about the read itself, so the routing, signature, scoping and payload checks
@@ -39,10 +39,11 @@ async function postSignedWithLength(body: string, contentLength: number): Promis
 	return dispatch(await signedDelivery(body, { "content-length": String(contentLength) }));
 }
 
-/* A chunked upload carries no Content-Length, so the declared-length check cannot see it and
- * the running byte count is what has to stop the read. Chunks are produced on demand, so the
- * stream is cancelled at the cap instead of the test handing over the whole oversized body. */
-const CHUNK_BYTES = 4_194_304;
+/* A chunked upload carries no Content-Length, so the byte count is what has to stop the read,
+ * and each chunk is a fraction of the cap so that count has to accumulate across them. Chunks
+ * are produced on demand, so the stream is cancelled at the cap rather than handed over whole. */
+const CHUNK_COUNT = 8;
+const CHUNK_BYTES = Math.ceil(OVERSIZED_BODY_BYTES / CHUNK_COUNT);
 function oversizedChunkedRequest(): Request {
 	let sent = 0;
 	const body = new ReadableStream({
@@ -74,7 +75,7 @@ async function postSignedChunked(body: string): Promise<Response> {
 
 describe("request body limits", () => {
 	it(
-		"rejects a Content-Length above the 25 MB webhook cap before reading the body",
+		"rejects a Content-Length above the body cap before reading the body",
 		{ timeout: 5000 },
 		async () => {
 			expect.hasAssertions();
