@@ -17,8 +17,8 @@ import {
 	membershipUrl,
 } from "./github-api";
 import { describe, expect, it } from "vitest";
-import type { GithubAccount } from "../src/types";
-import { MAX_VERIFIABLE_COMMITS } from "../src/commits";
+import type { GithubAccount } from "~src/types";
+import { MAX_VERIFIABLE_COMMITS } from "~src/commits";
 import { installFetchMock } from "./fetch-stub";
 
 /* Two ordinary untrusted commit principals, stated here rather than with the shared account

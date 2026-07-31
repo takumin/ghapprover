@@ -12,13 +12,13 @@ import type {
 	GithubAccount,
 	LivePullRequest,
 	PullRequestReview,
-} from "../src/types";
+} from "~src/types";
 import {
 	checkPullRequestState,
 	hasOwnApproval,
 	isLiveStateCurrent,
 	isTargetAction,
-} from "../src/decision";
+} from "~src/decision";
 import { describe, expect, it } from "vitest";
 
 const BOT_LOGIN = APP_BOT.login;

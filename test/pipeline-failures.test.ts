@@ -26,10 +26,10 @@ import {
 	postSigned,
 } from "./delivery";
 import { HEAD_SHA, ORG, PULL_NUMBER, REPOSITORY } from "./fixtures";
-import { HTTP_INTERNAL_ERROR, HTTP_NOT_FOUND } from "../src/http-status";
+import { HTTP_INTERNAL_ERROR, HTTP_NOT_FOUND } from "~src/http-status";
 import { describe, expect, it } from "vitest";
 import { installFetchMock, jsonRoute } from "./fetch-stub";
-import { MAX_ERROR_MESSAGE_CHARS } from "../src/log";
+import { MAX_ERROR_MESSAGE_CHARS } from "~src/log";
 import type { PlannedRoute } from "./fetch-stub";
 
 /** What the auth library says about that key, and what §8's errorMessage exists to carry into the entry. */

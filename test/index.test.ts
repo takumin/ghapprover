@@ -30,7 +30,7 @@ import {
 	HTTP_NOT_FOUND,
 	HTTP_PAYLOAD_TOO_LARGE,
 	HTTP_UNAUTHORIZED,
-} from "../src/http-status";
+} from "~src/http-status";
 import { describe, expect, it } from "vitest";
 import { installFetchMock } from "./fetch-stub";
 import { sign } from "@octokit/webhooks-methods";

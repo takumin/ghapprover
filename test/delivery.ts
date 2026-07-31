@@ -22,9 +22,9 @@ import {
 } from "./github-api";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { expect, onTestFinished, vi } from "vitest";
-import worker, { MAX_BODY_BYTES } from "../src/index";
-import type { GithubAccount } from "../src/types";
-import { HTTP_OK } from "../src/http-status";
+import worker, { MAX_BODY_BYTES } from "~src/index";
+import type { GithubAccount } from "~src/types";
+import { HTTP_OK } from "~src/http-status";
 import type { MockInstance } from "vitest";
 import type { PlannedRoute } from "./fetch-stub";
 import { privateKeyPemOnce } from "./app-key";

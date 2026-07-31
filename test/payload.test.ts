@@ -9,8 +9,8 @@
 
 import { HEAD_SHA, HUMAN, OWNER, REPOSITORY } from "./fixtures";
 import { describe, expect, it } from "vitest";
-import type { PullRequestEventPayload } from "../src/types";
-import { parsePullRequestEvent } from "../src/payload";
+import type { PullRequestEventPayload } from "~src/types";
+import { parsePullRequestEvent } from "~src/payload";
 
 function expectedPayload(): PullRequestEventPayload {
 	return {

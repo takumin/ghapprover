@@ -134,8 +134,6 @@
 			"files": ["vitest.config.mts", "test/**/*.ts"],
 			"plugins": ["vitest"],
 			"rules": {
-				// The tests import from `../src`.
-				"import/no-relative-parent-imports": "off",
 				// vitest globals are not enabled (see vitest.config.mts), so the
 				// suites import `describe`/`it`/`expect` explicitly — the spelling
 				// the enabled vitest/prefer-importing-vitest-globals requires; as
