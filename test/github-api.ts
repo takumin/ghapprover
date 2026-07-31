@@ -6,10 +6,10 @@
  * repository — a route built from its own literals can disagree with the call actually made, and
  * surfaces as the stub's "unplanned request" in whichever suite was not updated, which reads as a
  * routing bug rather than as a stale fixture. What one delivery does with these routes is in
- * test/delivery.ts; the stub that serves them is test/fetch-stub.ts. The App's own credentials —
- * its id and the private key every delivery is signed with — are part of that same App fixture, so
- * they are stated here together rather than in a module of their own that only ever travels with
- * this one.
+ * test/delivery.ts; the stub that serves them is test/fetch-stub.ts. The App's own credentials — its
+ * id and the private key its JWT is signed with (§7) — are part of that same App fixture, so they
+ * are stated here together rather than in a module of their own that only ever travels with this
+ * one.
  */
 
 import { APP_SLUG, HEAD_SHA, ORG, OWNER, PULL_NUMBER, REPOSITORY } from "./fixtures";
@@ -56,10 +56,14 @@ const REFUSAL_HEADERS = {
 
 /** The App every delivery is authed as: the id the env fixture declares and the App JWT's `iss`. */
 const APP_ID = "12345";
-/**
- * The App's private key: generated once per suite with real Web Crypto and exported as a PKCS#8
- * PEM, the only format the auth library can import (SPEC.md §7). PEM material is never hard-coded.
- */
+/** The installation the payload fixtures name, and whose token every non-app call is authed with. */
+const INSTALLATION_ID = 67_890;
+const TOKEN = "install-token";
+/** GET /app takes no parameter, so its URL is the same one for every fixture repository and installation. */
+const APP_URL = `${BASE}/app`;
+/** The installation-token route, whose path the §8 attribution of a token failure is matched on. */
+const TOKEN_URL = `${BASE}/app/installations/${INSTALLATION_ID}/access_tokens`;
+
 const RSA_PARAMS = {
 	hash: "SHA-256",
 	modulusLength: 2048,
@@ -91,19 +95,16 @@ async function generatePrivateKeyPem(): Promise<string> {
 
 let cachedPrivateKeyPem: Promise<string> | null = null;
 
-/** Generates the PEM once and shares it across tests. */
+/**
+ * The App's private key, generated once per suite with real Web Crypto and shared across its tests:
+ * exported as a PKCS#8 PEM, the only format the auth library can import (SPEC.md §7). PEM material
+ * is never hard-coded.
+ */
 async function privateKeyPemOnce(): Promise<string> {
 	cachedPrivateKeyPem ??= generatePrivateKeyPem();
 	const pem = await cachedPrivateKeyPem;
 	return pem;
 }
-/** The installation the payload fixtures name, and whose token every non-app call is authed with. */
-const INSTALLATION_ID = 67_890;
-const TOKEN = "install-token";
-/** GET /app takes no parameter, so its URL is the same one for every fixture repository and installation. */
-const APP_URL = `${BASE}/app`;
-/** The installation-token route, whose path the §8 attribution of a token failure is matched on. */
-const TOKEN_URL = `${BASE}/app/installations/${INSTALLATION_ID}/access_tokens`;
 
 async function makeClient(): Promise<GithubClient> {
 	return createGithubClient(

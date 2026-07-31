@@ -74,7 +74,7 @@ const REPO_NAME = "hello";
  * The one repository every suite is about, as an event payload carries it, stated with its owner
  * rather than beside it — under the owner a case gives it, because a repository owned by an
  * organization is what sends §3.1 through the membership API. The suite that drives the payload
- * schema (payload.test.ts), the one that drives the §3 conditions evaluated against it
+ * schema (pipeline-payload.test.ts), the one that drives the §3 conditions evaluated against it
  * (decision.test.ts) and the delivery suites that serve its API calls (test/github-api.ts) all build
  * it here: a second declaration can disagree about the modeled repository and both still pass.
  */
