@@ -38,15 +38,19 @@ function pr(pullRequestOverrides: Record<string, unknown>): Record<string, unkno
 	return merged(base, { pull_request: merged(base.pull_request, pullRequestOverrides) });
 }
 
-/* An absent installation is left absent and a malformed one is replaced with null, which the
+/* An absent installation is left absent and a malformed one is normalized to absent, which the
  * pipeline settles alike as missing-installation (SPEC.md §9) — neither invalidates the body. */
 const WITHOUT_INSTALLATION = {
 	action: "opened",
 	pull_request: expectedPayload().pull_request,
 	repository: expectedPayload().repository,
 };
-const NULL_INSTALLATION = merged(expectedPayload(), { installation: null });
+const ABSENT_INSTALLATION = merged(expectedPayload(), { installation: undefined });
+/* The two spellings of a gone head repository stay apart: `null` is what GitHub sent and is
+ * carried through as sent, an absent key stays an absent key. The reader tests for a repository
+ * rather than for which of the two it was (src/decision.ts). */
 const NULL_HEAD_REPO = pr({ head: { repo: null, sha: HEAD_SHA } });
+const ABSENT_HEAD_REPO = pr({ head: { sha: HEAD_SHA } });
 
 const PARSE_OK_CASES = [
 	{ expected: expectedPayload(), name: "a fully populated payload", payload: expectedPayload() },
@@ -57,17 +61,17 @@ const PARSE_OK_CASES = [
 	},
 	{ expected: WITHOUT_INSTALLATION, name: "installation absent", payload: WITHOUT_INSTALLATION },
 	{
-		expected: NULL_INSTALLATION,
+		expected: ABSENT_INSTALLATION,
 		name: "installation id not numeric",
 		payload: merged(expectedPayload(), { installation: { id: "12" } }),
 	},
 	{
-		expected: NULL_INSTALLATION,
+		expected: ABSENT_INSTALLATION,
 		name: "installation not an object",
 		payload: merged(expectedPayload(), { installation: "x" }),
 	},
 	{ expected: NULL_HEAD_REPO, name: "head repo null", payload: NULL_HEAD_REPO },
-	{ expected: NULL_HEAD_REPO, name: "head repo absent", payload: pr({ head: { sha: HEAD_SHA } }) },
+	{ expected: ABSENT_HEAD_REPO, name: "head repo absent", payload: ABSENT_HEAD_REPO },
 ];
 
 /* Every row states the path §8's `field` carries for it. A body that is not an object at all
@@ -171,7 +175,7 @@ describe("webhook payload validation", () => {
 		{ timeout: 5000 },
 		({ field, payload }) => {
 			expect.hasAssertions();
-			expect(parsePullRequestEvent(payload)).toStrictEqual({ field, payload: null });
+			expect(parsePullRequestEvent(payload)).toStrictEqual({ field });
 		},
 	);
 });

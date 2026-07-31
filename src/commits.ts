@@ -49,23 +49,23 @@ type CommitProblem =
 	| "unverified-commit";
 
 /** SPEC.md §3.2: zero commits, or more than the commits API can return, fail closed. */
-function precheckCommitCount(declaredCount: number): CommitProblem | null {
+function precheckCommitCount(declaredCount: number): CommitProblem | undefined {
 	if (declaredCount === 0) {
 		return "no-commits";
 	}
 	if (declaredCount > MAX_VERIFIABLE_COMMITS) {
 		return "too-many-commits";
 	}
-	return null;
+	return undefined;
 }
 
 /* SPEC.md §3.2: the fetched list must match the count the payload declared. The declared count
  * itself is settled by precheckCommitCount, which the caller runs before it spends the fetch. */
-function checkCommitCount(fetchedCount: number, declaredCount: number): CommitProblem | null {
+function checkCommitCount(fetchedCount: number, declaredCount: number): CommitProblem | undefined {
 	if (fetchedCount !== declaredCount) {
 		return "commit-count-mismatch";
 	}
-	return null;
+	return undefined;
 }
 
 /**
@@ -91,7 +91,7 @@ type TrustResolver = (account: GithubAccount) => Promise<boolean>;
 async function checkCommit(
 	entry: PullRequestCommit,
 	isTrusted: TrustResolver,
-): Promise<CommitProblem | null> {
+): Promise<CommitProblem | undefined> {
 	const { author, commit, committer } = entry;
 	const { verification } = commit;
 	if (verification === null || !verification.verified) {
@@ -106,7 +106,7 @@ async function checkCommit(
 			return "untrusted-commit";
 		}
 	}
-	return null;
+	return undefined;
 }
 /* SPEC.md §3.2 for the whole list, in commit order: checkCommit settles one commit (spending a
  * lookup only on what it cannot settle without one), and the first failing commit ends the loop for
@@ -117,15 +117,15 @@ async function checkCommit(
 async function checkCommits(
 	commits: readonly PullRequestCommit[],
 	isTrusted: TrustResolver,
-): Promise<CommitProblem | null> {
+): Promise<CommitProblem | undefined> {
 	for (const entry of commits) {
 		// oxlint-disable-next-line eslint/no-await-in-loop -- sequential by design: the first failing commit must end the walk before another lookup is spent
 		const problem = await checkCommit(entry, isTrusted);
-		if (problem !== null) {
+		if (problem !== undefined) {
 			return problem;
 		}
 	}
-	return null;
+	return undefined;
 }
 
 export {

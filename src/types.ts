@@ -62,6 +62,14 @@ declare global {
 /** A bare `{ id }` reference: the installation (SPEC.md §7) and the head repository (§3 cond. 2). */
 const idRefSchema = pipe(object({ id: number() }), readonly());
 
+/**
+ * Absence itself, so it can be handed to a schema combinator that takes a value: a bare
+ * `undefined` argument is not a spelling the lint gate leaves available
+ * (`unicorn/no-useless-undefined`), and `null` is not one this codebase writes
+ * (`unicorn/no-null`) — it is what GitHub sends, not how absence is said here.
+ */
+const ABSENT = undefined;
+
 /** A GitHub account (user, bot, or organization) as embedded in payloads; `type` is
  * "User" | "Bot" | "Organization", kept open because GitHub may add kinds. */
 const accountSchema = pipe(object({ id: number(), login: string(), type: string() }), readonly());
@@ -69,11 +77,12 @@ type GithubAccount = InferOutput<typeof accountSchema>;
 /** Null when the commit email or the review author does not map to a GitHub account. */
 const nullableAccountSchema = nullable(accountSchema);
 
-/* A deleted head repository is absent rather than malformed, so `null` and an absent key alike
- * validate to null (SPEC.md §3 condition 2), while a value of any other shape fails validation.
- * That is what keeps "the head repository is gone" — a skip — apart from "this body is not a
- * pull_request payload" — a 500. */
-const headRepoSchema = nullish(idRefSchema, null);
+/* A deleted head repository is absent rather than malformed, so the `null` GitHub sends and an
+ * absent key alike validate (SPEC.md §3 condition 2), while a value of any other shape fails
+ * validation. That is what keeps "the head repository is gone" — a skip — apart from "this body is
+ * not a pull_request payload" — a 500. Both spellings of absence are left as they arrived rather
+ * than normalized onto one: the reader tests for a repository, not for which of the two it was. */
+const headRepoSchema = nullish(idRefSchema);
 const headSchema = pipe(object({ repo: headRepoSchema, sha: string() }), readonly());
 
 const pullRequestSchema = pipe(
@@ -109,7 +118,7 @@ type EventRepository = InferOutput<typeof repositorySchema>;
  * settles the malformed half, `optional` the absent one — and `optional` without a default,
  * because a default would make the key required in the inferred type and so break the
  * projection check below against a payload definition where it is optional. */
-const installationSchema = optional(fallback(nullable(idRefSchema), null));
+const installationSchema = optional(fallback(nullish(idRefSchema), ABSENT));
 
 /** The `pull_request` webhook payload subset (SPEC.md §3, §4). */
 const pullRequestEventSchema = pipe(

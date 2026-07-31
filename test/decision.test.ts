@@ -77,7 +77,7 @@ describe("target action filtering", () => {
 
 describe("pull request state gate", () => {
 	it.each([
-		{ expected: null, name: "an open non-draft pull request", overrides: {} },
+		{ expected: undefined, name: "an open non-draft pull request", overrides: {} },
 		{ expected: "pr-not-open", name: "a closed pull request", overrides: { state: "closed" } },
 		{ expected: "pr-draft", name: "a draft pull request", overrides: { draft: true } },
 		{ expected: "head-repo-missing", name: "a deleted head repo", overrides: { repo: null } },
@@ -104,6 +104,23 @@ describe("pull request state gate", () => {
 	])("returns $expected for $name", { timeout: 5000 }, ({ expected, overrides }) => {
 		expect.hasAssertions();
 		expect(checkPullRequestState(eventPullRequest(overrides), REPOSITORY)).toBe(expected);
+	});
+
+	/* The schema carries a gone head repository through in whichever of the two spellings GitHub
+	 * used (src/types.ts), so the absent key has to reach the same verdict as the explicit null the
+	 * row above states — stated as a whole pull request, because the fixture's default would fill an
+	 * `undefined` override back in. */
+	it("returns head-repo-missing for an absent head repo", { timeout: 5000 }, () => {
+		expect.hasAssertions();
+		const withoutHeadRepo: EventPullRequest = {
+			commits: 1,
+			draft: false,
+			head: { sha: HEAD_SHA },
+			number: 11,
+			state: "open",
+			user: OWNER,
+		};
+		expect(checkPullRequestState(withoutHeadRepo, REPOSITORY)).toBe("head-repo-missing");
 	});
 });
 

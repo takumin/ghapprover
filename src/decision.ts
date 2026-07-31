@@ -36,20 +36,23 @@ type PrStateProblem = "head-repo-forked" | "head-repo-missing" | "pr-draft" | "p
 function checkPullRequestState(
 	pr: EventPullRequest,
 	repository: EventRepository,
-): PrStateProblem | null {
+): PrStateProblem | undefined {
 	if (pr.state !== "open") {
 		return "pr-not-open";
 	}
 	if (pr.draft) {
 		return "pr-draft";
 	}
-	if (pr.head.repo === null) {
+	/* Truthiness rather than a comparison, because the schema leaves both spellings of a gone head
+	 * repository as they arrived (src/types.ts) and this check is about neither in particular; the
+	 * value is an object when present, so nothing else can be falsy here. */
+	if (!pr.head.repo) {
 		return "head-repo-missing";
 	}
 	if (pr.head.repo.id !== repository.id) {
 		return "head-repo-forked";
 	}
-	return null;
+	return undefined;
 }
 
 /* The verdict, or the one lookup that resolves it — the membership of the organization that owns
@@ -80,9 +83,9 @@ function classifyPrincipal(user: GithubAccount, repoOwner: GithubAccount): Trust
 	return "untrusted";
 }
 
-/** SPEC.md §3.1: an org owner is an active admin; null (404, not a member) is not one. */
-function isOwnerMembership(membership: OrgMembership | null): boolean {
-	if (membership === null) {
+/** SPEC.md §3.1: an org owner is an active admin; no membership (404, not a member) is not one. */
+function isOwnerMembership(membership: OrgMembership | undefined): boolean {
+	if (membership === undefined) {
 		return false;
 	}
 	return membership.state === "active" && membership.role === "admin";

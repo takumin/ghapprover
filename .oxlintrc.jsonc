@@ -51,9 +51,10 @@
 			{ "enforceConst": true, "ignore": [0, 1, -1], "ignoreArrayIndexes": true },
 		],
 		// `undefined` is how absence is spelled throughout: the SPEC §8 diagnostics
-		// an outcome does not carry (src/pipeline.ts), and the validation result
-		// with no field to name (src/payload.ts). `null` cannot stand in for it --
-		// `null` is a value the GitHub payloads really carry.
+		// an outcome does not carry (src/pipeline.ts), the validation result with no
+		// field to name (src/payload.ts), and every "no problem found" a §3 check
+		// answers with. `null` cannot stand in for it -- `null` is a value the GitHub
+		// payloads really carry, which is what unicorn/no-null below now enforces.
 		"eslint/no-undefined": "off",
 		// Nursery rules worth having. No enabled category carries them, so each is
 		// named individually.
@@ -124,13 +125,14 @@
 		// foreign type — the runtime's Request, the generated Env, the octokit
 		// client — that is not deeply readonly and not this codebase's to change.
 		"typescript/prefer-readonly-parameter-types": "off",
-		// GitHub's webhook payloads and REST responses really carry `null`, and the
-		// frozen contract (src/types.ts) models that absence as `null` rather than
-		// converting it -- `undefined` is already spoken for as the parse-failure
-		// sentinel (see eslint/no-undefined above), so the two cannot be collapsed.
-		// Banning the literal would leave no way to spell the shape the API sends,
-		// in src or in the fixtures that stand in for it.
-		"unicorn/no-null": "off",
+		// `null` is what GitHub sends, not how this codebase says absence: the frozen
+		// contract (src/types.ts) still types the payload fields that really carry it
+		// as nullable, and reading such a field against `null` stays legal (the rule's
+		// default checkStrictEquality: false). What the rule bans is writing the
+		// literal ourselves, which is what keeps a value that came off the wire apart
+		// from an absence this code decided on -- those are spelled `undefined`
+		// throughout (see eslint/no-undefined above). Off for the fixtures, below.
+		"unicorn/no-null": "error",
 	},
 	"overrides": [
 		{
@@ -143,6 +145,18 @@
 				// errors the pair would leave a suite no way to name its test
 				// functions.
 				"vitest/no-importing-vitest-globals": "off",
+			},
+		},
+		// Scoped to the suites alone rather than folded into the block above, which
+		// also covers vitest.config.mts: nothing in that file has a wire format to
+		// spell, so it stays under the rule.
+		{
+			"files": ["test/**/*.ts"],
+			"rules": {
+				// The fixtures spell the wire format GitHub actually sends, and those
+				// payloads really carry `null`; a fixture cannot exercise the nullable
+				// contract branches without constructing the value itself.
+				"unicorn/no-null": "off",
 			},
 		},
 	],

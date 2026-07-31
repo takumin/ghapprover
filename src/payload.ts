@@ -12,13 +12,13 @@ import type { PullRequestEventPayload } from "./types";
 import { pullRequestEventSchema } from "./types";
 
 /**
- * The modeled payload, or null with SPEC.md §8's `field`: the dot path of the first field that
+ * The modeled payload, or no payload and SPEC.md §8's `field`: the dot path of the first field that
  * failed validation. The path alone — the issue also carries the value that failed, which is
  * webhook payload content and never leaves this module (§8 warning, §11).
  */
 interface PayloadValidation {
 	readonly field?: string | undefined;
-	readonly payload: PullRequestEventPayload | null;
+	readonly payload?: PullRequestEventPayload | undefined;
 }
 
 /* An issue at the root — a body that is not an object at all has no field to name — has no dot
@@ -27,16 +27,16 @@ function issueField(issue: BaseIssue<unknown>): string | undefined {
 	return getDotPath(issue) ?? undefined;
 }
 
-/* The whole body, or null when it does not match the modeled shape — a missing or malformed
- * installation being the one divergence the schema absorbs rather than rejects (SPEC.md §9). The
- * first issue is the one reported: the schema states its fields in a fixed order, so which field
- * a given malformed body names does not vary between deliveries. */
+/* The whole body, or no payload at all when it does not match the modeled shape — a missing or
+ * malformed installation being the one divergence the schema absorbs rather than rejects (SPEC.md
+ * §9). The first issue is the one reported: the schema states its fields in a fixed order, so which
+ * field a given malformed body names does not vary between deliveries. */
 function parsePullRequestEvent(payload: unknown): PayloadValidation {
 	const result = safeParse(pullRequestEventSchema, payload);
 	if (result.success) {
 		return { payload: result.output };
 	}
-	return { field: issueField(result.issues[0]), payload: null };
+	return { field: issueField(result.issues[0]) };
 }
 
 /**
@@ -50,7 +50,7 @@ function parsePullRequestEventBody(body: string): PayloadValidation {
 		const parsed: unknown = JSON.parse(body);
 		return parsePullRequestEvent(parsed);
 	} catch {
-		return { payload: null };
+		return {};
 	}
 }
 
