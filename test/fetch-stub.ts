@@ -14,7 +14,7 @@
  */
 import { vi } from "vitest";
 
-export interface PlannedRoute {
+interface PlannedRoute {
 	readonly body: string;
 	/** Extra response headers (e.g. link); the JSON content-type is implied. */
 	readonly headers?: Record<string, string> | undefined;
@@ -25,7 +25,7 @@ export interface PlannedRoute {
 	readonly status: number;
 	readonly url: string;
 }
-export interface RecordedRequest {
+interface RecordedRequest {
 	readonly body: string;
 	readonly headers: Record<string, string>;
 	readonly method: string;
@@ -33,7 +33,7 @@ export interface RecordedRequest {
 	readonly signal: AbortSignal | undefined;
 	readonly url: string;
 }
-export interface FetchMockSession {
+interface FetchMockSession {
 	readonly assertDone: () => void;
 	readonly requests: readonly RecordedRequest[];
 }
@@ -74,7 +74,7 @@ function takeRoute(pending: PlannedRoute[], request: Request): PlannedRoute {
 	return route;
 }
 
-export function installFetchMock(routes: readonly PlannedRoute[]): FetchMockSession {
+function installFetchMock(routes: readonly PlannedRoute[]): FetchMockSession {
 	const pending = [...routes];
 	const requests: RecordedRequest[] = [];
 	const handler = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -103,7 +103,7 @@ export function installFetchMock(routes: readonly PlannedRoute[]): FetchMockSess
 	};
 }
 
-export function jsonRoute(route: {
+function jsonRoute(route: {
 	headers?: Record<string, string> | undefined;
 	method: string;
 	payload: unknown;
@@ -120,10 +120,13 @@ export function jsonRoute(route: {
 }
 
 /** The recorded request for a planned URL; absence is a test-setup failure, not an assertion. */
-export function requestByUrl(session: FetchMockSession, url: string): RecordedRequest {
+function requestByUrl(session: FetchMockSession, url: string): RecordedRequest {
 	const found = session.requests.find((entry) => entry.url === url);
 	if (found === undefined) {
 		throw new Error(`request not recorded: ${url}`);
 	}
 	return found;
 }
+
+export { installFetchMock, jsonRoute, requestByUrl };
+export type { FetchMockSession, PlannedRoute, RecordedRequest };

@@ -25,7 +25,7 @@ import type { PrStateProblem } from "./decision";
  * here rather than a silent change to the logged vocabulary. The rest are
  * outcomes of the pipeline itself.
  */
-export type SkipReason =
+type SkipReason =
 	| CommitProblem
 	| PrStateProblem
 	| "already-approved"
@@ -34,7 +34,7 @@ export type SkipReason =
 	| "head-moved"
 	| "review-rejected";
 /** The other half: an evaluation that could not be completed, which the §9 status table below keys. */
-export type ErrorReason =
+type ErrorReason =
 	| "github-api-error"
 	| "internal-error"
 	| "invalid-payload"
@@ -49,7 +49,7 @@ export type ErrorReason =
  * §9 status table below would be keyed by reasons that can never reach it. Reunited here because
  * the logged vocabulary is the whole of both.
  */
-export type Reason = ErrorReason | SkipReason;
+type Reason = ErrorReason | SkipReason;
 
 /**
  * Evaluation result mapped onto the §9 status table and the §8 log entry.
@@ -67,7 +67,7 @@ export type Reason = ErrorReason | SkipReason;
  * have carried no response — and, for field, no locatable field — at all, and
  * such a field is to be absent from the entry rather than logged empty.
  */
-export interface Outcome extends Partial<ApiDiagnostics> {
+interface Outcome extends Partial<ApiDiagnostics> {
 	readonly decision: "approved" | "error" | "skipped";
 	readonly endpoint?: string;
 	readonly errorName?: string;
@@ -80,10 +80,10 @@ export interface Outcome extends Partial<ApiDiagnostics> {
 type ErrorDetail = Omit<Outcome, "decision" | "httpStatus" | "reason">;
 
 /** SPEC.md §4 step 8: the approval landed, which is the one outcome with nothing further to report. */
-export function approvedOutcome(): Outcome {
+function approvedOutcome(): Outcome {
 	return { decision: "approved", httpStatus: HTTP_OK };
 }
-export function skippedOutcome(reason: SkipReason): Outcome {
+function skippedOutcome(reason: SkipReason): Outcome {
 	return { decision: "skipped", httpStatus: HTTP_OK, reason };
 }
 /**
@@ -101,7 +101,7 @@ const ERROR_STATUS: Partial<Record<ErrorReason, number>> = {
 /* The one way an error outcome is built, whichever §8 fields it carries: the reason decides the
  * status, and the detail is merged onto it with Object.assign rather than spread (the spread
  * properties are lint-banned), so what every failure has in common is stated once. */
-export function errorOutcome(reason: ErrorReason, detail: ErrorDetail = {}): Outcome {
+function errorOutcome(reason: ErrorReason, detail: ErrorDetail = {}): Outcome {
 	const failure: Outcome = {
 		decision: "error",
 		httpStatus: ERROR_STATUS[reason] ?? HTTP_INTERNAL_ERROR,
@@ -115,7 +115,7 @@ export function errorOutcome(reason: ErrorReason, detail: ErrorDetail = {}): Out
  * failure carried no response to read them from. Carried as the whole diagnostics group rather
  * than field by field, so a diagnostic added to it reaches the outcome here. Mapped alongside the
  * error contract it reads (src/api-error.ts) rather than restated by whoever catches the error. */
-export function apiErrorOutcome(error: GithubApiError): Outcome {
+function apiErrorOutcome(error: GithubApiError): Outcome {
 	const origin = { endpoint: error.endpoint, status: error.status };
 	return errorOutcome("github-api-error", Object.assign(origin, error.diagnostics));
 }
@@ -126,9 +126,12 @@ export function apiErrorOutcome(error: GithubApiError): Outcome {
  * it was, the class alone being `Error` for both. A value thrown that is not an Error has no
  * message to report — the class name already says so — so the field is left off rather than
  * filled with a stringification of whatever it was. */
-export function internalErrorOutcome(error: unknown): Outcome {
+function internalErrorOutcome(error: unknown): Outcome {
 	if (error instanceof Error) {
 		return errorOutcome("internal-error", { errorMessage: error.message, errorName: error.name });
 	}
 	return errorOutcome("internal-error", { errorName: "unknown" });
 }
+
+export { apiErrorOutcome, approvedOutcome, errorOutcome, internalErrorOutcome, skippedOutcome };
+export type { ErrorReason, Outcome, Reason, SkipReason };

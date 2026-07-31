@@ -9,8 +9,8 @@
 
 import { HEAD_SHA, HUMAN, OWNER, REPOSITORY } from "./fixtures";
 import { describe, expect, it } from "vitest";
-import type { PullRequestEventPayload } from "../src/types";
-import { parsePullRequestEvent } from "../src/payload";
+import type { PullRequestEventPayload } from "~src/types";
+import { parsePullRequestEvent } from "~src/payload";
 
 function expectedPayload(): PullRequestEventPayload {
 	return {
@@ -159,19 +159,23 @@ const MALFORMED_PAYLOADS = [
 ];
 
 describe("webhook payload validation", () => {
-	it("builds a new object instead of returning the input", () => {
+	it("builds a new object instead of returning the input", { timeout: 5000 }, () => {
 		expect.hasAssertions();
 		const payload = expectedPayload();
 		expect(parsePullRequestEvent(payload).payload).not.toBe(payload);
 	});
 
-	it.each(PARSE_OK_CASES)("accepts $name", ({ expected, payload }) => {
+	it.each(PARSE_OK_CASES)("accepts $name", { timeout: 5000 }, ({ expected, payload }) => {
 		expect.hasAssertions();
 		expect(parsePullRequestEvent(payload)).toStrictEqual({ payload: expected });
 	});
 
-	it.each(MALFORMED_PAYLOADS)("rejects $name, naming $field", ({ field, payload }) => {
-		expect.hasAssertions();
-		expect(parsePullRequestEvent(payload)).toStrictEqual({ field });
-	});
+	it.each(MALFORMED_PAYLOADS)(
+		"rejects $name, naming $field",
+		{ timeout: 5000 },
+		({ field, payload }) => {
+			expect.hasAssertions();
+			expect(parsePullRequestEvent(payload)).toStrictEqual({ field });
+		},
+	);
 });

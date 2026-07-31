@@ -62,15 +62,15 @@
 		"eslint/no-useless-assignment": "error",
 		// Not the duplicate of typescript/require-await the name suggests: this one
 		// also reports an `async` function that returns a promise without awaiting
-		// it, which is the shape most of the async helpers in src/ have. It cannot
-		// be an error while two enabled rules stand: typescript/promise-function-async
-		// requires a promise-returning helper to be async, and typescript/return-await
-		// (in-try-catch) forbids the `return await` that would appease this rule
-		// outside a try/catch — together the three would leave a pass-through helper
-		// no legal spelling at all. The type-aware rule, which reports only a
-		// function with nothing async about it at all, is left on by category to
-		// carry the check.
-		"eslint/require-await": "off",
+		// it, so a pass-through helper has to await the call it forwards and the
+		// promise is settled inside the frame that made it — the try/catch in
+		// src/github.ts only catches what it awaits. Two enabled rules rule out the
+		// obvious spellings: typescript/promise-function-async requires a
+		// promise-returning helper to be async, and typescript/return-await
+		// (in-try-catch) forbids `return await` outside a try/catch. What passes all
+		// three is the intermediate variable — `const x = await f(); return x;` —
+		// which is the shape every pass-through helper here is written in.
+		"eslint/require-await": "error",
 		// The import group, in the order oxlint sorts it:
 		// - no-named-export and prefer-default-export each contradict
 		//   no-default-export, which the restriction category keeps on: the first
@@ -78,19 +78,22 @@
 		//   orders the single-export modules to write the default export the
 		//   enabled rule bans. The named shape is also what lets SPEC §12's
 		//   decision logic be unit-tested without mocking the GitHub API.
-		// - exports-last and group-exports reject export-at-declaration, the shape
-		//   every module here is written in: satisfying them restates every public
-		//   declaration in a trailing export block without changing anything a
-		//   rule could catch afterwards.
+		// - exports-last and group-exports together give every module one trailing
+		//   export block: a declaration is private unless the block at the bottom
+		//   names it, so the public surface is read off one statement rather than
+		//   gathered from the `export` keywords scattered through the file. The
+		//   two rules count value and type exports apart, so a module that exports
+		//   both states them as `export { … }` and `export type { … }` — which is
+		//   also the spelling import/consistent-type-specifier-style requires.
 		// - no-default-export bans the Workers entrypoint, so the two declarations
 		//   that cannot avoid a default export (src/index.ts, vitest.config.mts)
 		//   carry a line exemption rather than the rule being switched off for
 		//   whole files.
-		"import/exports-last": "off",
+		"import/exports-last": "error",
 		// Reports nothing against the extensionless imports this codebase writes, so
 		// it is carried as a guard on that style rather than switched off.
 		"import/extensions": "error",
-		"import/group-exports": "off",
+		"import/group-exports": "error",
 		"import/no-named-export": "off",
 		"import/prefer-default-export": "off",
 		// Bans async/await outright, while the enabled
@@ -136,17 +139,12 @@
 			"files": ["vitest.config.mts", "test/**/*.ts"],
 			"plugins": ["vitest"],
 			"rules": {
-				// The tests import from `../src`.
-				"import/no-relative-parent-imports": "off",
 				// vitest globals are not enabled (see vitest.config.mts), so the
 				// suites import `describe`/`it`/`expect` explicitly — the spelling
 				// the enabled vitest/prefer-importing-vitest-globals requires; as
 				// errors the pair would leave a suite no way to name its test
 				// functions.
 				"vitest/no-importing-vitest-globals": "off",
-				// Demands an explicit timeout argument on every test. The suites run
-				// in-process against stubs, so they rely on the default instead.
-				"vitest/require-test-timeout": "off",
 			},
 		},
 		// Scoped to the suites alone rather than folded into the block above, which

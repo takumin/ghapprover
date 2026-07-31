@@ -160,14 +160,15 @@ async function evaluateApproval(
 	if (!payload.installation) {
 		return errorOutcome("missing-installation");
 	}
-	return approveWhenConditionsHold(payload, credentials, payload.installation.id);
+	const outcome = await approveWhenConditionsHold(payload, credentials, payload.installation.id);
+	return outcome;
 }
 /**
  * The pipeline, with the one failure its own calls raise mapped onto an outcome (SPEC.md §9): every
  * endpoint in src/github.ts throws GithubApiError, so this is where that contract is read. Anything
  * else thrown travels on to the entry point's catch-all, which owns §9's "any other thrown failure".
  */
-export async function runPipeline(
+async function runPipeline(
 	payload: PullRequestEventPayload,
 	credentials: AppCredentials,
 ): Promise<Outcome> {
@@ -180,3 +181,5 @@ export async function runPipeline(
 		throw error;
 	}
 }
+
+export { runPipeline };

@@ -16,7 +16,7 @@ import { isSameAccount, isWebFlow } from "./account";
  * verified and is not approved (SPEC.md §3.2). A capability limit of the endpoint rather than an
  * approval constant, so it lives with the check that reads it and not in src/account.ts (§5).
  */
-export const MAX_VERIFIABLE_COMMITS = 250;
+const MAX_VERIFIABLE_COMMITS = 250;
 
 /* The accounts whose trust one commit's §3.2 check needs: the author, and the committer unless it
  * is web-flow (exempt as committer only — this is the one place that exemption is applied) or
@@ -24,7 +24,7 @@ export const MAX_VERIFIABLE_COMMITS = 250;
  * derives them — an unmapped principal fails the commit rather than being dropped from the walk.
  * The caller resolves them in commit order, memoized per delivery (§3.1), so a failing commit stops
  * the remaining membership lookups instead of querying every principal of every commit up front. */
-export function commitPrincipals(
+function commitPrincipals(
 	author: GithubAccount,
 	committer: GithubAccount,
 ): readonly GithubAccount[] {
@@ -41,7 +41,7 @@ export function commitPrincipals(
  * frame (src/pipeline.ts) and reach SPEC.md §8 as one reason each, so an alias apiece only made the
  * reason vocabulary (src/outcome.ts) name this module three times over to say "§3.2".
  */
-export type CommitProblem =
+type CommitProblem =
 	| "commit-count-mismatch"
 	| "no-commits"
 	| "too-many-commits"
@@ -49,7 +49,7 @@ export type CommitProblem =
 	| "unverified-commit";
 
 /** SPEC.md §3.2: zero commits, or more than the commits API can return, fail closed. */
-export function precheckCommitCount(declaredCount: number): CommitProblem | undefined {
+function precheckCommitCount(declaredCount: number): CommitProblem | undefined {
 	if (declaredCount === 0) {
 		return "no-commits";
 	}
@@ -61,10 +61,7 @@ export function precheckCommitCount(declaredCount: number): CommitProblem | unde
 
 /* SPEC.md §3.2: the fetched list must match the count the payload declared. The declared count
  * itself is settled by precheckCommitCount, which the caller runs before it spends the fetch. */
-export function checkCommitCount(
-	fetchedCount: number,
-	declaredCount: number,
-): CommitProblem | undefined {
+function checkCommitCount(fetchedCount: number, declaredCount: number): CommitProblem | undefined {
 	if (fetchedCount !== declaredCount) {
 		return "commit-count-mismatch";
 	}
@@ -76,7 +73,7 @@ export function checkCommitCount(
  * per-delivery memoized resolver, a suite a plain function. Declared once here, where the
  * contract is consumed, so the caller building one and the checks running it cannot drift apart.
  */
-export type TrustResolver = (account: GithubAccount) => Promise<boolean>;
+type TrustResolver = (account: GithubAccount) => Promise<boolean>;
 
 /* SPEC.md §3.2 for one commit, in the order the checks must run: the signature, then the principals
  * the payload has to map at all, then their trust. Both directions of that order are load-bearing —
@@ -91,7 +88,7 @@ export type TrustResolver = (account: GithubAccount) => Promise<boolean>;
  * further lookup could not change this commit's outcome, and a delivery that ends in a skip must not
  * burst one lookup per principal against the Worker subrequest allowance or GitHub's secondary rate
  * limits. */
-export async function checkCommit(
+async function checkCommit(
 	entry: PullRequestCommit,
 	isTrusted: TrustResolver,
 ): Promise<CommitProblem | undefined> {
@@ -117,7 +114,7 @@ export async function checkCommit(
  * a skip must not burst a lookup per principal of every commit against the Worker subrequest
  * allowance or GitHub's secondary rate limits. The walk lives here with the check it repeats, so
  * that argument is made once and the caller is left with the fetch it sequences around it. */
-export async function checkCommits(
+async function checkCommits(
 	commits: readonly PullRequestCommit[],
 	isTrusted: TrustResolver,
 ): Promise<CommitProblem | undefined> {
@@ -130,3 +127,13 @@ export async function checkCommits(
 	}
 	return undefined;
 }
+
+export {
+	MAX_VERIFIABLE_COMMITS,
+	checkCommit,
+	checkCommitCount,
+	checkCommits,
+	commitPrincipals,
+	precheckCommitCount,
+};
+export type { CommitProblem, TrustResolver };
