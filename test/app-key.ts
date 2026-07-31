@@ -38,7 +38,8 @@ let cached: Promise<string> | null = null;
 /** Generates the PEM once and shares it across tests. */
 async function privateKeyPemOnce(): Promise<string> {
 	cached ??= generatePrivateKeyPem();
-	return cached;
+	const pem = await cached;
+	return pem;
 }
 
 export { privateKeyPemOnce };

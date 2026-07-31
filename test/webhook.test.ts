@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sign } from "@octokit/webhooks-methods";
-import { verifyWebhookSignature } from "../src/webhook";
+import { verifyWebhookSignature } from "~src/webhook";
 
 /** The frozen signature accepts string | null for the missing-header case. */
 const NO_HEADER = null;

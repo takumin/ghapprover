@@ -105,7 +105,14 @@ async function contractCall<Schema extends GenericSchema>(
  */
 async function fetchAppBotLogin(client: GithubClient): Promise<string> {
 	const endpoint = "GET /app";
-	const { slug } = await contractCall(endpoint, async () => client.request(endpoint), appSchema);
+	const { slug } = await contractCall(
+		endpoint,
+		async () => {
+			const response = await client.request(endpoint);
+			return response;
+		},
+		appSchema,
+	);
 	return `${slug}[bot]`;
 }
 
@@ -125,14 +132,15 @@ async function listPullRequestItems<Schema extends GenericSchema>(
 	itemSchema: Schema,
 ): Promise<readonly InferOutput<Schema>[]> {
 	const { endpoint, pullNumber, repo } = list;
-	const items = await dispatched(endpoint, async () =>
-		client.paginate(endpoint, {
+	const items = await dispatched(endpoint, async () => {
+		const pages = await client.paginate(endpoint, {
 			owner: repo.owner,
 			per_page: PAGE_SIZE,
 			pull_number: pullNumber,
 			repo: repo.repo,
-		}),
-	);
+		});
+		return pages;
+	});
 	/* Item shape errors surface after a successful page, so they carry 200. */
 	return items.map((item) => parseContract(itemSchema, item, { endpoint, status: HTTP_OK }));
 }
@@ -143,11 +151,12 @@ async function listPullRequestCommits(
 	repo: RepoRef,
 	pullNumber: number,
 ): Promise<readonly PullRequestCommit[]> {
-	return listPullRequestItems(
+	const commits = await listPullRequestItems(
 		client,
 		{ endpoint: "GET /repos/{owner}/{repo}/pulls/{pull_number}/commits", pullNumber, repo },
 		pullRequestCommitSchema,
 	);
+	return commits;
 }
 
 /** GET /orgs/{org}/memberships/{username}; a 404 means "not a member" → null (SPEC.md §9). */
@@ -157,13 +166,18 @@ async function fetchOrgMembership(
 	username: string,
 ): Promise<OrgMembership | null> {
 	const endpoint = "GET /orgs/{org}/memberships/{username}";
-	return answering({ endpoint, status: HTTP_NOT_FOUND }, null, async () =>
-		contractCall(
+	const membership = await answering({ endpoint, status: HTTP_NOT_FOUND }, null, async () => {
+		const parsed = await contractCall(
 			endpoint,
-			async () => client.request(endpoint, { org, username }),
+			async () => {
+				const response = await client.request(endpoint, { org, username });
+				return response;
+			},
 			orgMembershipSchema,
-		),
-	);
+		);
+		return parsed;
+	});
+	return membership;
 }
 
 /** All PR reviews via Link-header pagination (SPEC.md §3 cond. 5). */
@@ -172,11 +186,12 @@ async function listPullRequestReviews(
 	repo: RepoRef,
 	pullNumber: number,
 ): Promise<readonly PullRequestReview[]> {
-	return listPullRequestItems(
+	const reviews = await listPullRequestItems(
 		client,
 		{ endpoint: "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews", pullNumber, repo },
 		pullRequestReviewSchema,
 	);
+	return reviews;
 }
 
 /** GET /repos/{owner}/{repo}/pulls/{n} for the live TOCTOU check (SPEC.md §3.3). */
@@ -186,16 +201,19 @@ async function fetchPullRequest(
 	pullNumber: number,
 ): Promise<LivePullRequest> {
 	const endpoint = "GET /repos/{owner}/{repo}/pulls/{pull_number}";
-	return contractCall(
+	const pullRequest = await contractCall(
 		endpoint,
-		async () =>
-			client.request(endpoint, {
+		async () => {
+			const response = await client.request(endpoint, {
 				owner: repo.owner,
 				pull_number: pullNumber,
 				repo: repo.repo,
-			}),
+			});
+			return response;
+		},
 		livePullRequestSchema,
 	);
+	return pullRequest;
 }
 
 /** The pull request and head commit one approval review is anchored to, and the caller's §3.3 live check compares against. */
@@ -215,22 +233,24 @@ async function createApprovalReview(
 ): Promise<"created" | "rejected"> {
 	const { commitId, pullNumber, repo } = target;
 	const endpoint = "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews";
-	return answering(
+	const review = await answering(
 		{ endpoint, status: HTTP_UNPROCESSABLE_ENTITY },
 		"rejected" as const,
 		async (): Promise<"created"> => {
-			await dispatched(endpoint, async () =>
-				client.request(endpoint, {
+			await dispatched(endpoint, async () => {
+				const response = await client.request(endpoint, {
 					commit_id: commitId,
 					event: "APPROVE",
 					owner: repo.owner,
 					pull_number: pullNumber,
 					repo: repo.repo,
-				}),
-			);
+				});
+				return response;
+			});
 			return "created";
 		},
 	);
+	return review;
 }
 
 export {

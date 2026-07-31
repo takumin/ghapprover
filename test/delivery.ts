@@ -22,9 +22,9 @@ import {
 } from "./github-api";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { expect, onTestFinished, vi } from "vitest";
-import worker, { MAX_BODY_BYTES } from "../src/index";
-import type { GithubAccount } from "../src/types";
-import { HTTP_OK } from "../src/http-status";
+import worker, { MAX_BODY_BYTES } from "~src/index";
+import type { GithubAccount } from "~src/types";
+import { HTTP_OK } from "~src/http-status";
 import type { MockInstance } from "vitest";
 import type { PlannedRoute } from "./fetch-stub";
 import { privateKeyPemOnce } from "./app-key";
@@ -190,13 +190,13 @@ async function expectReply(response: Response, expected: ExpectedReply): Promise
  * reason, which is why that one alone is named at the call.
  */
 async function expectApproved(response: Response): Promise<void> {
-	return expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
+	await expectReply(response, { body: { decision: "approved" }, status: HTTP_OK });
 }
 async function expectSkipped(response: Response, reason: string): Promise<void> {
-	return expectReply(response, { body: { decision: "skipped", reason }, status: HTTP_OK });
+	await expectReply(response, { body: { decision: "skipped", reason }, status: HTTP_OK });
 }
 async function expectError(response: Response, reason: string, status: number): Promise<void> {
-	return expectReply(response, { body: { decision: "error", reason }, status });
+	await expectReply(response, { body: { decision: "error", reason }, status });
 }
 
 export {

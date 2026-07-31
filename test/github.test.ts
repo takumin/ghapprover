@@ -33,7 +33,7 @@ import {
 	HTTP_NOT_FOUND,
 	HTTP_OK,
 	HTTP_UNPROCESSABLE_ENTITY,
-} from "../src/http-status";
+} from "~src/http-status";
 import {
 	PAGE_SIZE,
 	createApprovalReview,
@@ -42,10 +42,10 @@ import {
 	fetchPullRequest,
 	listPullRequestCommits,
 	listPullRequestReviews,
-} from "../src/github";
+} from "~src/github";
 import { describe, expect, it } from "vitest";
 import { installFetchMock, requestByUrl } from "./fetch-stub";
-import { GithubApiError } from "../src/api-error";
+import { GithubApiError } from "~src/api-error";
 
 const SECOND_PAGE_COUNT = 37;
 

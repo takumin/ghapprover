@@ -14,8 +14,8 @@
  * suite builds a payload around them.
  */
 
-import { ALLOWED_BOTS, WEB_FLOW } from "../src/account";
-import type { EventRepository, GithubAccount } from "../src/types";
+import { ALLOWED_BOTS, WEB_FLOW } from "~src/account";
+import type { EventRepository, GithubAccount } from "~src/types";
 
 interface AccountOverrides {
 	readonly id?: number;

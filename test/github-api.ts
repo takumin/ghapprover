@@ -10,13 +10,13 @@
  */
 
 import { APP_SLUG, HEAD_SHA, ORG, OWNER, PULL_NUMBER, REPOSITORY } from "./fixtures";
-import type { ApprovalTarget, RepoRef } from "../src/github";
-import { HTTP_NOT_FOUND, HTTP_OK } from "../src/http-status";
-import type { GithubAccount } from "../src/types";
-import type { GithubClient } from "../src/client";
-import { PAGE_SIZE } from "../src/github";
+import type { ApprovalTarget, RepoRef } from "~src/github";
+import { HTTP_NOT_FOUND, HTTP_OK } from "~src/http-status";
+import type { GithubAccount } from "~src/types";
+import type { GithubClient } from "~src/client";
+import { PAGE_SIZE } from "~src/github";
 import type { PlannedRoute } from "./fetch-stub";
-import { createGithubClient } from "../src/client";
+import { createGithubClient } from "~src/client";
 import { jsonRoute } from "./fetch-stub";
 import { privateKeyPemOnce } from "./app-key";
 
