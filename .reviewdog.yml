@@ -21,6 +21,20 @@ runner:
     cmd: actionlint -shellcheck shellcheck -oneline -no-color
     errorformat:
       - "%f:%l:%c: %m"
+  shellcheck:
+    # `--format=gcc` for the one finding per line the errorformat below wants;
+    # the default format spans several lines per finding. shellcheck's own
+    # `style` and `info` levels both surface as gcc `note`.
+    cmd: shellcheck --format=gcc scripts/*.sh
+    errorformat:
+      - "%f:%l:%c: %trror: %m"
+      - "%f:%l:%c: %tarning: %m"
+      - "%f:%l:%c: %tote: %m"
+      - "%-G%.%#"
+  file-refs:
+    cmd: ./scripts/check-file-refs.sh
+    errorformat:
+      - "%f:%l:%c: %m"
   ghalint-run:
     cmd: ghalint --log-color never run
     errorformat:
