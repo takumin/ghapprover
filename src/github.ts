@@ -1,10 +1,9 @@
 /**
- * The GitHub REST calls the pipeline makes (SPEC.md §3, §4) and the validation of
- * their responses against the frozen contract schemas (src/types.ts): every value
- * is rebuilt by the schema that models it, and a response that violates one is a
- * broken API contract and throws (fail closed, SPEC.md §9). The client these calls
- * are issued through and the delivery budget bounding them live in src/client.ts;
- * the mapping of a thrown failure onto GithubApiError lives in src/api-error.ts.
+ * The GitHub REST calls the pipeline makes (SPEC.md §3, §4) and the validation of their responses
+ * against the frozen contract schemas (src/types.ts): every value is rebuilt by the schema that
+ * models it, and a response that violates one is a broken API contract and throws (fail closed,
+ * SPEC.md §9). The client these calls are issued through and the delivery budget bounding them live
+ * in src/client.ts; the mapping of a thrown failure onto GithubApiError lives in src/api-error.ts.
  */
 
 import type { GenericSchema, InferOutput } from "valibot";
@@ -22,8 +21,8 @@ import type { EndpointStatus } from "./api-error";
 import type { GithubClient } from "./client";
 import { safeParse } from "valibot";
 
-/* The page size every list call asks for. Exported for the suites, which plan their routes on the
- * query it produces rather than on a page size of their own. */
+/* The page size every list call asks for, exported so the suites plan their routes on the query it
+ * produces rather than on a page size of their own. */
 const PAGE_SIZE = 100;
 
 interface RepoRef {
@@ -31,13 +30,11 @@ interface RepoRef {
 	readonly repo: string;
 }
 
-/*
- * One response value against the schema that models it. The schema rebuilds the value from the
- * modeled fields alone, so nothing unmodeled travels on from here, and a violation throws as a
- * github-api-error naming the route (SPEC.md §9). The validation issue itself is discarded: §8
- * gives `field` to invalid-payload alone, where the body is the App's own contract with GitHub;
- * a response that breaks its shape is already located by the endpoint the error names.
- */
+/* One response value against the schema that models it. The schema rebuilds the value from the modeled
+ * fields alone, so nothing unmodeled travels on from here, and a violation throws as a github-api-error
+ * naming the route (SPEC.md §9). The validation issue itself is discarded: §8 gives `field` to
+ * invalid-payload alone, where the body is the App's own contract with GitHub, and a response that
+ * breaks its shape is already located by the endpoint the error names. */
 function parseContract<Schema extends GenericSchema>(
 	schema: Schema,
 	value: unknown,
@@ -50,14 +47,12 @@ function parseContract<Schema extends GenericSchema>(
 	return result.output;
 }
 
-/**
- * The one frame every call below is dispatched inside: whatever it throws leaves as the frozen
+/** The one frame every call below is dispatched inside: whatever it throws leaves as the frozen
  * GithubApiError contract, named after the endpoint asked for (SPEC.md §9, §11). Owned here rather
- * than restated per endpoint, because a call that skipped the mapping would reach the entry point
- * as an internal-error and drop the §8 diagnostics the failed call carries — which compiles, and
- * still works, so nothing else would say so. The dispatch is passed in rather than the route, so
- * each endpoint keeps octokit's own checking of the parameters that route takes.
- */
+ * than restated per endpoint, because a call that skipped the mapping would reach the entry point as
+ * an internal-error and drop the §8 diagnostics the failed call carries — which compiles, and still
+ * works, so nothing else would say so. The dispatch is passed in rather than the route, so each
+ * endpoint keeps octokit's own checking of the parameters that route takes. */
 async function dispatched<Result>(endpoint: string, call: () => Promise<Result>): Promise<Result> {
 	try {
 		return await call();
@@ -65,14 +60,12 @@ async function dispatched<Result>(endpoint: string, call: () => Promise<Result>)
 		throw toApiError(endpoint, error);
 	}
 }
-/**
- * A call whose one documented failure is an answer rather than an error (SPEC.md §9): a 404 from
- * the membership lookup means "not a member", a 422 from the review POST means the pull request
- * closed underneath it. Stated once, so the two read alike and neither can drift into swallowing
- * more than the one status it is entitled to. Matched on the endpoint as well as the status
- * (src/api-error.ts): the auth strategy issues its token request from inside these very calls, and
- * absorbing its 404 here would turn a configuration failure into a routine skip.
- */
+/** A call whose one documented failure is an answer rather than an error (SPEC.md §9): a 404 from the
+ * membership lookup means "not a member", a 422 from the review POST means the pull request closed
+ * underneath it. Stated once, so the two read alike and neither can drift into swallowing more than
+ * the one status it is entitled to. Matched on the endpoint as well as the status (src/api-error.ts):
+ * the auth strategy issues its token request from inside these very calls, and absorbing its 404 here
+ * would turn a configuration failure into a routine skip. */
 async function answering<Answer, Result>(
 	tolerated: EndpointStatus,
 	answer: Answer,
@@ -97,18 +90,16 @@ async function contractCall<Schema extends GenericSchema>(
 	return parseContract(schema, response.data, { endpoint, status: response.status });
 }
 
-/*
- * The lookup rather than only the login it derives, held for the isolate (SPEC.md §4): the slug is
- * fixed for the deployment, so a delivery after the first spends neither a subrequest nor a
- * rate-limit call re-reading a constant, and one arriving while that call is still in flight joins
- * it rather than issuing a second. A rejection is not retained: the next delivery retries instead.
- */
+/* The lookup rather than only the login it derives, held for the isolate (SPEC.md §4): the slug is
+ * fixed for the deployment, so a delivery after the first spends neither a subrequest nor a rate-limit
+ * call re-reading a constant, and one arriving while that call is still in flight joins it rather than
+ * issuing a second. A rejection is not retained: the next delivery retries instead. */
 // oxlint-disable-next-line eslint/init-declarations -- the initializer spelling this absence is what unicorn/no-useless-undefined reports
 let cachedBotLogin: Promise<string> | undefined;
 
 /** GET /app itself, uncached: the login is "<slug>[bot]" for the non-empty slug the endpoint returns
- * (SPEC.md §3 cond. 5). The suffix is a GitHub naming convention, so deriving the login belongs to
- * this module rather than to the caller that matches reviews against it. */
+ * (SPEC.md §3 cond. 5). The suffix is a GitHub naming convention, so deriving the login belongs to this
+ * module rather than to the caller that matches reviews against it. */
 async function requestAppBotLogin(client: GithubClient): Promise<string> {
 	const endpoint = "GET /app";
 	const { slug } = await contractCall(
@@ -121,27 +112,46 @@ async function requestAppBotLogin(client: GithubClient): Promise<string> {
 	);
 	return `${slug}[bot]`;
 }
-
-/** The one GET /app of the isolate (SPEC.md §4); what a stale entry can cost is argued there. The promise is
- * installed before it is ever awaited, so concurrent deliveries on a cold isolate join the lookup in flight; the
- * failure path clears by identity, dropping the entry this call awaited and never a newer one already installed. */
-async function fetchAppBotLogin(client: GithubClient): Promise<string> {
-	const pending = (cachedBotLogin ??= requestAppBotLogin(client));
+/** One attempt at the isolate's lookup: the caller installs its own GET /app, or joins the one already
+ * in flight — the promise is installed before it is ever awaited, which is what leaves it there to be
+ * joined. A failure drops the entry by identity, because by then a later delivery may already have
+ * installed a lookup of its own, and dropping that one would cost the isolate the sharing it is for. */
+async function attemptAppBotLogin(client: GithubClient): Promise<string> {
+	const lookup = (cachedBotLogin ??= requestAppBotLogin(client));
 	try {
-		return await pending;
+		return await lookup;
 	} catch (error) {
-		if (cachedBotLogin === pending) {
+		if (cachedBotLogin === lookup) {
 			cachedBotLogin = undefined;
 		}
 		throw error;
 	}
 }
-
-/** Empties the cache above, whether it holds a settled lookup or one still in flight. Exported for
- * the suites alone: the cache is module state, so it outlives the case that filled it and would hand
- * the next one a login it never planned a route for — and being module state, no argument to
- * fetchAppBotLogin can reach it. A deployment has nothing to call this from; an isolate that wants
- * the slug again is a new isolate. */
+/** The one GET /app of the isolate (SPEC.md §4); what a stale entry can cost is argued there. When that
+ * shared lookup fails, the two roles a caller can have owe different things: the originator spent its
+ * own delivery budget on the call, so a second attempt would only meet the same expired deadline, while
+ * a joiner merely rode the originator's abort signal and may still have a budget of its own — so a
+ * joiner, and only a joiner, attempts once more on its own client. Once, not until it succeeds: an
+ * attempt that joins a third delivery's failing lookup throws. That retry needs no clearing of its own,
+ * the joiner's attempt above having dropped the rejected entry in this very frame; left to the
+ * originator's catch it would be a race, and re-entering early is handed the same rejection back. */
+async function fetchAppBotLogin(client: GithubClient): Promise<string> {
+	const originating = cachedBotLogin === undefined;
+	try {
+		return await attemptAppBotLogin(client);
+	} catch (error) {
+		if (originating) {
+			throw error;
+		}
+		const retried = await attemptAppBotLogin(client);
+		return retried;
+	}
+}
+/** Empties the cache above, whether it holds a settled lookup or one still in flight. Exported for the
+ * suites alone: the cache is module state, so it outlives the case that filled it and would hand the
+ * next one a login it never planned a route for — and being module state, no argument to the calls above
+ * can reach it. A deployment has nothing to call this from; an isolate that wants the slug again is a
+ * new isolate. */
 function resetAppBotLogin(): void {
 	cachedBotLogin = undefined;
 }
@@ -162,21 +172,15 @@ async function listPullRequestItems<Schema extends GenericSchema>(
 	itemSchema: Schema,
 ): Promise<readonly InferOutput<Schema>[]> {
 	const { endpoint, pullNumber, repo } = list;
+	const args = { owner: repo.owner, per_page: PAGE_SIZE, pull_number: pullNumber, repo: repo.repo };
 	const items = await dispatched(endpoint, async () => {
-		const pages = await client.paginate(endpoint, {
-			owner: repo.owner,
-			per_page: PAGE_SIZE,
-			pull_number: pullNumber,
-			repo: repo.repo,
-		});
+		const pages = await client.paginate(endpoint, args);
 		return pages;
 	});
 	/* Item shape errors surface after a successful page, so they carry 200. The item is taken as
-	 * `unknown` rather than as the shape octokit types it: nothing here has checked that shape yet,
-	 * and the schema below is what decides it. */
-	return items.map((item: unknown) =>
-		parseContract(itemSchema, item, { endpoint, status: HTTP_OK }),
-	);
+	 * `unknown` rather than as the shape octokit types it, which nothing here has checked yet. */
+	const origin = { endpoint, status: HTTP_OK };
+	return items.map((item: unknown) => parseContract(itemSchema, item, origin));
 }
 
 /** All PR commits via Link-header pagination (SPEC.md §3.2); the 250-commit cap is enforced upstream by precheckCommitCount. */
@@ -235,14 +239,11 @@ async function fetchPullRequest(
 	pullNumber: number,
 ): Promise<LivePullRequest> {
 	const endpoint = "GET /repos/{owner}/{repo}/pulls/{pull_number}";
+	const args = { owner: repo.owner, pull_number: pullNumber, repo: repo.repo };
 	const pullRequest = await contractCall(
 		endpoint,
 		async () => {
-			const response = await client.request(endpoint, {
-				owner: repo.owner,
-				pull_number: pullNumber,
-				repo: repo.repo,
-			});
+			const response = await client.request(endpoint, args);
 			return response;
 		},
 		livePullRequestSchema,
@@ -257,10 +258,8 @@ interface ApprovalTarget {
 	readonly repo: RepoRef;
 }
 
-/**
- * POST an APPROVE review anchored to commitId; a 422 means the PR was closed
- * or merged in the meantime and is treated as a skip (SPEC.md §9).
- */
+/** POST an APPROVE review anchored to commitId; a 422 means the PR was closed or merged in the
+ * meantime and is treated as a skip (SPEC.md §9). */
 async function createApprovalReview(
 	client: GithubClient,
 	target: ApprovalTarget,

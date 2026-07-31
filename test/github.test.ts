@@ -49,6 +49,8 @@ import { installFetchMock, requestByUrl } from "./fetch-stub";
 import { GithubApiError } from "~src/api-error";
 
 const SECOND_PAGE_COUNT = 37;
+/** The originating lookup and the joiner's retry of it: the two GET /app one failure costs. */
+const RETRIED_LOOKUP_CALLS = 2;
 
 function reviewBody(commitId: string): Record<string, unknown> {
 	return { commit_id: commitId, state: "APPROVED", user: OWNER };
@@ -107,6 +109,19 @@ describe("fetchAppBotLogin() caching", () => {
 		await expect(fetchAppBotLogin(await makeClient())).resolves.toBe(APP_BOT.login);
 		mock.assertDone();
 	});
+
+	/* The shared lookup carries the originating delivery's abort signal, so it can fail on a deadline
+	 * that was never the joiner's: the joiner spends its own budget on a second GET /app rather than
+	 * failing a delivery that still had time. */
+	it("retries on its own client when the shared lookup fails", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const mock = installFetchMock([appRoute({}), appRoute()]);
+		const client = await makeClient();
+		const [shared, joined] = [fetchAppBotLogin(client), fetchAppBotLogin(client)];
+		await expect(shared).rejects.toBeInstanceOf(GithubApiError);
+		await expect(joined).resolves.toBe(APP_BOT.login);
+		expect(mock.requests).toHaveLength(RETRIED_LOOKUP_CALLS);
+	});
 });
 
 describe("listPullRequestCommits() pagination", () => {
@@ -144,19 +159,10 @@ describe("listPullRequestCommits() mapping", () => {
 			}),
 		]);
 		const commits = await listPullRequestCommits(await makeClient(), REPO, PULL_NUMBER);
+		const commit = { verification: { verified: true } };
 		expect(commits).toStrictEqual([
-			{
-				author: OWNER,
-				commit: { verification: { verified: true } },
-				committer: OWNER,
-				sha: "sha-a",
-			},
-			{
-				author: null,
-				commit: { verification: { verified: true } },
-				committer: OWNER,
-				sha: "sha-web",
-			},
+			{ author: OWNER, commit, committer: OWNER, sha: "sha-a" },
+			{ author: null, commit, committer: OWNER, sha: "sha-web" },
 		]);
 		mock.assertDone();
 	});
@@ -179,14 +185,8 @@ describe("listPullRequestCommits() mapping", () => {
 describe("fetchOrgMembership()", () => {
 	it("maps an active admin membership", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
-		const mock = installFetchMock([
-			installTokenRoute(),
-			membershipRoute(
-				HUMAN,
-				{ organization_url: "ignored", role: "admin", state: "active" },
-				HTTP_OK,
-			),
-		]);
+		const active = { organization_url: "ignored", role: "admin", state: "active" };
+		const mock = installFetchMock([installTokenRoute(), membershipRoute(HUMAN, active, HTTP_OK)]);
 		const membership = fetchOrgMembership(await makeClient(), ORG.login, HUMAN.login);
 		await expect(membership).resolves.toStrictEqual({ role: "admin", state: "active" });
 		mock.assertDone();
