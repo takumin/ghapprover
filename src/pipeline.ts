@@ -4,10 +4,11 @@
  * trust lookups they spend, and the approval itself — reduced to the outcome the entry point logs
  * and answers with (src/index.ts). What an outcome can say is the vocabulary in src/outcome.ts; this
  * module is what decides which one a delivery reaches. The modeling lives here rather than in a
- * module of its own because it is §4's own first step on the verified body and its answer is read
- * nowhere except immediately before the run below: the schema it defers to (src/types.ts) is what
- * decides whether the delivery can be modeled at all, and the §3 checks it feeds are their own
- * modules (src/decision.ts, src/commits.ts), free of I/O and unit-testable without the API (§12).
+ * module of its own because it is §4's own first step on the verified body and its answer is read at
+ * one seam only — src/index.ts models the body and hands the modeled payload straight to the run
+ * below. The schema it defers to (src/types.ts) is what decides whether the delivery can be modeled
+ * at all, and the §3 checks it feeds are their own modules (src/decision.ts, src/commits.ts), free
+ * of I/O and unit-testable without the API (§12).
  */
 
 import type { AppCredentials, GithubClient } from "./client";
