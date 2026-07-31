@@ -121,10 +121,46 @@
 		// Nursery, as above.
 		"typescript/no-unnecessary-condition": "error",
 		"typescript/prefer-optional-chain": "error",
-		// Too broad for the boundary this Worker sits on: most signatures take a
-		// foreign type — the runtime's Request, the generated Env, the octokit
-		// client — that is not deeply readonly and not this codebase's to change.
-		"typescript/prefer-readonly-parameter-types": "off",
+		// Enforced with an allow list rather than switched off. Plainly enabled it
+		// reports the boundary this Worker sits on — the runtime's Request, the
+		// octokit client, valibot's issue type — none of which is deeply readonly
+		// and none of which is this codebase's to change; switched off it would
+		// also stop reporting the parameters that *are* ours, which is the class of
+		// regression the rule exists to catch. So the exceptions are named, and
+		// only a type that is foreign or mutable by design earns a name. Matching
+		// is by type name, and a type alias does not survive it: `GithubClient` is
+		// listed under the octokit class it resolves to, and a parameter whose type
+		// resolves to no name at all (the before-request hook's options,
+		// src/client.ts) carries a line exemption instead.
+		"typescript/prefer-readonly-parameter-types": [
+			"error",
+			{
+				"allow": [
+					// The Workers runtime and the Fetch API it implements: what the entry point is
+					// handed (src/index.ts) and what the suites build deliveries out of.
+					"AbortSignal",
+					"ExecutionContext",
+					"ReadableStream",
+					"ReadableStreamDefaultController",
+					"Request",
+					"RequestInit",
+					"Response",
+					"URL",
+					// The octokit client (src/client.ts's GithubClient is an instance of it) and the
+					// one failure type the package types for us (src/api-error.ts).
+					"Octokit",
+					"RequestError",
+					// valibot's validation issue, read for its dot path alone (src/payload.ts).
+					"BaseIssue",
+					// Ours, but not readonly-able: GithubApiError extends Error, whose own
+					// name/message/stack are writable and are not ours to freeze.
+					"GithubApiError",
+					// Ours and mutable by design: the SPEC §8 log entry is an accumulator that
+					// deliveryFields/recordPayload/logOutcome build by writing into it (src/log.ts).
+					"LogFields",
+				],
+			},
+		],
 		// `null` is what GitHub sends, not how this codebase says absence: the frozen
 		// contract (src/types.ts) still types the payload fields that really carry it
 		// as nullable, and reading such a field against `null` stays legal (the rule's

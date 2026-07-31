@@ -160,7 +160,7 @@ describe("commit principal collection", () => {
 			expected: [ALICE, ALICE_LOOKALIKE],
 			name: "both accounts when the committer only shares the author's login",
 		},
-	])("collects $name", { timeout: 5000 }, ({ author, committer, expected }) => {
+	] as const)("collects $name", { timeout: 5000 }, ({ author, committer, expected }) => {
 		expect.hasAssertions();
 		expect(commitPrincipals(author, committer)).toStrictEqual(expected);
 	});
@@ -172,7 +172,7 @@ describe("commit count precheck", () => {
 		{ declared: 1, expected: undefined },
 		{ declared: MAX_VERIFIABLE_COMMITS, expected: undefined },
 		{ declared: MAX_VERIFIABLE_COMMITS + 1, expected: "too-many-commits" },
-	])(
+	] as const)(
 		"returns $expected for $declared declared commits",
 		{ timeout: 5000 },
 		({ declared, expected }) => {

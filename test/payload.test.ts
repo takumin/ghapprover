@@ -28,12 +28,17 @@ function expectedPayload(): PullRequestEventPayload {
 	};
 }
 
-function merged(base: object, overrides: Record<string, unknown>): Record<string, unknown> {
+function merged(
+	base: object,
+	overrides: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
 	const target: Record<string, unknown> = {};
 	return Object.assign(target, base, overrides);
 }
 
-function pr(pullRequestOverrides: Record<string, unknown>): Record<string, unknown> {
+function pr(
+	pullRequestOverrides: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
 	const base = expectedPayload();
 	return merged(base, { pull_request: merged(base.pull_request, pullRequestOverrides) });
 }
@@ -52,7 +57,13 @@ const ABSENT_INSTALLATION = merged(expectedPayload(), { installation: undefined 
 const NULL_HEAD_REPO = pr({ head: { repo: null, sha: HEAD_SHA } });
 const ABSENT_HEAD_REPO = pr({ head: { sha: HEAD_SHA } });
 
-const PARSE_OK_CASES = [
+interface ParseOkCase {
+	readonly expected: unknown;
+	readonly name: string;
+	readonly payload: unknown;
+}
+
+const PARSE_OK_CASES: readonly ParseOkCase[] = [
 	{ expected: expectedPayload(), name: "a fully populated payload", payload: expectedPayload() },
 	{
 		expected: expectedPayload(),
@@ -77,7 +88,14 @@ const PARSE_OK_CASES = [
 /* Every row states the path §8's `field` carries for it. A body that is not an object at all
  * fails at the root, which has no field to name, so those rows expect no path. An array is an
  * object as far as the schema is concerned, so it fails on the first key it is missing. */
-const MALFORMED_PAYLOADS = [
+interface MalformedCase {
+	/** SPEC.md §8's dot path, absent for a body that fails at the root. */
+	readonly field: string | undefined;
+	readonly name: string;
+	readonly payload: unknown;
+}
+
+const MALFORMED_PAYLOADS: readonly MalformedCase[] = [
 	{ field: undefined, name: "payload not an object", payload: "not-an-object" },
 	{ field: undefined, name: "payload null", payload: null },
 	{ field: "action", name: "payload an array", payload: [expectedPayload()] },

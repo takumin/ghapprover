@@ -62,7 +62,7 @@ describe("pull request state", () => {
 			overrides: { headRepo: { id: REPOSITORY.id + 1 } },
 			reason: "head-repo-forked",
 		},
-	])(
+	] as const)(
 		"skips $name without dispatching a single call",
 		{ timeout: 5000 },
 		async ({ overrides, reason }) => {

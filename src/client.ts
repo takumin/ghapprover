@@ -72,6 +72,10 @@ function createGithubClient(credentials: AppCredentials, installationId: number)
 		request: { signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS) },
 		userAgent: USER_AGENT,
 	});
+	/* The one parameter here that is written into rather than read, and the hook contract is what
+	 * writes it: octokit hands each dispatch its own options and takes the header back off them.
+	 * Exempted per line rather than by name — the type it arrives as resolves to none. */
+	// oxlint-disable-next-line typescript/prefer-readonly-parameter-types -- the before-request hook pins the header by writing into the options octokit hands it
 	client.hook.before("request", (options) => {
 		options.headers["x-github-api-version"] = API_VERSION;
 	});

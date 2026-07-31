@@ -133,13 +133,13 @@ function deliveryHeaders(signature: string, eventName = "pull_request"): Record<
 	return Object.assign(headers, { "x-hub-signature-256": signature });
 }
 /** The POST a delivery arrives as, however the case arrived at its headers. */
-function deliveryRequest(body: string, headers: Record<string, string>): Request {
+function deliveryRequest(body: string, headers: Readonly<Record<string, string>>): Request {
 	return new Request(WEBHOOK_URL, { body, headers, method: "POST" });
 }
 /** The same POST correctly signed over its own body; a case adds the headers GitHub would have sent with it. */
 async function signedDelivery(
 	body: string,
-	extraHeaders: Record<string, string> = {},
+	extraHeaders: Readonly<Record<string, string>> = {},
 	eventName = "pull_request",
 ): Promise<Request> {
 	const headers = deliveryHeaders(await sign(SECRET, body), eventName);
@@ -171,7 +171,7 @@ function captureLog(): MockInstance<typeof console.log> {
 }
 
 interface ExpectedReply {
-	readonly body: Record<string, string>;
+	readonly body: Readonly<Record<string, string>>;
 	readonly status: number;
 }
 
