@@ -355,7 +355,7 @@ In that case, do not add the owner or the App to the bypass actors.
 flowchart TD
     A["Request"] --> Z{"Routed to POST /webhook?"}
     Z -->|no| R404["404 (not-found)"]
-    Z -->|yes| L{"Read the body within the 25 MB cap<br>(part of step 1: the HMAC covers it)"}
+    Z -->|yes| L{"Read the body within the 2 MiB cap<br>(part of step 1: the HMAC covers it)"}
     L -->|over the cap| R413["413 (payload-too-large)"]
     L -->|within the cap| B{"1. Verify X-Hub-Signature-256"}
     B -->|invalid| R401["401"]
@@ -440,13 +440,27 @@ flowchart TD
   enough one exhausts the Free-plan allowance and fails the delivery closed (§9). It also
   removes, by resolving one at a time, a race between two concurrent lookups of the same
   login that the memoization cannot bound
-- **The body read is bounded at GitHub's 25 MB cap** (§9). The HMAC covers the raw body,
-  so step 1 has to buffer it before the caller is authenticated at all — which makes the
-  buffer the one thing an unauthenticated caller on the public endpoint controls. A
-  declared `Content-Length` above the cap is rejected before a byte is read, but it
-  cannot be the bound: it is absent on a chunked upload, and the same caller chooses
-  whether to send it. So the read counts bytes as they arrive and stops at the cap,
-  cancelling the rest of the stream.
+- **The body read is bounded at 2 MiB** (§9), which is a cap of this Worker's own rather
+  than GitHub's. The HMAC covers the raw body, so step 1 has to buffer it before the
+  caller is authenticated at all — which makes the buffer the one thing an unauthenticated
+  caller on the public endpoint controls. A declared `Content-Length` above the cap is
+  rejected before a byte is read, but it cannot be the bound: it is absent on a chunked
+  upload, and the same caller chooses whether to send it. So the read counts bytes as they
+  arrive and stops at the cap, cancelling the rest of the stream. GitHub caps a delivery at
+  25 MB, but a bound set there would be the largest payload the contract permits rather
+  than the largest one this Worker could act on, and it is the second that says what an
+  unauthenticated caller may spend. 2 MiB is **headroom over documented limits, not a
+  measurement**: a `pull_request` payload runs to tens of kilobytes and its largest single
+  field, the PR body, is capped at 65,536 characters, so the cap clears anything that shape
+  can produce by better than an order of magnitude. What would replace the argument with a
+  number is measuring real deliveries, which has not been done. The trade-off is stated
+  rather than hidden: a payload between this cap and GitHub's is valid as far as GitHub is
+  concerned and is still answered 413, which Recent Deliveries records as a failed delivery
+  and which leaves the PR unapproved until a push or a manual redelivery. §9 accepts that
+  failure mode for transient failures, where it is temporary and not of this Worker's
+  making; here it is neither, and every redelivery of that payload fails the same way. The
+  cap bounds what one request costs and not how many arrive — request volume is not bounded
+  here at all.
 - "Not approving" is a normal outcome (200), and its reason must always be logged.
   5xx is reserved for cases where the evaluation could not be completed (e.g. transient GitHub
   API failures).
@@ -559,7 +573,7 @@ exhaustive rather than illustrative:
 | skipped    | `head-moved`            | §3.3: the live PR was closed, turned draft, or left the payload's head    |
 | skipped    | `review-rejected`       | §9: the review POST returned 422                                          |
 | error      | `invalid-signature`     | §4 step 1: signature missing, malformed, or not matching                  |
-| error      | `payload-too-large`     | §4 step 1: a body above GitHub's 25 MB cap                                |
+| error      | `payload-too-large`     | §4 step 1: a body above the 2 MiB cap, this Worker's not GitHub's         |
 | error      | `not-found`             | A request outside `POST /webhook`                                         |
 | error      | `invalid-payload`       | The body is not JSON, or not the modeled `pull_request` shape             |
 | error      | `missing-installation`  | The delivery carries no `installation.id` (§7)                            |
@@ -614,7 +628,7 @@ are not a vocabulary an operator greps for — they are what turns a grep hit in
 | --------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A request outside `POST /webhook`                                     | 404      | `not-found`. Logged like every other outcome (§8), so a webhook URL pointing at the wrong path is greppable rather than silent                              |
 | Invalid signature / missing signature header                          | 401      | Do not process the body                                                                                                                                     |
-| Request body above GitHub's 25 MB payload cap                         | 413      | `payload-too-large`. Rejected on the declared `Content-Length` before the body is buffered, and on the byte count while it is (§4)                          |
+| Request body above the 2 MiB cap — this Worker's, not GitHub's 25 MB  | 413      | `payload-too-large`. Rejected on the declared `Content-Length` before the body is buffered, and on the byte count while it is (§4)                          |
 | Out-of-scope event / action                                           | 200      | Log the reason                                                                                                                                              |
 | Approval conditions unsatisfied                                       | 200      | Normal outcome. Log the reason                                                                                                                              |
 | Membership API returns 404 (the account is not an org member)         | 200      | Normal outcome, not an error: `author-not-trusted` for the PR author, `untrusted-commit` for a commit principal (§3.2)                                      |
