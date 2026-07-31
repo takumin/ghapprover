@@ -71,12 +71,10 @@
 		// carry the check.
 		"eslint/require-await": "off",
 		// The import group, in the order oxlint sorts it:
-		// - no-named-export and prefer-default-export each contradict
-		//   no-default-export, which the restriction category keeps on: the first
-		//   pair as errors leaves a module nothing it may export, and the second
-		//   orders the single-export modules to write the default export the
-		//   enabled rule bans. The named shape is also what lets SPEC §12's
-		//   decision logic be unit-tested without mocking the GitHub API.
+		// - no-named-export contradicts no-default-export, which the restriction
+		//   category keeps on: as errors the pair leaves a module nothing it may
+		//   export. The named shape is also what lets SPEC §12's decision logic be
+		//   unit-tested without mocking the GitHub API.
 		// - exports-last and group-exports reject export-at-declaration, the shape
 		//   every module here is written in: satisfying them restates every public
 		//   declaration in a trailing export block without changing anything a
@@ -85,13 +83,22 @@
 		//   that cannot avoid a default export (src/index.ts, vitest.config.mts)
 		//   carry a line exemption rather than the rule being switched off for
 		//   whole files.
+		// - prefer-default-export fires only on a module with a single export, and
+		//   asks for the default export no-default-export bans, so with that rule
+		//   standing it reads as "no module may have exactly one export". That is
+		//   the shape this codebase already wants: a lone export is either a value
+		//   the consumer restates because the module never offered it, or a module
+		//   that only ever travels with its single caller. Keeping it an error is
+		//   what stops the next one from being added silently -- and what makes
+		//   the constraint permanent, since a refactor that leaves a module one
+		//   export has to resolve it rather than land.
 		"import/exports-last": "off",
 		// Reports nothing against the extensionless imports this codebase writes, so
 		// it is carried as a guard on that style rather than switched off.
 		"import/extensions": "error",
 		"import/group-exports": "off",
 		"import/no-named-export": "off",
-		"import/prefer-default-export": "off",
+		"import/prefer-default-export": "error",
 		// Bans async/await outright, while the enabled
 		// typescript/promise-function-async requires every promise-returning
 		// function to be async: as errors the pair leaves no legal way to return a
