@@ -228,4 +228,3 @@ async function runPipeline(
 }
 
 export { parsePullRequestEvent, parsePullRequestEventBody, runPipeline };
-export type { PayloadValidation };
