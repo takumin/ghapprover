@@ -110,10 +110,14 @@ const CLASSIFY_CASES = [
 ];
 
 describe("principal classification", () => {
-	it.each(CLASSIFY_CASES)("classifies $name as $expected", ({ expected, owner, user }) => {
-		expect.hasAssertions();
-		expect(classifyPrincipal(user, owner)).toBe(expected);
-	});
+	it.each(CLASSIFY_CASES)(
+		"classifies $name as $expected",
+		{ timeout: 5000 },
+		({ expected, owner, user }) => {
+			expect.hasAssertions();
+			expect(classifyPrincipal(user, owner)).toBe(expected);
+		},
+	);
 });
 
 describe("org owner membership", () => {
@@ -122,7 +126,7 @@ describe("org owner membership", () => {
 		{ expected: false, membership: ACTIVE_MEMBER, name: "an active regular member" },
 		{ expected: false, membership: PENDING_ADMIN, name: "a pending admin" },
 		{ expected: false, membership: null, name: "a missing membership (404)" },
-	])("returns $expected for $name", ({ expected, membership }) => {
+	])("returns $expected for $name", { timeout: 5000 }, ({ expected, membership }) => {
 		expect.hasAssertions();
 		expect(isOwnerMembership(membership)).toBe(expected);
 	});

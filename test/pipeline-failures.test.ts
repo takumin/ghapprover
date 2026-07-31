@@ -39,26 +39,30 @@ const PKCS1_MESSAGE =
 const PKCS1_PEM = "-----BEGIN RSA PRIVATE KEY-----\nAAAA\n-----END RSA PRIVATE KEY-----\n";
 
 describe("auth configuration failures", () => {
-	it("errors with a bounded diagnostic when the private key is rejected", async () => {
-		expect.hasAssertions();
-		const logSpy = captureLog();
-		const session = installFetchMock([]);
-		const env = await makeEnv({ GITHUB_APP_PRIVATE_KEY: PKCS1_PEM });
-		const response = await postSigned(buildPayload(), "pull_request", env);
-		await expectError(response, "internal-error", HTTP_INTERNAL_ERROR);
-		/* SPEC.md §8: the class name is `Error` for every configuration mistake alike, so what says
-		 * which one this was is the message the auth library raised. */
-		expect(logSpy).toHaveBeenCalledWith(
-			expect.objectContaining({
-				errorMessage: PKCS1_MESSAGE,
-				errorName: "Error",
-				reason: "internal-error",
-			}),
-		);
-		session.assertDone();
-	});
+	it(
+		"errors with a bounded diagnostic when the private key is rejected",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const logSpy = captureLog();
+			const session = installFetchMock([]);
+			const env = await makeEnv({ GITHUB_APP_PRIVATE_KEY: PKCS1_PEM });
+			const response = await postSigned(buildPayload(), "pull_request", env);
+			await expectError(response, "internal-error", HTTP_INTERNAL_ERROR);
+			/* SPEC.md §8: the class name is `Error` for every configuration mistake alike, so what says
+			 * which one this was is the message the auth library raised. */
+			expect(logSpy).toHaveBeenCalledWith(
+				expect.objectContaining({
+					errorMessage: PKCS1_MESSAGE,
+					errorName: "Error",
+					reason: "internal-error",
+				}),
+			);
+			session.assertDone();
+		},
+	);
 
-	it("errors loudly when the installation token cannot be issued", async () => {
+	it("errors loudly when the installation token cannot be issued", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const logSpy = captureLog();
 		const session = installFetchMock([
@@ -79,7 +83,7 @@ describe("auth configuration failures", () => {
 });
 
 describe("github api failures", () => {
-	it("errors when the commits request fails", async () => {
+	it("errors when the commits request fails", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
@@ -95,7 +99,7 @@ describe("github api failures", () => {
 		session.assertDone();
 	});
 
-	it("errors when the commits request hits a network failure", async () => {
+	it("errors when the commits request hits a network failure", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const session = installFetchMock([
 			installTokenRoute(),
@@ -132,58 +136,74 @@ function commitsFailureRoute(
 /* SPEC.md §8 and §9: a github-api-error is greppable, but only these fields say which failure it
  * was. §9 asks for a 401/403 to be distinguishable in logs as a configuration problem, and it is
  * the headers that do it — status 403 alone is a missing permission and a rate limit at once. */
-describe("api failure diagnostics", () => {
-	it("logs what tells a refused call apart from an exhausted rate limit", async () => {
-		expect.hasAssertions();
-		const logSpy = captureLog();
-		const session = installFetchMock([
-			installTokenRoute(),
-			commitsFailureRoute({ message: "API rate limit exceeded" }, HTTP_FORBIDDEN, REFUSAL_HEADERS),
-		]);
-		await postSigned(buildPayload());
-		expect(logSpy).toHaveBeenCalledWith(
-			expect.objectContaining({
-				acceptedPermissions: "pull_requests=write",
-				endpoint: COMMITS_ENDPOINT,
-				errorMessage: "API rate limit exceeded",
-				rateLimitRemaining: "0",
-				rateLimitReset: "1770000000",
-				reason: "github-api-error",
-				requestId: "F1E2:3D4C",
-				status: HTTP_FORBIDDEN,
-			}),
-		);
-		session.assertDone();
-	});
+describe("api failure diagnostics with a response", () => {
+	it(
+		"logs what tells a refused call apart from an exhausted rate limit",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const logSpy = captureLog();
+			const session = installFetchMock([
+				installTokenRoute(),
+				commitsFailureRoute(
+					{ message: "API rate limit exceeded" },
+					HTTP_FORBIDDEN,
+					REFUSAL_HEADERS,
+				),
+			]);
+			await postSigned(buildPayload());
+			expect(logSpy).toHaveBeenCalledWith(
+				expect.objectContaining({
+					acceptedPermissions: "pull_requests=write",
+					endpoint: COMMITS_ENDPOINT,
+					errorMessage: "API rate limit exceeded",
+					rateLimitRemaining: "0",
+					rateLimitReset: "1770000000",
+					reason: "github-api-error",
+					requestId: "F1E2:3D4C",
+					status: HTTP_FORBIDDEN,
+				}),
+			);
+			session.assertDone();
+		},
+	);
+});
 
-	/* Asserted as the whole entry rather than a subset: what this case is about is the four fields
-	 * that are *not* there, a failure with no response having no headers to read them off. */
-	it("logs the message but no headers when the call never received a response", async () => {
-		expect.hasAssertions();
-		const logSpy = captureLog();
-		const session = installFetchMock([installTokenRoute(), commitsFailureRoute({}, 0)]);
-		await postSigned(buildPayload());
-		expect(logSpy).toHaveBeenCalledWith({
-			action: "opened",
-			decision: "error",
-			deliveryId: DELIVERY_ID,
-			endpoint: COMMITS_ENDPOINT,
-			errorMessage: "simulated network failure",
-			headSha: HEAD_SHA,
-			prNumber: PULL_NUMBER,
-			reason: "github-api-error",
-			repo: REPOSITORY.full_name,
-			status: 0,
-		});
-		session.assertDone();
-	});
+/* The counterpart of the case above, and asserted as the whole entry rather than a subset: what
+ * this case is about is the four fields that are *not* there, a failure with no response having no
+ * headers to read them off. Its own suite because the pair of them under one describe runs past
+ * eslint/max-lines-per-function. */
+describe("api failure diagnostics without a response", () => {
+	it(
+		"logs the message but no headers when the call never received a response",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const logSpy = captureLog();
+			const session = installFetchMock([installTokenRoute(), commitsFailureRoute({}, 0)]);
+			await postSigned(buildPayload());
+			expect(logSpy).toHaveBeenCalledWith({
+				action: "opened",
+				decision: "error",
+				deliveryId: DELIVERY_ID,
+				endpoint: COMMITS_ENDPOINT,
+				errorMessage: "simulated network failure",
+				headSha: HEAD_SHA,
+				prNumber: PULL_NUMBER,
+				reason: "github-api-error",
+				repo: REPOSITORY.full_name,
+				status: 0,
+			});
+			session.assertDone();
+		},
+	);
 });
 
 /* SPEC.md §8 and §12: @octokit/request builds the message from the response body — the whole body
  * when it is not JSON — so nothing bounds it at the source. The entry is where it is bounded,
  * which is what makes one rule cover every path onto the field. */
 describe("error message bounds", () => {
-	it("truncates a message the source does not bound", async () => {
+	it("truncates a message the source does not bound", { timeout: 5000 }, async () => {
 		expect.hasAssertions();
 		const logSpy = captureLog();
 		const session = installFetchMock([

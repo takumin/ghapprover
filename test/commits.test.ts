@@ -156,7 +156,7 @@ describe("commit principal collection", () => {
 			expected: [ALICE, ALICE_LOOKALIKE],
 			name: "both accounts when the committer only shares the author's login",
 		},
-	])("collects $name", ({ author, committer, expected }) => {
+	])("collects $name", { timeout: 5000 }, ({ author, committer, expected }) => {
 		expect.hasAssertions();
 		expect(commitPrincipals(author, committer)).toStrictEqual(expected);
 	});
@@ -168,15 +168,20 @@ describe("commit count precheck", () => {
 		{ declared: 1, expected: null },
 		{ declared: MAX_VERIFIABLE_COMMITS, expected: null },
 		{ declared: MAX_VERIFIABLE_COMMITS + 1, expected: "too-many-commits" },
-	])("returns $expected for $declared declared commits", ({ declared, expected }) => {
-		expect.hasAssertions();
-		expect(precheckCommitCount(declared)).toBe(expected);
-	});
+	])(
+		"returns $expected for $declared declared commits",
+		{ timeout: 5000 },
+		({ declared, expected }) => {
+			expect.hasAssertions();
+			expect(precheckCommitCount(declared)).toBe(expected);
+		},
+	);
 });
 
 describe("fetched commit count", () => {
 	it.each(COMMIT_COUNT_CASES)(
 		"returns $expected for $fetched fetched of $declared declared",
+		{ timeout: 5000 },
 		({ declared, expected, fetched }) => {
 			expect.hasAssertions();
 			expect(checkCommitCount(fetched, declared)).toBe(expected);
@@ -185,8 +190,12 @@ describe("fetched commit count", () => {
 });
 
 describe("commit verification gate", () => {
-	it.each(COMMIT_CASES)("returns $expected for $name", async ({ entry, expected }) => {
-		expect.hasAssertions();
-		await expect(checkCommit(entry, isTrustedFixture)).resolves.toBe(expected);
-	});
+	it.each(COMMIT_CASES)(
+		"returns $expected for $name",
+		{ timeout: 5000 },
+		async ({ entry, expected }) => {
+			expect.hasAssertions();
+			await expect(checkCommit(entry, isTrustedFixture)).resolves.toBe(expected);
+		},
+	);
 });

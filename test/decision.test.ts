@@ -69,7 +69,7 @@ describe("target action filtering", () => {
 		{ action: "labeled", expected: false },
 		{ action: "converted_to_draft", expected: false },
 		{ action: "review_requested", expected: false },
-	])("returns $expected for $action", ({ action, expected }) => {
+	])("returns $expected for $action", { timeout: 5000 }, ({ action, expected }) => {
 		expect.hasAssertions();
 		expect(isTargetAction(action)).toBe(expected);
 	});
@@ -101,7 +101,7 @@ describe("pull request state gate", () => {
 			name: "a draft fork pull request",
 			overrides: { draft: true, repo: { id: 999 } },
 		},
-	])("returns $expected for $name", ({ expected, overrides }) => {
+	])("returns $expected for $name", { timeout: 5000 }, ({ expected, overrides }) => {
 		expect.hasAssertions();
 		expect(checkPullRequestState(eventPullRequest(overrides), REPOSITORY)).toBe(expected);
 	});
@@ -134,7 +134,7 @@ describe("own approval detection", () => {
 				review(),
 			],
 		},
-	])("returns $expected for $name", ({ expected, reviews }) => {
+	])("returns $expected for $name", { timeout: 5000 }, ({ expected, reviews }) => {
 		expect.hasAssertions();
 		expect(hasOwnApproval(reviews, BOT_LOGIN, HEAD_SHA)).toBe(expected);
 	});
@@ -146,7 +146,7 @@ describe("live pull request state", () => {
 		{ expected: false, name: "a pull request closed meanwhile", overrides: { state: "closed" } },
 		{ expected: false, name: "a pull request turned draft", overrides: { draft: true } },
 		{ expected: false, name: "a moved head", overrides: { sha: "moved-sha" } },
-	])("returns $expected for $name", ({ expected, overrides }) => {
+	])("returns $expected for $name", { timeout: 5000 }, ({ expected, overrides }) => {
 		expect.hasAssertions();
 		expect(isLiveStateCurrent(livePullRequest(overrides), HEAD_SHA)).toBe(expected);
 	});
