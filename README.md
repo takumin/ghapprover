@@ -303,10 +303,14 @@ field that cannot be there reads as a missing log:
   `missing-webhook-secret`, `payload-too-large` and `invalid-signature` — the entries
   whose only other identifier is the clock. It is absent when the header is, which is the
   ordinary case for `not-found`: such a request is usually not a delivery at all.
-- `repo`, `prNumber`, `action` and `headSha` are read from the payload, so they exist
-  only once the body has been signature-verified and parsed. The four refusals above and
-  `invalid-payload` carry none of them; grep those by `deliveryId` and match it against
-  Recent Deliveries.
+- `repo`, `prNumber`, `action` and `headSha` are read from the payload, so they exist only
+  once the body has been signature-verified and parsed. The rule is that side of the
+  parse rather than any list of reasons: _every_ outcome settled before it carries none of
+  the four. That is the refusals above, `invalid-payload`, an `internal-error` thrown that
+  early — and `event-out-of-scope`, which is the one easy to misread, since a correctly
+  signed delivery that simply is not a `pull_request` event is turned away on the event
+  header alone, before its body is looked at. Grep those by `deliveryId` and match it
+  against Recent Deliveries.
 - `reason`, drawn from a closed vocabulary, accompanies every outcome except an approval
   — for which the `approved` decision is the whole of it.
 
