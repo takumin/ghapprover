@@ -161,7 +161,7 @@
 					// name/message/stack are writable and are not ours to freeze.
 					"GithubApiError",
 					// Ours and mutable by design: the SPEC §8 log entry is an accumulator that
-					// deliveryFields/recordPayload/logOutcome build by writing into it (src/log.ts).
+					// recordDelivery/recordPayload/logOutcome build by writing into it (src/log.ts).
 					"LogFields",
 				],
 			},

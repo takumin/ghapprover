@@ -15,18 +15,20 @@ type LogFields = Record<string, number | string>;
 
 /* SPEC.md §8: X-GitHub-Delivery is the only identifier GitHub's Recent Deliveries shows for a
  * failed delivery, so it is what an operator carries into the logs. It is known from the headers
- * alone, which is why every entry starts from this rather than from an empty field set. The
- * deployed version id is known just as early — it is a binding, not anything the request carries —
- * and is what says which build produced the entry, so the two are set together and both survive on
- * a delivery rejected before its body is read. */
-function deliveryFields(request: Request, env: Env): LogFields {
-	const log: LogFields = {};
+ * alone, which is why this is the first of the three to run and every later field lands on the
+ * record it leaves behind. The deployed version id is known just as early — it is a binding, not
+ * anything the request carries — and is what says which build produced the entry, so the two are
+ * set together and both survive on a delivery rejected before its body is read. Like recordPayload
+ * it writes into the record it is handed rather than returning one of its own, which is what lets
+ * the caller derive these inside the frame that guarantees the entry (src/index.ts): reaching
+ * through a binding can throw like anything else there, and an entry naming that throw and
+ * carrying neither field is still an entry. */
+function recordDelivery(log: LogFields, request: Request, env: Env): void {
 	const deliveryId = request.headers.get("x-github-delivery");
 	if (deliveryId !== null) {
 		log["deliveryId"] = deliveryId;
 	}
 	log["versionId"] = env.CF_VERSION_METADATA.id;
-	return log;
 }
 
 function recordPayload(log: LogFields, payload: PullRequestEventPayload): void {
@@ -91,5 +93,5 @@ function logOutcome(log: LogFields, outcome: Outcome): void {
 	console.log(log);
 }
 
-export { MAX_ERROR_MESSAGE_CHARS, deliveryFields, logOutcome, recordPayload };
+export { MAX_ERROR_MESSAGE_CHARS, logOutcome, recordDelivery, recordPayload };
 export type { AllOutcomeFieldsLogged, LogFields };

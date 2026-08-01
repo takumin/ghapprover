@@ -43,11 +43,20 @@ declare global {
 	interface Env {
 		/**
 		 * The deployed Worker version (SPEC.md §5), whose id every log entry carries (§8).
-		 * Generated already, being declared in wrangler.jsonc; narrowed to readonly here so
-		 * that `Env` stays a value a delivery reads and never one it could write into, which
-		 * is what the three secrets below get from their own modifiers.
+		 * Generated already, being declared in wrangler.jsonc; restated here narrowed to
+		 * readonly, so that `Env` stays a value a delivery reads and never one it could write
+		 * into, which is what the three secrets below get from their own modifiers.
+		 *
+		 * The narrowing is taken off the generated declaration rather than written out again,
+		 * which is what keeps the restatement from also becoming a second source for whether
+		 * the binding exists at all. Spelled out, a config that stopped declaring
+		 * `version_metadata` would still typecheck and still build against this line, and the
+		 * §8 entry would lose its `versionId` at runtime alone. Read through `__BaseEnv_Env` —
+		 * the generated interface both this and `Cloudflare.Env` extend — the same config change
+		 * stops compiling on this line instead, which is where the field the entry needs is
+		 * claimed to exist.
 		 */
-		readonly CF_VERSION_METADATA: Readonly<WorkerVersionMetadata>;
+		readonly CF_VERSION_METADATA: Readonly<__BaseEnv_Env["CF_VERSION_METADATA"]>;
 		/** GitHub App ID (or client ID), the `iss` claim of the App JWT. */
 		readonly GITHUB_APP_ID: string;
 		/** GitHub App private key, PKCS#8 PEM (SPEC.md §7); the PKCS#1 PEM GitHub serves is rejected at runtime. */
@@ -60,7 +69,7 @@ declare global {
 	namespace Cloudflare {
 		/** Mirror of the above for `env` importers (`cloudflare:test` / `cloudflare:workers`). */
 		interface Env {
-			readonly CF_VERSION_METADATA: Readonly<WorkerVersionMetadata>;
+			readonly CF_VERSION_METADATA: Readonly<__BaseEnv_Env["CF_VERSION_METADATA"]>;
 			readonly GITHUB_APP_ID: string;
 			readonly GITHUB_APP_PRIVATE_KEY: string;
 			readonly GITHUB_WEBHOOK_SECRET: string;

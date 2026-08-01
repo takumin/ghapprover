@@ -57,6 +57,19 @@ async function makeEnv(overrides: Partial<Env> = {}): Promise<Env> {
 	return Object.assign(env, overrides);
 }
 
+/**
+ * The env a deployment that dropped the §5 binding would hand the Worker: the one env shape
+ * `Env` says cannot exist, which is exactly why no override can express it and the key is
+ * deleted reflectively instead. The binding is declared in wrangler.jsonc, so this is what a
+ * config change rather than a request produces — and §8's guarantee is about the entry the
+ * delivery leaves either way.
+ */
+async function makeEnvWithoutVersionMetadata(): Promise<Env> {
+	const env = await makeEnv();
+	Reflect.deleteProperty(env, "CF_VERSION_METADATA");
+	return env;
+}
+
 interface PayloadOverrides {
 	readonly action?: string;
 	readonly commits?: number;
@@ -225,6 +238,7 @@ export {
 	expectSkipped,
 	happyRoutes,
 	makeEnv,
+	makeEnvWithoutVersionMetadata,
 	pipelineRoutes,
 	postSigned,
 	signedDelivery,

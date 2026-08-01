@@ -7,8 +7,8 @@
  */
 
 import { SIGNATURE_HEADER, verifyWebhookSignature } from "./webhook";
-import { deliveryFields, logOutcome, recordPayload } from "./log";
 import { errorOutcome, internalErrorOutcome, skippedOutcome } from "./outcome";
+import { logOutcome, recordDelivery, recordPayload } from "./log";
 import { parsePullRequestEventBody, runPipeline } from "./pipeline";
 import type { AppCredentials } from "./client";
 import type { LogFields } from "./log";
@@ -131,12 +131,18 @@ function isMisrouted(request: Request): boolean {
 	return request.method !== "POST" || new URL(request.url).pathname !== "/webhook";
 }
 /* SPEC.md §8 and §9: the one frame that maps a thrown failure onto an outcome, for the whole
- * delivery rather than the pipeline alone — reading the body and verifying the signature run
- * outside the pipeline and can reject on their own (a client disconnect or a truncated chunked
- * upload rejects request.text()). Without this the Worker would answer with the runtime's own
- * 500 and leave no log entry at all, which is the one outcome §8 does not allow. */
+ * delivery rather than the pipeline alone — deriving the entry's own fields, reading the body and
+ * verifying the signature all run outside the pipeline and can reject on their own (a client
+ * disconnect or a truncated chunked upload rejects request.text()). Without this the Worker would
+ * answer with the runtime's own 500 and leave no log entry at all, which is the one outcome §8
+ * does not allow. */
 async function evaluateOrFail(request: Request, env: Env, log: LogFields): Promise<Outcome> {
 	try {
+		/* First, and inside the frame rather than before it: the §8 fields known from the headers and
+		 * the §5 binding alone. Deriving them reaches through a binding, so a deployment that dropped
+		 * it makes this throw — and an entry that names that throw is still the one entry §8 requires,
+		 * where the same read ahead of the frame would leave the delivery no entry at all. */
+		recordDelivery(log, request, env);
 		/* SPEC.md §8: the reason vocabulary is what an operator greps, and a webhook URL pointing at
 		 * the wrong path is exactly what not-found exists to surface — so it has to leave a log entry,
 		 * not only a 404 body. Settled on the evaluation path rather than in fetch so every request
@@ -153,9 +159,14 @@ async function evaluateOrFail(request: Request, env: Env, log: LogFields): Promi
 		return internalErrorOutcome(error);
 	}
 }
-/** The one terminal frame: every request leaves through exactly one log entry and one response. */
+/**
+ * The one terminal frame: every request leaves through exactly one log entry and one response.
+ * The entry starts empty here because everything that fills it belongs inside the guarded region,
+ * the §8 fields off the headers and the binding included. What is left outside is the logging and
+ * the response themselves, which copy what the record and the outcome already hold.
+ */
 async function handleWebhook(request: Request, env: Env): Promise<Response> {
-	const log = deliveryFields(request, env);
+	const log: LogFields = {};
 	const outcome = await evaluateOrFail(request, env, log);
 	logOutcome(log, outcome);
 	return respond(outcome);
