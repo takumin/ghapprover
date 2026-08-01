@@ -182,9 +182,15 @@ openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt \
 
 ```sh
 mise run wrangler secret put GITHUB_APP_ID          # the App ID from the App's settings page
-mise run wrangler secret put GITHUB_APP_PRIVATE_KEY # paste the PKCS#8 key, BEGIN/END lines included
 mise run wrangler secret put GITHUB_WEBHOOK_SECRET  # the webhook secret from step 2
+mise run wrangler secret put GITHUB_APP_PRIVATE_KEY < private-key-pkcs8.key
 ```
+
+**Redirect the private key from the file; do not paste it.** The `secret put` prompt ends
+at the first newline, so a pasted PEM stores its `-----BEGIN PRIVATE KEY-----` line and
+discards the rest — a key that cannot be imported, on a deployment that otherwise looks
+configured. Every qualifying delivery then fails, and the reason it logs names the import
+rather than the paste.
 
 Nothing else is configurable, and nothing is read from environment variables — see
 [Customization](#customization).
@@ -360,7 +366,7 @@ grepped.
 | `payload-too-large`                             | The body exceeded the 2 MiB cap the Worker buffers before verifying it                                           |
 | `invalid-payload`                               | The body is not a `pull_request` event of the modeled shape — check the App's event subscription                 |
 | `missing-installation`                          | The delivery carried no usable installation id — reinstall the App on the account                                |
-| `internal-error` right after deploying          | The private key was stored in PKCS#1 — redo step 3                                                               |
+| `internal-error` right after deploying          | The private key was stored in PKCS#1, or pasted rather than redirected so only its first line landed — see step 4 |
 | `event-out-of-scope` / `already-approved`       | Working as intended: an action outside the four handled, or an APPROVE from this App already covers the head SHA |
 | `pr-draft` / `pr-not-open` / `head-repo-forked` | Working as intended: drafts, closed pull requests, and forks are never approved                                  |
 | `head-repo-missing`                             | The head branch's repository was deleted before the delivery was evaluated                                       |
