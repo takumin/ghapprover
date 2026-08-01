@@ -88,6 +88,32 @@ depends = ["setup"]
 run = "pnpm build"
 
 ################################################################################
+# Worker
+################################################################################
+
+[tasks.dev]
+description = "Run the worker locally with wrangler dev"
+depends = ["setup"]
+run = "pnpm dev"
+
+# `pnpm run deploy`, not `pnpm deploy`: pnpm has a built-in `deploy` command that
+# takes precedence over the script and swallows the arguments meant for wrangler.
+[tasks.deploy]
+description = "Deploy the worker to Cloudflare"
+depends = ["setup"]
+run = "pnpm run deploy"
+
+# The escape hatch for the wrangler subcommands that have no script of their own
+# (`login`, `secret put`, `tail`, `delete`). mise appends the task's CLI arguments
+# to the run command, so `mise run wrangler secret put NAME` reaches wrangler
+# intact. Separate flags with `--` -- `mise run wrangler -- delete --help` --
+# because mise claims some of them (`--help`) for itself otherwise.
+[tasks.wrangler]
+description = "Run wrangler directly (login, secret put, tail, ...)"
+depends = ["setup"]
+run = "pnpm exec wrangler"
+
+################################################################################
 # Reviewdog
 ################################################################################
 
