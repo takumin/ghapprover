@@ -70,6 +70,18 @@ async function makeEnvWithoutVersionMetadata(): Promise<Env> {
 	return env;
 }
 
+/**
+ * The env a deployment that never ran `wrangler secret put` would hand the Worker (SPEC.md §7):
+ * an unset Workers Secret is absent rather than empty, which is the one shape `Env` says cannot
+ * exist and no override can express — so the key is deleted reflectively, as the §5 binding above
+ * is. The empty secret the other case drives is expressible and is passed as a plain override.
+ */
+async function makeEnvWithoutWebhookSecret(): Promise<Env> {
+	const env = await makeEnv();
+	Reflect.deleteProperty(env, "GITHUB_WEBHOOK_SECRET");
+	return env;
+}
+
 interface PayloadOverrides {
 	readonly action?: string;
 	readonly commits?: number;
@@ -239,6 +251,7 @@ export {
 	happyRoutes,
 	makeEnv,
 	makeEnvWithoutVersionMetadata,
+	makeEnvWithoutWebhookSecret,
 	pipelineRoutes,
 	postSigned,
 	signedDelivery,

@@ -105,6 +105,38 @@ async function readBoundedBody(request: Request): Promise<string | undefined> {
 	const body = await readCappedStream(stream);
 	return body;
 }
+/**
+ * What SPEC.md §4 step 1 refuses the delivery for, or nothing when the caller is authenticated.
+ * The two refusals are kept apart because they name different secrets: `invalid-signature` is a
+ * digest that did not match and sends an operator to the secret configured on the GitHub App,
+ * while `missing-webhook-secret` is this Worker's own Secret never having been set (§7) — and both
+ * sides of that pair are called "the webhook secret", so an entry that says only the first sends
+ * them after the one fault that is not there. Which is why the Worker's own configuration is
+ * settled first: it refuses every delivery a deployment receives, digest and header alike.
+ */
+async function verificationFailure(
+	request: Request,
+	env: Env,
+	body: string,
+): Promise<Outcome | undefined> {
+	/* Tested for falsiness rather than compared to undefined: an unset Workers Secret arrives as
+	 * undefined though `Env` declares it a string (src/types.ts), which leaves that comparison a
+	 * check against a value the declared type says it cannot hold — and an empty secret verifies
+	 * nothing either, so falsiness is the one test both shapes fail. */
+	const secret = env.GITHUB_WEBHOOK_SECRET;
+	if (!secret) {
+		return errorOutcome("missing-webhook-secret");
+	}
+	const verified = await verifyWebhookSignature(
+		secret,
+		body,
+		request.headers.get(SIGNATURE_HEADER),
+	);
+	if (!verified) {
+		return errorOutcome("invalid-signature");
+	}
+	return undefined;
+}
 /** SPEC.md §4 step 1 and §9: verify the signature and scope the event before parsing the body. */
 async function evaluateDelivery(request: Request, env: Env, log: LogFields): Promise<Outcome> {
 	const body = await readBoundedBody(request);
@@ -113,13 +145,9 @@ async function evaluateDelivery(request: Request, env: Env, log: LogFields): Pro
 	if (body === undefined) {
 		return errorOutcome("payload-too-large");
 	}
-	const verified = await verifyWebhookSignature(
-		env.GITHUB_WEBHOOK_SECRET,
-		body,
-		request.headers.get(SIGNATURE_HEADER),
-	);
-	if (!verified) {
-		return errorOutcome("invalid-signature");
+	const refused = await verificationFailure(request, env, body);
+	if (refused !== undefined) {
+		return refused;
 	}
 	if (request.headers.get("x-github-event") !== "pull_request") {
 		return skippedOutcome("event-out-of-scope");

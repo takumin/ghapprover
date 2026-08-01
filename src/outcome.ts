@@ -40,6 +40,7 @@ type ErrorReason =
 	| "invalid-payload"
 	| "invalid-signature"
 	| "missing-installation"
+	| "missing-webhook-secret"
 	| "not-found"
 	| "payload-too-large";
 /**

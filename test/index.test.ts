@@ -18,7 +18,9 @@ import {
 	dispatch,
 	expectError,
 	expectSkipped,
+	makeEnv,
 	makeEnvWithoutVersionMetadata,
+	makeEnvWithoutWebhookSecret,
 	postSigned,
 	unsignedDeliveryHeaders,
 } from "./delivery";
@@ -103,6 +105,53 @@ describe("signature verification", () => {
 			deliveryHeaders(signature),
 		);
 		await expectError(await dispatch(request), "invalid-signature", HTTP_UNAUTHORIZED);
+	});
+});
+
+/* SPEC.md §8: a deployment that never had a webhook secret rejects every delivery, and what the
+ * entry has to say is which of the two secrets called "the webhook secret" is at fault — the one on
+ * the App, or this Worker's own. Every case here signs correctly where it signs at all, so what is
+ * being driven is the deployment and never the digest. */
+describe("webhook secret configuration", () => {
+	it("errors when the secret binding is absent", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const logSpy = captureLog();
+		const session = installFetchMock([]);
+		const env = await makeEnvWithoutWebhookSecret();
+		const response = await postSigned(buildPayload(), "pull_request", env);
+		await expectError(response, "missing-webhook-secret", HTTP_INTERNAL_ERROR);
+		expect(logSpy).toHaveBeenCalledExactlyOnceWith(
+			loggedEntry({
+				decision: "error",
+				deliveryId: DELIVERY_ID,
+				reason: "missing-webhook-secret",
+			}),
+		);
+		session.assertDone();
+	});
+
+	/* The other shape an unconfigured secret takes, and the one the binding's declared type does
+	 * admit: verify() refuses it exactly as it refuses the absent one, so it is the same outcome. */
+	it("errors when the secret is empty", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const session = installFetchMock([]);
+		const env = await makeEnv({ GITHUB_WEBHOOK_SECRET: "" });
+		const response = await postSigned(buildPayload(), "pull_request", env);
+		await expectError(response, "missing-webhook-secret", HTTP_INTERNAL_ERROR);
+		session.assertDone();
+	});
+
+	/* Which of the two failures a delivery that has neither is reported as. The Worker's own
+	 * configuration is settled first on purpose: a deployment with no secret answers every delivery
+	 * the same way, so an entry naming the caller's header would send the operator after the one
+	 * fault that is not there. */
+	it("reports the absent secret rather than the missing signature", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const session = installFetchMock([]);
+		const request = deliveryRequest(buildPayload(), unsignedDeliveryHeaders());
+		const response = await dispatch(request, await makeEnvWithoutWebhookSecret());
+		await expectError(response, "missing-webhook-secret", HTTP_INTERNAL_ERROR);
+		session.assertDone();
 	});
 });
 
