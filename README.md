@@ -219,15 +219,26 @@ changes nothing. Configure, on each protected branch:
   squash or merge commits.
 - **Dismiss stale pull request approvals when new commits are pushed.** ghapprover
   re-verifies and re-approves on every push, so with this on, a pull request stays
-  approved only while all of its commits stay trusted.
+  approved only while all of its commits stay trusted — with one documented exception. A
+  push that lands between the live head check and the review POST completing is _earlier_
+  than the approval it would have to dismiss, so it does not dismiss it, and the commit it
+  carried ends up under an approval that never verified it. Require signed commits still
+  blocks an unsigned one from merging; a signed commit from an untrusted principal is the
+  residual risk, and [SPEC.md §3.3](SPEC.md#33-race-condition-mitigation-toctou) is where
+  it is set out.
 
 If you installed with "All repositories" and some repositories must keep human review
 required, require review from Code Owners — the App's bot cannot be one — and do not add
-the owner or the App to the bypass actors. Raising the required approval count is not a
-substitute: ghapprover's approval counts toward it, and so does any other reviewing App or
-bot on the repository, so a count of 2 can be met with nobody human involved. A count says
-how many approvals are needed; only a rule that names who may give them keeps a person in
-the loop.
+the owner or the App to the bypass actors. Enabling that rule is half of it: it only bites
+where a pull request touches an owned path, so back it with a `CODEOWNERS` file that
+covers the repository, catch-all `*` entry naming a human or team included. Without the
+file, or on a pull request touching only unowned paths, the rule asks for no approval at
+all and the ordinary count is again satisfiable by ghapprover alone.
+
+Raising the required approval count is not a substitute either: ghapprover's approval
+counts toward it, and so does any other reviewing App or bot on the repository, so a count
+of 2 can be met with nobody human involved. A count says how many approvals are needed;
+only a rule that names who may give them keeps a person in the loop.
 
 Details and caveats:
 [SPEC.md §3.4](SPEC.md#34-prerequisite-branch-protection--ruleset-configuration-users-responsibility).

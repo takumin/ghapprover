@@ -326,7 +326,9 @@ requirement:
   on the repository counts toward the number just as well. Prefer the Code Owners rule
   where the requirement is human review rather than a second approval
 - Enable Require review from Code Owners (the App's bot cannot be a code owner, so its
-  approval does not satisfy this requirement)
+  approval does not satisfy this requirement). The rule applies only where a PR touches an
+  owned path, so it needs a `CODEOWNERS` file covering the repository — a catch-all `*`
+  entry included — or a PR touching only unowned paths falls back to the ordinary count
 
 In that case, do not add the owner or the App to the bypass actors.
 
