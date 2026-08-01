@@ -1,8 +1,9 @@
 /**
  * What src/index.ts decides about a delivery once its bytes have been read: the one route check,
  * signature verification, event scoping, and the payload the pipeline is only handed if it models
- * (SPEC.md §4 step 1, §8, §9). The read that produces those bytes, cap and all, is index-body's;
- * what happens once a delivery is verified and modeled is driven by the pipeline suites.
+ * (SPEC.md §4 step 1, §8, §9), and the frame all of that decides inside. The read that produces
+ * those bytes, cap and all, is index-body's; what happens once a delivery is verified and modeled
+ * is driven by the pipeline suites.
  */
 
 import {
@@ -17,6 +18,7 @@ import {
 	dispatch,
 	expectError,
 	expectSkipped,
+	makeEnvWithoutVersionMetadata,
 	postSigned,
 	unsignedDeliveryHeaders,
 } from "./delivery";
@@ -159,6 +161,39 @@ describe("payload validation", () => {
 		const session = installFetchMock([]);
 		const response = await postSigned(buildPayload({ installation: null }));
 		await expectError(response, "missing-installation", HTTP_INTERNAL_ERROR);
+		session.assertDone();
+	});
+});
+
+/* The runtime's own wording for a property read on nothing, which is not this Worker's to state:
+ * the entry has to carry a message, and which one is workerd's business. Typed as `unknown` at the
+ * matcher rather than at its use, `expect.any` being untyped where the entry below is not. */
+const ANY_MESSAGE: unknown = expect.any(String);
+
+describe("the terminal frame", () => {
+	/* SPEC.md §8 asks for one entry per delivery, and the fields of the entry itself are inside
+	 * what that has to hold for: `versionId` is read off the §5 binding, so a deployment that
+	 * dropped it makes the read throw. Derived ahead of the frame the throw escaped `fetch` and the
+	 * delivery ended as the runtime's own 500 with nothing logged — the one outcome §8 does not
+	 * allow, and the only one nothing here observed. What survives is not the field but the entry:
+	 * the delivery id read just before the throw, and the class that threw. */
+	it("logs one entry when the version binding is absent", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const logSpy = captureLog();
+		const session = installFetchMock([]);
+		const env = await makeEnvWithoutVersionMetadata();
+		const response = await postSigned(buildPayload(), "pull_request", env);
+		await expectError(response, "internal-error", HTTP_INTERNAL_ERROR);
+		/* Exactly once and with exactly this: one entry is half of what §8 asks for here, and an
+		 * entry stated whole rather than contained is what says the field that threw is absent
+		 * from it rather than merely unasserted. */
+		expect(logSpy).toHaveBeenCalledExactlyOnceWith({
+			decision: "error",
+			deliveryId: DELIVERY_ID,
+			errorMessage: ANY_MESSAGE,
+			errorName: "TypeError",
+			reason: "internal-error",
+		});
 		session.assertDone();
 	});
 });
