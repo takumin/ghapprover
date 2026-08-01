@@ -106,27 +106,17 @@ async function readBoundedBody(request: Request): Promise<string | undefined> {
 	return body;
 }
 /**
- * What SPEC.md §4 step 1 refuses the delivery for, or nothing when the caller is authenticated.
- * The two refusals are kept apart because they name different secrets: `invalid-signature` is a
- * digest that did not match and sends an operator to the secret configured on the GitHub App,
- * while `missing-webhook-secret` is this Worker's own Secret never having been set (§7) — and both
- * sides of that pair are called "the webhook secret", so an entry that says only the first sends
- * them after the one fault that is not there. Which is why the Worker's own configuration is
- * settled first: it refuses every delivery a deployment receives, digest and header alike.
+ * What turns a delivery away once its bytes are in hand, or nothing when the body is to be modeled:
+ * a digest that did not match (SPEC.md §4 step 1) and an event outside §3 condition 1. Stated
+ * together because both are decided from the headers and the raw body, which is what puts them on
+ * the near side of the parse — and apart from the delivery itself, because that one leaves through
+ * a third answer, the modeled payload the pipeline is handed.
  */
-async function verificationFailure(
+async function refusalBeforeParsing(
 	request: Request,
-	env: Env,
+	secret: string,
 	body: string,
 ): Promise<Outcome | undefined> {
-	/* Tested for falsiness rather than compared to undefined: an unset Workers Secret arrives as
-	 * undefined though `Env` declares it a string (src/types.ts), which leaves that comparison a
-	 * check against a value the declared type says it cannot hold — and an empty secret verifies
-	 * nothing either, so falsiness is the one test both shapes fail. */
-	const secret = env.GITHUB_WEBHOOK_SECRET;
-	if (!secret) {
-		return errorOutcome("missing-webhook-secret");
-	}
 	const verified = await verifyWebhookSignature(
 		secret,
 		body,
@@ -135,22 +125,38 @@ async function verificationFailure(
 	if (!verified) {
 		return errorOutcome("invalid-signature");
 	}
+	if (request.headers.get("x-github-event") !== "pull_request") {
+		return skippedOutcome("event-out-of-scope");
+	}
 	return undefined;
 }
 /** SPEC.md §4 step 1 and §9: verify the signature and scope the event before parsing the body. */
 async function evaluateDelivery(request: Request, env: Env, log: LogFields): Promise<Outcome> {
+	/* SPEC.md §7, ahead of the read because it is decided by the deployment alone: a Worker with no
+	 * secret can verify nothing, so it has nothing to gain by first buffering up to 2 MiB from an
+	 * unauthenticated caller, and this is the answer to every delivery it receives rather than only
+	 * to the ones whose body happened to arrive — read after the cap, an oversized or unreadable
+	 * body would be answered payload-too-large or internal-error and name a fault that is not the
+	 * one there. Reported apart from `invalid-signature` because the two name different secrets:
+	 * that one is a digest GitHub got wrong and sends an operator to the secret configured on the
+	 * App, this one is the Worker's own Secret never having been set, and both sides of that pair
+	 * are called "the webhook secret". Tested for falsiness rather than compared to undefined: an
+	 * unset Workers Secret arrives as undefined though `Env` declares it a string (src/types.ts),
+	 * which leaves that comparison a check against a value the declared type says it cannot hold —
+	 * and an emptied one arrives as "", which verifies nothing either. */
+	const secret = env.GITHUB_WEBHOOK_SECRET;
+	if (!secret) {
+		return errorOutcome("missing-webhook-secret");
+	}
 	const body = await readBoundedBody(request);
 	/* Compared rather than tested for truth: an empty body is a body, and it still has to be
 	 * signature-verified and parsed like any other. */
 	if (body === undefined) {
 		return errorOutcome("payload-too-large");
 	}
-	const refused = await verificationFailure(request, env, body);
-	if (refused !== undefined) {
-		return refused;
-	}
-	if (request.headers.get("x-github-event") !== "pull_request") {
-		return skippedOutcome("event-out-of-scope");
+	const refusal = await refusalBeforeParsing(request, secret, body);
+	if (refusal !== undefined) {
+		return refusal;
 	}
 	return evaluateBody(body, env, log);
 }

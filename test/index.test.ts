@@ -8,7 +8,9 @@
 
 import {
 	DELIVERY_ID,
+	OVERSIZED_BODY_BYTES,
 	SECRET,
+	UNCHECKED_SIGNATURE,
 	VERSION_ID,
 	WEBHOOK_URL,
 	buildPayload,
@@ -140,19 +142,41 @@ describe("webhook secret configuration", () => {
 		await expectError(response, "missing-webhook-secret", HTTP_INTERNAL_ERROR);
 		session.assertDone();
 	});
+});
 
-	/* Which of the two failures a delivery that has neither is reported as. The Worker's own
-	 * configuration is settled first on purpose: a deployment with no secret answers every delivery
-	 * the same way, so an entry naming the caller's header would send the operator after the one
-	 * fault that is not there. */
-	it("reports the absent secret rather than the missing signature", { timeout: 5000 }, async () => {
-		expect.hasAssertions();
-		const session = installFetchMock([]);
-		const request = deliveryRequest(buildPayload(), unsignedDeliveryHeaders());
-		const response = await dispatch(request, await makeEnvWithoutWebhookSecret());
-		await expectError(response, "missing-webhook-secret", HTTP_INTERNAL_ERROR);
-		session.assertDone();
-	});
+/* What an unconfigured deployment answers a delivery that would have been turned away on its own
+ * terms anyway. The secret is settled before the signature header is looked at and before a byte of
+ * the body is read (SPEC.md §4), which is what makes the outcome the answer to every delivery such
+ * a deployment receives rather than to the ones that happened to arrive well-formed and within the
+ * cap — the others would name the delivery for a fault that is the deployment's. */
+interface RefusedCase {
+	readonly headers: Readonly<Record<string, string>>;
+	readonly name: string;
+}
+
+const OTHERWISE_REFUSED: readonly RefusedCase[] = [
+	{ headers: unsignedDeliveryHeaders(), name: "a delivery carrying no signature" },
+	{
+		headers: Object.assign(deliveryHeaders(UNCHECKED_SIGNATURE), {
+			"content-length": String(OVERSIZED_BODY_BYTES),
+		}),
+		name: "a body declared over the cap",
+	},
+];
+
+describe("webhook secret precedence", () => {
+	it.each(OTHERWISE_REFUSED)(
+		"reports the absent secret over $name",
+		{ timeout: 5000 },
+		async ({ headers }) => {
+			expect.hasAssertions();
+			const session = installFetchMock([]);
+			const request = deliveryRequest(buildPayload(), headers);
+			const response = await dispatch(request, await makeEnvWithoutWebhookSecret());
+			await expectError(response, "missing-webhook-secret", HTTP_INTERNAL_ERROR);
+			session.assertDone();
+		},
+	);
 });
 
 describe("event scoping", () => {

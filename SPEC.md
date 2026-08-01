@@ -355,7 +355,9 @@ In that case, do not add the owner or the App to the bypass actors.
 flowchart TD
     A["Request"] --> Z{"Routed to POST /webhook?"}
     Z -->|no| R404["404 (not-found)"]
-    Z -->|yes| L{"Read the body within the 2 MiB cap<br>(part of step 1: the HMAC covers it)"}
+    Z -->|yes| S{"Is this Worker's own webhook secret set?<br>(§7, before a byte of the body is read)"}
+    S -->|no| R500S["500 (missing-webhook-secret)"]
+    S -->|yes| L{"Read the body within the 2 MiB cap<br>(part of step 1: the HMAC covers it)"}
     L -->|over the cap| R413["413 (payload-too-large)"]
     L -->|within the cap| B{"1. Verify X-Hub-Signature-256"}
     B -->|invalid| R401["401"]
@@ -461,6 +463,14 @@ flowchart TD
   making; here it is neither, and every redelivery of that payload fails the same way. The
   cap bounds what one request costs and not how many arrive — request volume is not bounded
   here at all.
+- **This Worker's own webhook secret is read before the body is.** It comes off the binding
+  rather than the request, so a deployment that has none can verify nothing and refuses every
+  delivery it receives (§9's `missing-webhook-secret`) without buffering a byte of what an
+  unauthenticated caller sent. The order is what makes that "every": read after the cap
+  instead, a body over the cap or a stream that fails mid-read would be answered
+  `payload-too-large` or `internal-error` and point an operator at the delivery rather than at
+  the deployment. It stays behind the route check, so a request that never reached
+  `POST /webhook` is still `not-found` (§9)
 - "Not approving" is a normal outcome (200), and its reason must always be logged.
   5xx is reserved for cases where the evaluation could not be completed (e.g. transient GitHub
   API failures).
