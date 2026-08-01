@@ -195,8 +195,12 @@ Install the App on the target account, with one of:
 - **All repositories** — every repository, including ones created later. Per-repository
   control then lives in rulesets (step 6).
 
-Either way the approval conditions are evaluated per pull request and fail closed, so
-widening the scope never creates a new approval path.
+The installation scope is the only repository filter there is: ghapprover keeps no
+allowlist of its own, and the §3 conditions ask about a pull request rather than about
+which repository it is in. So the conditions do not narrow the scope — widening it to
+**All repositories** is what decides that every qualifying owner or bot pull request in
+each newly included repository, present and future, gets approved. Treat that as
+granting a new approval path per repository, and pick the scope accordingly.
 
 ### 6. Configure branch protection or a ruleset
 
@@ -283,11 +287,26 @@ configuration loading — every approval condition lives in the code and in Git 
 
 ## Observability
 
-Every delivery emits one structured log entry to Workers Logs carrying the delivery id,
-the deployed version id, the repository, pull request number, action, head SHA, a
-`decision` of `approved` / `skipped` / `error`, and a `reason` drawn from a closed
-vocabulary. Failures add diagnostic fields: a failed API call carries the route template,
-status, GitHub request id, and the accepted-permissions and rate-limit headers; an
+Every delivery emits exactly one structured log entry to Workers Logs. Each field is
+written as soon as it is known, so an entry says only as much as the delivery got far
+enough to establish — which matters most for the early refusals, where looking for a
+field that cannot be there reads as a missing log:
+
+- `versionId`, the deployed version id, and a `decision` of `approved` / `skipped` /
+  `error` are on every entry.
+- `deliveryId` comes from the headers, ahead of every check, so it is there even on
+  `missing-webhook-secret`, `payload-too-large` and `invalid-signature` — the entries
+  whose only other identifier is the clock. It is absent when the header is, which is the
+  ordinary case for `not-found`: such a request is usually not a delivery at all.
+- `repo`, `prNumber`, `action` and `headSha` are read from the payload, so they exist
+  only once the body has been signature-verified and parsed. The four refusals above and
+  `invalid-payload` carry none of them; grep those by `deliveryId` and match it against
+  Recent Deliveries.
+- `reason`, drawn from a closed vocabulary, accompanies every outcome except an approval
+  — for which the `approved` decision is the whole of it.
+
+Failures add diagnostic fields: a failed API call carries the route template, status,
+GitHub request id, and the accepted-permissions and rate-limit headers; an
 `invalid-payload` carries `field`, the dot path of the payload field that failed
 validation and the only thing that says which; and an `internal-error` carries
 `errorName`, the thrown value's class, with the originating `errorMessage`.
