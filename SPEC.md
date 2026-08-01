@@ -320,7 +320,11 @@ repositories where human review must remain required, configure one of the follo
 rulesets so that ghapprover's approval alone does not satisfy the required-review
 requirement:
 
-- Set Required approvals to 2 or more (ghapprover's approval counts as 1)
+- Set Required approvals to 2 or more (ghapprover's approval counts as 1). This keeps
+  ghapprover's approval from sufficing on its own, which is what this section asks for —
+  but it does not by itself keep a human in the loop, since any other reviewing App or bot
+  on the repository counts toward the number just as well. Prefer the Code Owners rule
+  where the requirement is human review rather than a second approval
 - Enable Require review from Code Owners (the App's bot cannot be a code owner, so its
   approval does not satisfy this requirement)
 

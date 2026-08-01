@@ -222,9 +222,12 @@ changes nothing. Configure, on each protected branch:
   approved only while all of its commits stay trusted.
 
 If you installed with "All repositories" and some repositories must keep human review
-required, set their required approvals to 2 or more, or require review from Code Owners
-(the App's bot cannot be a code owner) — and do not add the owner or the App to the
-bypass actors.
+required, require review from Code Owners — the App's bot cannot be one — and do not add
+the owner or the App to the bypass actors. Raising the required approval count is not a
+substitute: ghapprover's approval counts toward it, and so does any other reviewing App or
+bot on the repository, so a count of 2 can be met with nobody human involved. A count says
+how many approvals are needed; only a rule that names who may give them keeps a person in
+the loop.
 
 Details and caveats:
 [SPEC.md §3.4](SPEC.md#34-prerequisite-branch-protection--ruleset-configuration-users-responsibility).
@@ -268,8 +271,10 @@ configuration loading — every approval condition lives in the code and in Git 
 
 - **Who can get an approval**: only the trusted principals listed above. The check is a
   three-way branch, not a fallback chain, so a bot account is settled by the allowlist
-  alone and a lookalike login is rejected without a lookup. Every identity exemption that
-  _grants_ approval is pinned on a numeric id as well as a login.
+  alone and a lookalike login is rejected without a lookup. A personal repository's owner
+  and an allowed bot are both pinned on a numeric id as well as a login. An organization
+  owner is the exception: the membership API is asked about a login, so that one path
+  rests on GitHub's own account resolution rather than on an id this Worker compares.
 - **Why signatures matter**: a commit's `author` and `committer` user objects are derived
   from its email addresses, so anyone with push access can forge them. Requiring
   `verification.verified` is what makes attribution mean anything — and it is why
@@ -323,7 +328,9 @@ them from:
   never reached GitHub or a delivery that spent its time budget. An individual header can
   be missing from a real response too.
 - An `invalid-payload` carries `field`, the dot path of the payload field that failed
-  validation and the only thing that says which.
+  validation and the only thing that says which — where there is a field to name. A body
+  that is not JSON at all, or one whose whole document is the wrong type (a bare string,
+  `null`), fails at the root with no path to report, and that entry carries no `field`.
 - An `internal-error` carries `errorName`, the thrown value's class, with the originating
   `errorMessage`. A thrown value that is not an `Error` has no message to report: the entry
   then reads `errorName: "unknown"` and carries no `errorMessage` at all.
