@@ -552,7 +552,16 @@ entries rejected before the body is looked at (`payload-too-large`,
 Deliveries shows for a failed delivery, and therefore the one an operator greps by. It is
 omitted rather than defaulted when the header is absent, which is the ordinary case for
 `not-found`: a request that never reached
-`POST /webhook` is usually not a GitHub delivery at all. `versionId` is the id of the
+`POST /webhook` is usually not a GitHub delivery at all. Surviving those rejections means
+it is read before any of them is decided, which makes it the one §8 field an
+unauthenticated caller writes into — so it is **truncated to 64 characters**, the header
+itself carrying no bound the Worker can rely on. A delivery id is a 36-character UUID, so
+that is headroom over the shape rather than a fit to it: nothing GitHub sends is cut, and
+whatever is cut was not a delivery id to begin with. Truncating rather than checking the
+value against the UUID form is what keeps the field independent of GitHub's current id
+format, where a format change would otherwise make it disappear silently. It bounds the
+size of such an entry and not the number of them, which is a rate limit at the edge rather
+than anything this Worker decides. `versionId` is the id of the
 deployed Worker version, taken from the §5 binding, and answers the one question a changed
 outcome raises that no other field can: which build produced the entry. Every approval
 condition lives in the code — an `ALLOWED_BOTS` entry, a §3 check, the §4 delivery budget —
@@ -632,7 +641,7 @@ are not a vocabulary an operator greps for — they are what turns a grep hit in
 > a Tail Worker forwards these logs to an external destination and voids that premise** —
 > treat the destination as part of the trust boundary before enabling either. The bounded
 > fields stay bounded either way: `endpoint` is a route template, `errorName` a class
-> name, `field` a path, and `errorMessage` is truncated.
+> name, `field` a path, and `deliveryId` and `errorMessage` are truncated.
 
 ## 9. Error Handling
 
@@ -785,7 +794,7 @@ Rules:
 - The §3 contract types are inferred from the validation schemas rather than declared
   beside them (§11), which is what keeps the two from drifting. The projection check
   against `@octokit/webhooks-types` applies to the inferred type
-- `errorMessage` is truncated where the log entry is built rather than where the error is
-  raised, so every path onto that field is bounded by one rule (§8). The diagnostic
-  headers come off the failed response, which is why they are absent whenever there was
-  no response at all
+- `deliveryId` and `errorMessage` are truncated where the log entry is built rather than
+  where the value is raised or read, so every path onto a field whose source imposes no
+  bound of its own is bounded by one rule (§8). The diagnostic headers come off the failed
+  response, which is why they are absent whenever there was no response at all
