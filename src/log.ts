@@ -13,6 +13,34 @@ import type { PullRequestEventPayload } from "./types";
 /** SPEC.md §8 flat log entry, accumulating fields as they become known per delivery. */
 type LogFields = Record<string, number | string>;
 
+/*
+ * The bounds on the two §8 fields whose source imposes none. Stated together because they are one
+ * rule rather than two slices: a field this entry copies verbatim from something outside this
+ * Worker is bounded where the entry is built, not at each place a value can reach it (SPEC.md §12).
+ * Both are exported for the suites that drive the truncation, which state the overlong value as the
+ * bound plus one rather than as a literal of their own — a literal keeps passing once a bound moves.
+ */
+/**
+ * A delivery id is a 36-character UUID, so this is headroom over that shape rather
+ * than a fit to it: every id GitHub actually sends passes through whole, and a value
+ * this does cut is therefore not a delivery id at all — the entry never carries a
+ * prefix an operator could mistake for one and grep Recent Deliveries for in vain.
+ * The bound is what the field's position costs: it is filled from the headers before
+ * the route check, before the webhook secret is looked at and before the signature is
+ * verified (src/index.ts), because §8 requires it on `payload-too-large`,
+ * `missing-webhook-secret` and `invalid-signature` — which makes it the one §8 field
+ * an unauthenticated caller writes into, on every request the Worker receives. This
+ * bounds the size of such an entry and not the number of them; that is a rate limit at
+ * the edge rather than anything this Worker can decide.
+ */
+const MAX_DELIVERY_ID_CHARS = 64;
+/**
+ * @octokit/request builds an error message from the response body and takes the whole
+ * body when that body is not JSON (an HTML error page from GitHub or a proxy in front
+ * of it), so the message arrives unbounded however short the error it names.
+ */
+const MAX_ERROR_MESSAGE_CHARS = 512;
+
 /* SPEC.md §8: X-GitHub-Delivery is the only identifier GitHub's Recent Deliveries shows for a
  * failed delivery, so it is what an operator carries into the logs. It is known from the headers
  * alone, which is why this is the first of the three to run and every later field lands on the
@@ -26,7 +54,7 @@ type LogFields = Record<string, number | string>;
 function recordDelivery(log: LogFields, request: Request, env: Env): void {
 	const deliveryId = request.headers.get("x-github-delivery");
 	if (deliveryId !== null) {
-		log["deliveryId"] = deliveryId;
+		log["deliveryId"] = deliveryId.slice(0, MAX_DELIVERY_ID_CHARS);
 	}
 	log["versionId"] = env.CF_VERSION_METADATA.id;
 }
@@ -66,16 +94,6 @@ type AllOutcomeFieldsLogged = NoneOf<
 		"decision" | "errorMessage" | "httpStatus" | (typeof OPTIONAL_LOG_FIELDS)[number]
 	>
 >;
-/**
- * The one bound on the one §8 field that has none at its source: @octokit/request
- * builds an error message from the response body and takes the whole body when
- * that body is not JSON (an HTML error page from GitHub or a proxy in front of
- * it). Truncating here, where the entry is built, is what makes it one rule for
- * every path onto the field rather than one per place an error is raised
- * (SPEC.md §12). Exported for the suite that drives the truncation, which builds
- * a message past the bound out of the bound itself.
- */
-const MAX_ERROR_MESSAGE_CHARS = 512;
 /** Exactly one structured log entry per handled webhook delivery (SPEC.md §8). */
 function logOutcome(log: LogFields, outcome: Outcome): void {
 	log["decision"] = outcome.decision;
@@ -93,5 +111,11 @@ function logOutcome(log: LogFields, outcome: Outcome): void {
 	console.log(log);
 }
 
-export { MAX_ERROR_MESSAGE_CHARS, logOutcome, recordDelivery, recordPayload };
+export {
+	MAX_DELIVERY_ID_CHARS,
+	MAX_ERROR_MESSAGE_CHARS,
+	logOutcome,
+	recordDelivery,
+	recordPayload,
+};
 export type { AllOutcomeFieldsLogged, LogFields };

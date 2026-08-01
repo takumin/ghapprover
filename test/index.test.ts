@@ -28,6 +28,7 @@ import {
 } from "./delivery";
 import { HTTP_INTERNAL_ERROR, HTTP_NOT_FOUND, HTTP_UNAUTHORIZED } from "~src/http-status";
 import { beforeEach, describe, expect, it } from "vitest";
+import { MAX_DELIVERY_ID_CHARS } from "~src/log";
 import { installFetchMock } from "./fetch-stub";
 import { resetAppBotLogin } from "~src/github";
 import { sign } from "@octokit/webhooks-methods";
@@ -88,6 +89,30 @@ describe("request routing", () => {
 			expect(logSpy).toHaveBeenCalledWith(loggedEntry(expected));
 		},
 	);
+});
+
+/* SPEC.md §8: the same header read as above, driven for its bound rather than its presence. A
+ * misrouted GET is the cheapest way to reach it with nothing authenticated — no route check, no
+ * webhook secret and no signature has been consulted by the time the field is on the entry, so
+ * the length of what lands there is the caller's to pick unless the entry bounds it. */
+describe("delivery id bound", () => {
+	/* Stated as the bound plus one rather than as a length of its own: a literal would keep passing
+	 * as a value within the bound once that bound moved, which is the case this is here to hold. */
+	it("truncates a delivery id past the bound", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const logSpy = captureLog();
+		installFetchMock([]);
+		const overlong = "d".repeat(MAX_DELIVERY_ID_CHARS + 1);
+		const headers = { "x-github-delivery": overlong };
+		await dispatch(new Request(WEBHOOK_URL, { headers, method: "GET" }));
+		expect(logSpy).toHaveBeenCalledWith(
+			loggedEntry({
+				decision: "error",
+				deliveryId: overlong.slice(0, MAX_DELIVERY_ID_CHARS),
+				reason: "not-found",
+			}),
+		);
+	});
 });
 
 describe("signature verification", () => {
