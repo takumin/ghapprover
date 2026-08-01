@@ -112,10 +112,13 @@ flowchart TD
 Each delivery is handled synchronously, so its outcome is what GitHub records in Recent
 Deliveries, and a failure can be retried by redelivering it by hand.
 
-A delivery authored by the owner or an allowed bot costs under 10 API calls, against the 50
-subrequests per request the Workers free plan allows. What can exhaust that allowance is a
-pull request whose commits carry many _distinct_ principals, since each one costs a
-membership lookup; such a delivery fails closed rather than approving.
+A delivery authored by the owner or an allowed bot costs under 10 API calls on an ordinary
+pull request, against the 50 subrequests per request the Workers free plan allows. Two
+things scale past that, and neither is the size of the change: each _distinct_ principal
+among the commits costs a membership lookup, and both the commit list and this App's own
+review list are read through Link-header pagination at 100 per page — so a pull request
+with hundreds of commits, or one carrying a long review history, spends a subrequest per
+page of each. A delivery that exhausts the allowance fails closed rather than approving.
 
 ## Prerequisites
 
@@ -281,9 +284,11 @@ configuration loading — every approval condition lives in the code and in Git 
 - **Secrets** live in Workers Secrets. Installation tokens are issued per delivery and
   never persisted; webhook signatures are compared in constant time; the request body is
   capped at 2 MiB before it is buffered.
-- **Logs** stay inside your Cloudflare account and never carry tokens, keys, or payload
-  values. Enabling Logpush or a Tail Worker forwards them elsewhere — treat that
-  destination as part of the trust boundary first.
+- **Logs** stay inside your Cloudflare account and never carry tokens, keys, or the
+  contents of a payload — no field values, no titles, no diffs. They do carry the
+  identifying metadata of what was evaluated: repository full name, pull request number,
+  event action, and head SHA. Enabling Logpush or a Tail Worker forwards that metadata to
+  the destination too — treat it as part of the trust boundary first.
 
 ## Observability
 
@@ -305,11 +310,19 @@ field that cannot be there reads as a missing log:
 - `reason`, drawn from a closed vocabulary, accompanies every outcome except an approval
   — for which the `approved` decision is the whole of it.
 
-Failures add diagnostic fields: a failed API call carries the route template, status,
-GitHub request id, and the accepted-permissions and rate-limit headers; an
-`invalid-payload` carries `field`, the dot path of the payload field that failed
-validation and the only thing that says which; and an `internal-error` carries
-`errorName`, the thrown value's class, with the originating `errorMessage`.
+Failures add diagnostic fields, and these too exist only where there was something to read
+them from:
+
+- A failed API call always carries the route template and `status`. The GitHub request id
+  and the accepted-permissions and rate-limit headers are read off the failed response, so
+  they are absent when there was none — which is exactly the `status: 0` case, a call that
+  never reached GitHub or a delivery that spent its time budget. An individual header can
+  be missing from a real response too.
+- An `invalid-payload` carries `field`, the dot path of the payload field that failed
+  validation and the only thing that says which.
+- An `internal-error` carries `errorName`, the thrown value's class, with the originating
+  `errorMessage`. A thrown value that is not an `Error` has no message to report: the entry
+  then reads `errorName: "unknown"` and carries no `errorMessage` at all.
 
 The full reason vocabulary is in [SPEC.md §8](SPEC.md#8-observability); it is meant to be
 grepped.
@@ -335,7 +348,7 @@ grepped.
 | `no-commits`                                    | The pull request declares zero commits, so there is nothing to verify — it fails closed                          |
 | `too-many-commits`                              | More than 250 commits; the commits API cannot return them all, so it fails closed                                |
 | `commit-count-mismatch`                         | The commits API returned a different number than the payload declared — redeliver, or push again                 |
-| `head-moved`                                    | A push landed while the delivery was being evaluated; its own `synchronize` delivery approves the new head       |
+| `head-moved`                                    | A push landed mid-evaluation; that push's own `synchronize` delivery re-evaluates the new head on its own merits |
 | `review-rejected`                               | The pull request was closed or merged between the last check and the review POST                                 |
 | `github-api-error` with 401                     | The App ID and the private key are not from the same App, so the App JWT was rejected — recheck step 4           |
 | `github-api-error` with 403                     | Check `acceptedPermissions` in the log entry — a permission was never granted, or `rateLimitRemaining` is 0      |

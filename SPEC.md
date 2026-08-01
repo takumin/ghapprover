@@ -92,9 +92,15 @@ installation scopes:
 - **All repositories** — targets all repositories (including ones created in the
   future), with effective per-repository control handled on the ruleset side (§3.4)
 
-> [!NOTE]
-> Whichever is chosen, the approval conditions (§3) are evaluated per PR and fail
-> closed, so widening the installation scope never creates a new approval path.
+> [!IMPORTANT]
+> The installation scope is the only repository filter that exists: there is no
+> repository allowlist in the Worker, and the §3 conditions ask about a PR rather
+> than about which repository it arrived from. Failing closed therefore constrains
+> which PRs are approved, not which repositories are in play — widening the scope
+> is what puts each newly included repository behind those conditions, so every
+> qualifying owner or bot PR there will be approved. Treat widening as granting an
+> approval path per repository, and pair "All repositories" with the ruleset
+> configuration in §3.4.
 
 ## 3. Approval Conditions
 
@@ -634,7 +640,10 @@ are not a vocabulary an operator greps for — they are what turns a grep hit in
 > vocabulary rather than a diagnostic channel.
 
 > [!WARNING]
-> Structured logs never carry tokens, private keys, or webhook payload values. What
+> Structured logs never carry tokens, private keys, or the contents of a webhook payload —
+> no field values, no titles, no diffs. The identifying metadata listed above (`repo`,
+> `prNumber`, `action`, `headSha`) is logged by design and reaches any destination these
+> logs are forwarded to. What
 > separates them from the response body above is the audience rather than the sensitivity:
 > Workers Logs stay inside the Cloudflare account, and that premise is what makes
 > `errorMessage` acceptable there and unacceptable in the response. **Enabling Logpush or
