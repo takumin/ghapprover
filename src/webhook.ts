@@ -34,6 +34,11 @@ async function verifyWebhookSignature(
 	if (signatureHeader === null || !SIGNATURE_PATTERN.test(signatureHeader)) {
 		return false;
 	}
+	/* The guard verify() puts on its own arguments throws a TypeError on an empty secret, body or
+	 * signature, which is what this frame is here for. An unset secret is settled before a delivery
+	 * reaches this module (src/index.ts), so what the boolean still absorbs is an empty body — a
+	 * delivery no digest GitHub could produce would verify against, sign() refusing an empty payload
+	 * too, which is the invalid-signature it is reported as. */
 	try {
 		return await verify(secret, body, signatureHeader);
 	} catch {

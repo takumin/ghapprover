@@ -8,7 +8,9 @@
 
 import {
 	DELIVERY_ID,
+	OVERSIZED_BODY_BYTES,
 	SECRET,
+	UNCHECKED_SIGNATURE,
 	VERSION_ID,
 	WEBHOOK_URL,
 	buildPayload,
@@ -18,7 +20,9 @@ import {
 	dispatch,
 	expectError,
 	expectSkipped,
+	makeEnv,
 	makeEnvWithoutVersionMetadata,
+	makeEnvWithoutWebhookSecret,
 	postSigned,
 	unsignedDeliveryHeaders,
 } from "./delivery";
@@ -104,6 +108,75 @@ describe("signature verification", () => {
 		);
 		await expectError(await dispatch(request), "invalid-signature", HTTP_UNAUTHORIZED);
 	});
+});
+
+/* SPEC.md §8: a deployment that never had a webhook secret rejects every delivery, and what the
+ * entry has to say is which of the two secrets called "the webhook secret" is at fault — the one on
+ * the App, or this Worker's own. Every case here signs correctly where it signs at all, so what is
+ * being driven is the deployment and never the digest. */
+describe("webhook secret configuration", () => {
+	it("errors when the secret binding is absent", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const logSpy = captureLog();
+		const session = installFetchMock([]);
+		const env = await makeEnvWithoutWebhookSecret();
+		const response = await postSigned(buildPayload(), "pull_request", env);
+		await expectError(response, "missing-webhook-secret", HTTP_INTERNAL_ERROR);
+		expect(logSpy).toHaveBeenCalledExactlyOnceWith(
+			loggedEntry({
+				decision: "error",
+				deliveryId: DELIVERY_ID,
+				reason: "missing-webhook-secret",
+			}),
+		);
+		session.assertDone();
+	});
+
+	/* The other shape an unconfigured secret takes, and the one the binding's declared type does
+	 * admit: verify() refuses it exactly as it refuses the absent one, so it is the same outcome. */
+	it("errors when the secret is empty", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const session = installFetchMock([]);
+		const env = await makeEnv({ GITHUB_WEBHOOK_SECRET: "" });
+		const response = await postSigned(buildPayload(), "pull_request", env);
+		await expectError(response, "missing-webhook-secret", HTTP_INTERNAL_ERROR);
+		session.assertDone();
+	});
+});
+
+/* What an unconfigured deployment answers a delivery that would have been turned away on its own
+ * terms anyway. The secret is settled before the signature header is looked at and before a byte of
+ * the body is read (SPEC.md §4), which is what makes the outcome the answer to every delivery such
+ * a deployment receives rather than to the ones that happened to arrive well-formed and within the
+ * cap — the others would name the delivery for a fault that is the deployment's. */
+interface RefusedCase {
+	readonly headers: Readonly<Record<string, string>>;
+	readonly name: string;
+}
+
+const OTHERWISE_REFUSED: readonly RefusedCase[] = [
+	{ headers: unsignedDeliveryHeaders(), name: "a delivery carrying no signature" },
+	{
+		headers: Object.assign(deliveryHeaders(UNCHECKED_SIGNATURE), {
+			"content-length": String(OVERSIZED_BODY_BYTES),
+		}),
+		name: "a body declared over the cap",
+	},
+];
+
+describe("webhook secret precedence", () => {
+	it.each(OTHERWISE_REFUSED)(
+		"reports the absent secret over $name",
+		{ timeout: 5000 },
+		async ({ headers }) => {
+			expect.hasAssertions();
+			const session = installFetchMock([]);
+			const request = deliveryRequest(buildPayload(), headers);
+			const response = await dispatch(request, await makeEnvWithoutWebhookSecret());
+			await expectError(response, "missing-webhook-secret", HTTP_INTERNAL_ERROR);
+			session.assertDone();
+		},
+	);
 });
 
 describe("event scoping", () => {
