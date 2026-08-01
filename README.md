@@ -357,31 +357,31 @@ grepped.
 
 ## Troubleshooting
 
-| Symptom                                         | Likely cause                                                                                                     |
-| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| No delivery in Recent Deliveries                | The App is not installed on the repository, or `pull_request` is not subscribed                                  |
-| `not-found`                                     | The webhook URL is missing the `/webhook` path                                                                   |
-| `missing-webhook-secret`                        | `GITHUB_WEBHOOK_SECRET` is unset on the deployment                                                               |
-| 401 / `invalid-signature`                       | The secret in Workers does not match the one in the App's settings                                               |
-| `payload-too-large`                             | The body exceeded the 2 MiB cap the Worker buffers before verifying it                                           |
-| `invalid-payload`                               | The body is not a `pull_request` event of the modeled shape — check the App's event subscription                 |
-| `missing-installation`                          | The delivery carried no usable installation id — reinstall the App on the account                                |
+| Symptom                                         | Likely cause                                                                                                      |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| No delivery in Recent Deliveries                | The App is not installed on the repository, or `pull_request` is not subscribed                                   |
+| `not-found`                                     | The webhook URL is missing the `/webhook` path                                                                    |
+| `missing-webhook-secret`                        | `GITHUB_WEBHOOK_SECRET` is unset on the deployment                                                                |
+| 401 / `invalid-signature`                       | The secret in Workers does not match the one in the App's settings                                                |
+| `payload-too-large`                             | The body exceeded the 2 MiB cap the Worker buffers before verifying it                                            |
+| `invalid-payload`                               | The body is not a `pull_request` event of the modeled shape — check the App's event subscription                  |
+| `missing-installation`                          | The delivery carried no usable installation id — reinstall the App on the account                                 |
 | `internal-error` right after deploying          | The private key was stored in PKCS#1, or pasted rather than redirected so only its first line landed — see step 4 |
-| `event-out-of-scope` / `already-approved`       | Working as intended: an action outside the four handled, or an APPROVE from this App already covers the head SHA |
-| `pr-draft` / `pr-not-open` / `head-repo-forked` | Working as intended: drafts, closed pull requests, and forks are never approved                                  |
-| `head-repo-missing`                             | The head branch's repository was deleted before the delivery was evaluated                                       |
-| `author-not-trusted`                            | The author is not the owner, an org owner, or an allowed bot                                                     |
-| `unverified-commit`                             | A commit is unsigned — sign your commits, or commit through the web UI                                           |
-| `untrusted-commit`                              | Someone outside the trust boundary authored or pushed a commit onto the branch                                   |
-| `no-commits`                                    | The pull request declares zero commits, so there is nothing to verify — it fails closed                          |
-| `too-many-commits`                              | More than 250 commits; the commits API cannot return them all, so it fails closed                                |
-| `commit-count-mismatch`                         | The commits API returned a different number than the payload declared — redeliver, or push again                 |
-| `head-moved`                                    | A push landed mid-evaluation; that push's own `synchronize` delivery re-evaluates the new head on its own merits |
-| `review-rejected`                               | The pull request was closed or merged between the last check and the review POST                                 |
-| `github-api-error` with 401                     | The App ID and the private key are not from the same App, so the App JWT was rejected — recheck step 4           |
-| `github-api-error` with 403                     | Check `acceptedPermissions` in the log entry — a permission was never granted, or `rateLimitRemaining` is 0      |
-| `github-api-error` with `status: 0`             | The call never reached GitHub, or the delivery spent its whole time budget — redeliver                           |
-| Approved, but the merge is still blocked        | Another required check or a Code Owners review is unsatisfied — ghapprover only approves                         |
+| `event-out-of-scope` / `already-approved`       | Working as intended: an action outside the four handled, or an APPROVE from this App already covers the head SHA  |
+| `pr-draft` / `pr-not-open` / `head-repo-forked` | Working as intended: drafts, closed pull requests, and forks are never approved                                   |
+| `head-repo-missing`                             | The head branch's repository was deleted before the delivery was evaluated                                        |
+| `author-not-trusted`                            | The author is not the owner, an org owner, or an allowed bot                                                      |
+| `unverified-commit`                             | A commit is unsigned — sign your commits, or commit through the web UI                                            |
+| `untrusted-commit`                              | Someone outside the trust boundary authored or pushed a commit onto the branch                                    |
+| `no-commits`                                    | The pull request declares zero commits, so there is nothing to verify — it fails closed                           |
+| `too-many-commits`                              | More than 250 commits; the commits API cannot return them all, so it fails closed                                 |
+| `commit-count-mismatch`                         | The commits API returned a different number than the payload declared — redeliver, or push again                  |
+| `head-moved`                                    | A push landed mid-evaluation; that push's own `synchronize` delivery re-evaluates the new head on its own merits  |
+| `review-rejected`                               | The pull request was closed or merged between the last check and the review POST                                  |
+| `github-api-error` with 401                     | The App ID and the private key are not from the same App, so the App JWT was rejected — recheck step 4            |
+| `github-api-error` with 403                     | Check `acceptedPermissions` in the log entry — a permission was never granted, or `rateLimitRemaining` is 0       |
+| `github-api-error` with `status: 0`             | The call never reached GitHub, or the delivery spent its whole time budget — redeliver                            |
+| Approved, but the merge is still blocked        | Another required check or a Code Owners review is unsatisfied — ghapprover only approves                          |
 
 GitHub does not redeliver failed webhook deliveries automatically. After fixing a
 configuration problem, redeliver by hand from Recent Deliveries, or push again. Doing so
