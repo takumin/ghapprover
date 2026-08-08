@@ -13,7 +13,7 @@ pinact = "4.1.1"
 # explicit `aqua:` backend keeps the package identity stable even if the mise
 # registry later remaps a short name to a different source.
 "aqua:reviewdog/reviewdog" = "0.21.0"
-"aqua:editorconfig-checker/editorconfig-checker" = "3.10.0"
+"aqua:editorconfig-checker/editorconfig-checker" = "3.11.1"
 "aqua:rhysd/actionlint" = "1.7.12"
 # A reviewdog runner of its own over scripts/, and consumed by
 # `actionlint -shellcheck shellcheck` to lint workflow `run:` blocks.
