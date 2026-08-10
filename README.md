@@ -344,6 +344,12 @@ field that cannot be there reads as a missing log:
   against Recent Deliveries.
 - `reason`, drawn from a closed vocabulary, accompanies every outcome except an approval
   — for which the `approved` decision is the whole of it.
+- `level` is the severity the entry is filed at, which is what the Level column reads and
+  what the console method it arrives on matches. Every outcome that could not be completed
+  is `error`. A skip is `warn` where it is not routine — a commit count the API disagreed
+  with, a head that moved mid-evaluation, a head repository that is gone, a review GitHub
+  refused — and `info` where it is one of the conditions doing its job, as is an approval.
+  Filter by it to find what an ordinary day does not produce.
 
 Failures add diagnostic fields, and these too exist only where there was something to read
 them from:

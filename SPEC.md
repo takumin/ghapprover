@@ -582,6 +582,7 @@ Emit at least the following to structured logs (Workers Logs):
 - `deliveryId` (X-GitHub-Delivery), `versionId` (the deployed Worker version, §5), `repo`,
   `prNumber`, `action`, `headSha`
 - `decision` (approved / skipped / error) and `reason`
+- `level`, the severity the entry is filed at (table below)
 - the diagnostic fields the outcome carries (table below)
 
 Every field is logged as soon as it is known, so an outcome decided early carries only
@@ -614,31 +615,47 @@ once the body has been parsed.
 `reason` is drawn from a closed vocabulary. This is the list an operator greps, so it is
 exhaustive rather than illustrative:
 
-| `decision` | `reason`                 | Meaning                                                                   |
-| ---------- | ------------------------ | ------------------------------------------------------------------------- |
-| approved   | _(none)_                 | The review was posted                                                     |
-| skipped    | `event-out-of-scope`     | Not a `pull_request` event, or an action outside §3 cond. 1               |
-| skipped    | `pr-not-open`            | §3 condition 2: the PR is closed or merged                                |
-| skipped    | `pr-draft`               | §3 condition 2: the PR is a draft                                         |
-| skipped    | `head-repo-missing`      | §3 condition 2: `head.repo` is null (the head repository was deleted)     |
-| skipped    | `head-repo-forked`       | §3 condition 2: the head repository is not the repository itself (a fork) |
-| skipped    | `author-not-trusted`     | §3 condition 3, including a membership 404                                |
-| skipped    | `no-commits`             | §3.2: `pull_request.commits` is 0                                         |
-| skipped    | `too-many-commits`       | §3.2: more than the 250 the commits API can return                        |
-| skipped    | `commit-count-mismatch`  | §3.2: the fetched list differs from the declared count                    |
-| skipped    | `unverified-commit`      | §3.2: a commit is not `verification.verified`                             |
-| skipped    | `untrusted-commit`       | §3.2: the principal a commit is decided on is not trusted                 |
-| skipped    | `already-approved`       | §3 condition 5 / §6: an own APPROVE for this head exists                  |
-| skipped    | `head-moved`             | §3.3: the live PR was closed, turned draft, or left the payload's head    |
-| skipped    | `review-rejected`        | §9: the review POST returned 422                                          |
-| error      | `invalid-signature`      | §4 step 1: signature missing, malformed, or not matching                  |
-| error      | `missing-webhook-secret` | §4 step 1: this Worker has no webhook secret to verify against (§7)       |
-| error      | `payload-too-large`      | §4 step 1: a body above the 2 MiB cap, this Worker's not GitHub's         |
-| error      | `not-found`              | A request outside `POST /webhook`                                         |
-| error      | `invalid-payload`        | The body is not JSON, or not the modeled `pull_request` shape             |
-| error      | `missing-installation`   | The delivery carries no `installation.id` (§7)                            |
-| error      | `github-api-error`       | §9: a GitHub API call failed; the diagnostic fields below accompany it    |
-| error      | `internal-error`         | Any other thrown failure; the diagnostic fields below accompany it        |
+| `decision` | `reason`                 | `level` | Meaning                                                                   |
+| ---------- | ------------------------ | ------- | ------------------------------------------------------------------------- |
+| approved   | _(none)_                 | info    | The review was posted                                                     |
+| skipped    | `event-out-of-scope`     | info    | Not a `pull_request` event, or an action outside §3 cond. 1               |
+| skipped    | `pr-not-open`            | info    | §3 condition 2: the PR is closed or merged                                |
+| skipped    | `pr-draft`               | info    | §3 condition 2: the PR is a draft                                         |
+| skipped    | `head-repo-missing`      | warn    | §3 condition 2: `head.repo` is null (the head repository was deleted)     |
+| skipped    | `head-repo-forked`       | info    | §3 condition 2: the head repository is not the repository itself (a fork) |
+| skipped    | `author-not-trusted`     | info    | §3 condition 3, including a membership 404                                |
+| skipped    | `no-commits`             | warn    | §3.2: `pull_request.commits` is 0                                         |
+| skipped    | `too-many-commits`       | warn    | §3.2: more than the 250 the commits API can return                        |
+| skipped    | `commit-count-mismatch`  | warn    | §3.2: the fetched list differs from the declared count                    |
+| skipped    | `unverified-commit`      | info    | §3.2: a commit is not `verification.verified`                             |
+| skipped    | `untrusted-commit`       | info    | §3.2: the principal a commit is decided on is not trusted                 |
+| skipped    | `already-approved`       | info    | §3 condition 5 / §6: an own APPROVE for this head exists                  |
+| skipped    | `head-moved`             | warn    | §3.3: the live PR was closed, turned draft, or left the payload's head    |
+| skipped    | `review-rejected`        | warn    | §9: the review POST returned 422                                          |
+| error      | `invalid-signature`      | error   | §4 step 1: signature missing, malformed, or not matching                  |
+| error      | `missing-webhook-secret` | error   | §4 step 1: this Worker has no webhook secret to verify against (§7)       |
+| error      | `payload-too-large`      | error   | §4 step 1: a body above the 2 MiB cap, this Worker's not GitHub's         |
+| error      | `not-found`              | error   | A request outside `POST /webhook`                                         |
+| error      | `invalid-payload`        | error   | The body is not JSON, or not the modeled `pull_request` shape             |
+| error      | `missing-installation`   | error   | The delivery carries no `installation.id` (§7)                            |
+| error      | `github-api-error`       | error   | §9: a GitHub API call failed; the diagnostic fields below accompany it    |
+| error      | `internal-error`         | error   | Any other thrown failure; the diagnostic fields below accompany it        |
+
+`level` is the severity each reason is filed at, and is the axis `decision` is not:
+`decision` says what the delivery did, `level` whether anyone needs to look. Workers Logs
+fills its Level column from the field, so an entry that carries none is filed with no
+severity at all — a listing that reads the same whether every delivery was approved or
+every one of them failed. The entry is emitted through the console method its severity
+names as well (`console.error`, `console.warn`, `console.info`), that being the only
+severity a tail has to go by, and the two are set together: a column an operator filters by
+that disagrees with the stream is worse than one saying nothing. Every `error` decision is
+`error` — §9 answers it non-2xx precisely because the evaluation could not be completed, so
+that half needs no judgement of its own. The skips are where the judgement is. `info` is a
+condition doing its job on a delivery there was never anything wrong with, which a busy
+repository produces all day. `warn` is a skip that is still not a failure but is not
+routine either: a commit count the API should not have disagreed with, a head that moved
+under the evaluation, a head repository that is gone, a review GitHub refused. Reading the
+column is worth doing only if the first kind does not drown the second.
 
 Diagnostic fields accompany the outcome named, and only that one. Unlike `reason`, they
 are not a vocabulary an operator greps for — they are what turns a grep hit into a cause.

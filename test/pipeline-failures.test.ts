@@ -190,6 +190,7 @@ describe("api failure diagnostics without a response", () => {
 				endpoint: COMMITS_ENDPOINT,
 				errorMessage: "simulated network failure",
 				headSha: HEAD_SHA,
+				level: "error",
 				prNumber: PULL_NUMBER,
 				reason: "github-api-error",
 				repo: REPOSITORY.full_name,
