@@ -136,13 +136,13 @@ or cannot be determined, do not approve (fail closed).
 > `pull_request.head.repo` is `null` because the head repository was deleted
 > (`head-repo-missing`). The comparison is `pull_request.head.repo.id` against
 > `repository.id` — the payload's own repository, so no part of `pull_request.base` is
-> read (§5). §3.2's guarantee — that third-party commits mixed into a trusted principal's
-> PR block approval — rests on `verification.verified` proving attribution, which holds
-> only where write access to the repository is itself the trust boundary. On a fork it is
-> not: the base repository's owner cannot see who is able to push to the head branch, so
-> a `synchronize` event can carry commits from someone else while the PR author stays
-> trusted. The intended use case (§1) pushes branches to the repository itself, so the
-> check costs nothing it needs, and it runs before any API call.
+> read (§5). §3.2's guarantee — that third-party commits pushed into a trusted principal's
+> PR block approval — rests on `verification.verified` proving who committed them, which
+> holds only where write access to the repository is itself the trust boundary. On a fork
+> it is not: the base repository's owner cannot see who is able to push to the head
+> branch, so a `synchronize` event can carry commits from someone else while the PR author
+> stays trusted. The intended use case (§1) pushes branches to the repository itself, so
+> the check costs nothing it needs, and it runs before any API call.
 
 > [!NOTE]
 > Condition 5 matches the App's own bot user on its login alone — the one identity check
@@ -179,9 +179,10 @@ Notes:
   owner-match never applies on an org repository, where `repository.owner` is the org
   itself. A `Bot` account is settled by the allowlist alone and falls through to neither,
   so a lookalike bot is rejected without spending a lookup on it
-- The definition is applied both to the PR author (condition 3) and to every commit
-  author / committer (§3.2). Memoize membership API results per delivery (in memory)
-  so each distinct user is looked up at most once
+- The definition is applied both to the PR author (condition 3) and to every commit's
+  principal (§3.2) — its committer, or its author where GitHub itself is the committer.
+  Memoize membership API results per delivery (in memory) so each distinct user is looked
+  up at most once
 - Bots outside the allowlist (e.g. `github-actions[bot]`) are never trusted; commits
   created by them intentionally block approval
 - `autofix-ci[bot]` is allowlisted because CI autofixers push their fixes as commits
@@ -217,32 +218,56 @@ For each commit:
 - `commit.verification.verified` is `true`. The `author` / `committer` user objects
   are derived solely from the commit's email addresses, so anyone with push access can
   impersonate a trusted principal — or the `web-flow` user, via `noreply@github.com` —
-  by forging the email. A verified signature guarantees the attribution is backed by a
-  key registered to the attributed account, or by GitHub itself (web UI / API commits)
-- `author` (the author mapped to a GitHub user) is not null and is a trusted principal
-  (§3.1), decided on the `(id, login)` pair rather than the login alone wherever the
-  decision is local — the org-membership branch is the one that resolves a bare login,
-  because a login is what the membership API takes
-- `committer` is not null and is either a trusted principal or `web-flow` (a commit made
-  via the GitHub web UI or API; genuine web-flow commits are always GitHub-signed, which
-  the `verified` check above enforces). `web-flow` is matched on login **and** numeric user id
-  (`19864447`), for the same reason as the §3.1 bot allowlist: an identity exemption
-  that decides approval must not turn on a login string alone
+  by forging the email. A verified signature is what makes one of those two attributions
+  binding, and only one: GitHub checks the signature against the **committer's** email
+  address and never the author's (`verification.reason` says so in as many words —
+  `no_user`, `unverified_email` and `bad_email` are all about the committer email), so
+  what a verified commit establishes is that it was committed by a key registered to the
+  committer's account, or by GitHub itself (web UI / API commits)
+- The commit's **principal** — the account that signature binds — is not null and is a
+  trusted principal (§3.1), decided on the `(id, login)` pair rather than the login alone
+  wherever the decision is local; the org-membership branch is the one that resolves a
+  bare login, because a login is what the membership API takes. The principal is the
+  `committer`, except where the committer is `web-flow` (a commit made via the GitHub web
+  UI or API), which stands for no actor: there the principal is the `author`. `web-flow`
+  is matched on login **and** numeric user id (`19864447`), for the same reason as the
+  §3.1 bot allowlist: an identity exemption that decides approval must not turn on a login
+  string alone
+
+`author` is read in that one case and nowhere else: it is not a second trust check, but
+the same one asked of the only field that names an actor when the committer does not.
 
 If even one commit fails these checks, do not approve. This ensures that if third-party
-commits get mixed into a trusted principal's PR (e.g. someone other than the maintainer
+commits get pushed into a trusted principal's PR (e.g. someone other than the maintainer
 pushes to a bot branch), it is not approved.
 
+> [!IMPORTANT]
+> The condition is about custody, not authorship. What it establishes is that a trusted
+> principal committed every change onto the branch — not that one wrote them. The two come
+> apart whenever `author` and `committer` differ: a patch applied on a contributor's
+> behalf, a rebase, a cherry-pick, a commit a tool generated and the maintainer signed.
+> Custody is the half a signature can carry, and requiring the author to be trusted as well
+> buys nothing that closes the gap. It would not stop an untrusted party from naming a
+> trusted principal as author, since no key backs that field; it would not stop a trusted
+> committer from committing the same change under any other author; and what it does do is
+> refuse a maintainer's own signed commits over a name they typed. A third party is blocked
+> by something else entirely — they cannot produce a verified commit committed by someone
+> who is not them — and that is the committer check.
+>
+> This is the boundary "approval is not review" is drawn at: a trusted principal signing a
+> commit onto the branch is inside it whatever the commit says about who wrote the change.
+> Reviewing what they signed is the part this App does not do (§10).
+
 > [!NOTE]
-> A GitHub-signed commit is the one case where the signature does not bind the `author`
-> to a key of its own, so the `web-flow` exemption rests on a further property: GitHub
-> does not sign a commit whose author the caller chose. The two are mutually exclusive
-> across the write paths — the contents API signs and substitutes `web-flow` as committer
-> only when `author` and `committer` are both omitted, `createCommitOnBranch` has no
-> author or committer input at all, and the git data API leaves an unsigned commit
-> unsigned. A verified `web-flow` commit therefore attributes its author to whoever
-> authenticated, and an actor with `contents: write` that is not a trusted principal
-> cannot put a commit naming one onto a bot's branch. This is observed behaviour rather
+> The web-flow case is the one where the decision falls to the `author`, which no signature
+> binds to a key of its own, so it rests on a further property: GitHub does not sign a
+> commit whose author the caller chose. The two are mutually exclusive across the write
+> paths — the contents API signs and substitutes `web-flow` as committer only when
+> `author` and `committer` are both omitted, `createCommitOnBranch` has no author or
+> committer input at all, and the git data API leaves an unsigned commit unsigned. A
+> verified `web-flow` commit therefore attributes its author to whoever authenticated, and
+> an actor with `contents: write` that is not a trusted principal cannot put a commit
+> naming one onto a bot's branch. This is observed behaviour rather
 > than a documented guarantee: what GitHub documents is that signing for apps and bots
 > requires "no custom author information, custom committer information, and no custom
 > signature information". Re-check it before relaxing either commit check.
@@ -298,8 +323,9 @@ Mitigation:
   (`platformCommit: "auto"` resolves to enabled for GitHub App tokens), so its commits
   are GitHub-signed; Dependabot signs its own commits by default; autofix.ci pushes
   through the GitHub API, so its commits are GitHub-signed too and carry `web-flow` as
-  committer (accepted per §3.2). A self-hosted Renovate pushing unsigned commits over
-  git is not approved (its login also differs from `renovate[bot]`, §5)
+  committer, which is the one case §3.2 decides on the author instead. A self-hosted
+  Renovate pushing unsigned commits over git is not approved (its login also differs from
+  `renovate[bot]`, §5)
 - Merge strategy caveat: GitHub does not sign the commits it creates for the rebase
   merge strategy. Use squash or merge-commit merges when this rule is enabled
 
@@ -345,7 +371,8 @@ In that case, do not add the owner or the App to the bypass actors.
 
 **Operational caveats:**
 
-- "Update branch" creates a merge commit authored by the user who clicked it. If
+- "Update branch" creates a GitHub-signed merge commit whose author is the user who
+  clicked it and whose committer is `web-flow`, so §3.2 decides it on that author. If
   someone other than a trusted principal clicks it on a bot PR, that commit fails §3.2
   and the PR is no longer re-approved until the branch is rebased
 - Retargeting a PR to a different base branch (`pull_request.edited`) changes the
@@ -393,10 +420,10 @@ flowchart TD
 - Processing is **synchronous** (not deferred to `ctx.waitUntil`). GitHub API calls per
   delivery: token issuance, the PR author's membership check (§3 condition 3 — only on an
   org repository with a non-bot author), commit list (up to 3 pages), membership checks
-  (one per further distinct non-bot commit author/committer, memoized within the delivery,
-  §3.1), the App slug fetch (`GET /app`, §3 condition 5 — the one call authenticated with
-  the App JWT rather than an installation token (§7), the one needing no permission at all,
-  and the one made once per isolate rather than once per delivery, below), existing reviews
+  (one per further distinct non-bot commit principal, memoized within the delivery, §3.1),
+  the App slug fetch (`GET /app`, §3 condition 5 — the one call authenticated with the App
+  JWT rather than an installation token (§7), the one needing no permission at all, and
+  the one made once per isolate rather than once per delivery, below), existing reviews
   (paginated), the live PR fetch, and the review POST — typically under 10 calls for PRs
   authored by the owner or an allowed bot. The calls run in that order, with one exception:
   the App slug fetch and the reviews list are issued concurrently, since neither takes an
@@ -498,7 +525,7 @@ the information needed for evaluation comes from the following.
 | Target branches        | Not a control axis. `pull_request.base` is not read at all, so a PR into a long-lived release branch is approved on exactly the same terms as one into the default branch. Per-branch differences belong in rulesets (§3.4), which is where branch targeting already lives |
 | Repository / org owner | Webhook payload + GitHub API (§3.1)                                                                                                                                                                                                                                        |
 | Allowed bots           | In-code constant pairing login and numeric user id (e.g. `ALLOWED_BOTS = [{ login: "renovate[bot]", id: 29139614 }, { login: "dependabot[bot]", id: 49699333 }, { login: "autofix-ci[bot]", id: 114827586 }] as const`)                                                    |
-| Web-flow committer     | In-code constant in the same shape (`WEB_FLOW = { login: "web-flow", id: 19864447 }`), used for the §3.2 committer exemption only                                                                                                                                          |
+| Web-flow committer     | In-code constant in the same shape (`WEB_FLOW = { login: "web-flow", id: 19864447 }`), used to recognize the committer of a GitHub-signed commit, which §3.2 then decides on its author                                                                                    |
 
 - To change the allowed bots, edit the constant and redeploy. The configuration is
   version-controlled in Git, and no path exists to rewrite the approval conditions at runtime
@@ -600,7 +627,7 @@ exhaustive rather than illustrative:
 | skipped    | `too-many-commits`       | §3.2: more than the 250 the commits API can return                        |
 | skipped    | `commit-count-mismatch`  | §3.2: the fetched list differs from the declared count                    |
 | skipped    | `unverified-commit`      | §3.2: a commit is not `verification.verified`                             |
-| skipped    | `untrusted-commit`       | §3.2: a commit author / committer is not a trusted principal              |
+| skipped    | `untrusted-commit`       | §3.2: the principal a commit is decided on is not trusted                 |
 | skipped    | `already-approved`       | §3 condition 5 / §6: an own APPROVE for this head exists                  |
 | skipped    | `head-moved`             | §3.3: the live PR was closed, turned draft, or left the payload's head    |
 | skipped    | `review-rejected`        | §9: the review POST returned 422                                          |

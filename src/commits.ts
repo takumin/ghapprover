@@ -1,15 +1,15 @@
 /**
  * SPEC.md §3.2, the commit condition: what the declared count settles on its own, what the fetched
- * list must match, and what every commit in it has to satisfy — its signature, the principals the
- * payload maps for it, and their trust. Split from the other §3 checks (src/decision.ts) because
- * this is the one condition that walks a list and spends a lookup per principal, so the order its
- * halves run in and the point each walk stops at are load-bearing arguments rather than a single
- * predicate. Deterministic and free of I/O like the rest of §3: the lookup arrives as an injected
- * predicate, so a test supplies a plain function instead of a stubbed API (SPEC.md §12).
+ * list must match, and what every commit in it has to satisfy — its signature, and the trust of the
+ * one principal that signature binds. Split from the other §3 checks (src/decision.ts) because this
+ * is the one condition that walks a list and spends a lookup per commit, so the order its halves
+ * run in and the point the walk stops at are load-bearing arguments rather than a single predicate.
+ * Deterministic and free of I/O like the rest of §3: the lookup arrives as an injected predicate, so
+ * a test supplies a plain function instead of a stubbed API (SPEC.md §12).
  */
 
 import type { GithubAccount, PullRequestCommit } from "./types";
-import { isSameAccount, isWebFlow } from "./account";
+import { isWebFlow } from "./account";
 
 /**
  * The PR commits API returns at most 250 commits, so a PR declaring more can never be fully
@@ -18,20 +18,26 @@ import { isSameAccount, isWebFlow } from "./account";
  */
 const MAX_VERIFIABLE_COMMITS = 250;
 
-/* The accounts whose trust one commit's §3.2 check needs: the author, and the committer unless it
- * is web-flow (exempt as committer only — this is the one place that exemption is applied) or
- * repeats the author. Both arrive mapped, which is what checkCommit below establishes before it
- * derives them — an unmapped principal fails the commit rather than being dropped from the walk.
- * The caller resolves them in commit order, memoized per delivery (§3.1), so a failing commit stops
- * the remaining membership lookups instead of querying every principal of every commit up front. */
-function commitPrincipals(
-	author: GithubAccount,
-	committer: GithubAccount,
-): readonly GithubAccount[] {
-	if (isWebFlow(committer) || isSameAccount(committer, author)) {
-		return [author];
+/* The one account §3.2 decides a commit on: the principal its verified signature binds. GitHub
+ * checks a signature against the committer's email address and never the author's, so the committer
+ * is the only party a verified commit is attributed to — `author` is a field that same party filled
+ * in freely, with no key behind it. The one exception is a GitHub-signed commit, whose committer is
+ * web-flow and therefore names no actor: there the author is the actor, which is safe for the reason
+ * the §3.2 NOTE gives — GitHub does not sign a commit whose author the caller chose. Absent when the
+ * payload maps no account for whichever of the two decides, which the caller fails closed on rather
+ * than deciding the commit on the account that does not. The two arguments arrive as GitHub sends
+ * them, `null` and all; what this answers with is absence as the rest of the code says it. */
+function commitPrincipal(
+	author: GithubAccount | null,
+	committer: GithubAccount | null,
+): GithubAccount | undefined {
+	if (committer === null) {
+		return undefined;
 	}
-	return [author, committer];
+	if (isWebFlow(committer)) {
+		return author ?? undefined;
+	}
+	return committer;
 }
 
 /**
@@ -75,19 +81,12 @@ function checkCommitCount(fetchedCount: number, declaredCount: number): CommitPr
  */
 type TrustResolver = (account: GithubAccount) => Promise<boolean>;
 
-/* SPEC.md §3.2 for one commit, in the order the checks must run: the signature, then the principals
- * the payload has to map at all, then their trust. Both directions of that order are load-bearing —
- * what a commit can be settled by without a lookup comes first, so no membership lookup is spent on
- * a commit that fails either, and the web-flow committer exemption commitPrincipals applies is only
- * safe once the signature check has run, genuine web-flow commits being GitHub-signed. Stated in
- * this one frame, so a caller cannot compose the checks in an order that gets it wrong — and the
- * two guards are what let commitPrincipals take its principals as mapped accounts.
- *
- * The trust walk runs the injected lookup and decides on it in the same loop, so the accounts looked
- * up and the accounts checked cannot diverge, and it stops at the first untrusted principal: a
- * further lookup could not change this commit's outcome, and a delivery that ends in a skip must not
- * burst one lookup per principal against the Worker subrequest allowance or GitHub's secondary rate
- * limits. */
+/* SPEC.md §3.2 for one commit, in the order the checks must run: the signature, then the trust of
+ * the principal it binds. Both are load-bearing in that order — the committer is the principal only
+ * *because* a verified signature is checked against its email, and the web-flow branch that hands
+ * the decision to the author instead is only safe once the signature is known to be GitHub's own.
+ * Running the signature first also means no membership lookup is spent on a commit that fails it. A
+ * principal the payload does not map fails the commit rather than being dropped from the walk. */
 async function checkCommit(
 	entry: PullRequestCommit,
 	isTrusted: TrustResolver,
@@ -97,23 +96,21 @@ async function checkCommit(
 	if (verification === null || !verification.verified) {
 		return "unverified-commit";
 	}
-	if (author === null || committer === null) {
+	const principal = commitPrincipal(author, committer);
+	if (principal === undefined) {
 		return "untrusted-commit";
 	}
-	for (const account of commitPrincipals(author, committer)) {
-		// oxlint-disable-next-line eslint/no-await-in-loop -- sequential by design: parallel lookups are the burst this walk exists to bound
-		if (!(await isTrusted(account))) {
-			return "untrusted-commit";
-		}
+	if (!(await isTrusted(principal))) {
+		return "untrusted-commit";
 	}
 	return undefined;
 }
-/* SPEC.md §3.2 for the whole list, in commit order: checkCommit settles one commit (spending a
- * lookup only on what it cannot settle without one), and the first failing commit ends the loop for
- * the same reason its principal walk stops at the first untrusted account — a delivery that ends in
- * a skip must not burst a lookup per principal of every commit against the Worker subrequest
- * allowance or GitHub's secondary rate limits. The walk lives here with the check it repeats, so
- * that argument is made once and the caller is left with the fetch it sequences around it. */
+/* SPEC.md §3.2 for the whole list, in commit order: checkCommit settles one commit, spending a
+ * lookup only on what its signature check leaves open, and the first failing commit ends the loop —
+ * no later commit can change an outcome already settled, and a delivery that ends in a skip must
+ * not burst a lookup per commit against the Worker subrequest allowance or GitHub's secondary rate
+ * limits. The walk lives here with the check it repeats, so that argument is made once and the
+ * caller is left with the fetch it sequences around it. */
 async function checkCommits(
 	commits: readonly PullRequestCommit[],
 	isTrusted: TrustResolver,
@@ -133,7 +130,7 @@ export {
 	checkCommit,
 	checkCommitCount,
 	checkCommits,
-	commitPrincipals,
+	commitPrincipal,
 	precheckCommitCount,
 };
 export type { CommitProblem, TrustResolver };

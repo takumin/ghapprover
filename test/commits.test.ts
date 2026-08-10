@@ -1,8 +1,8 @@
 /**
- * SPEC.md §3.2 commit verification: which principals one commit puts up for a trust lookup, what
- * the declared and fetched commit counts settle without one, and the per-commit gate itself. The
- * lookup is injected as a plain predicate, which is what lets the whole matrix run without the
- * GitHub API (SPEC.md §12).
+ * SPEC.md §3.2 commit verification: which of a commit's two accounts the condition is decided on,
+ * what the declared and fetched commit counts settle without a lookup, and the per-commit gate
+ * itself. The lookup is injected as a plain predicate, which is what lets the whole matrix run
+ * without the GitHub API (SPEC.md §12).
  */
 
 import type { GithubAccount, PullRequestCommit } from "~src/types";
@@ -10,7 +10,7 @@ import {
 	MAX_VERIFIABLE_COMMITS,
 	checkCommit,
 	checkCommitCount,
-	commitPrincipals,
+	commitPrincipal,
 	precheckCommitCount,
 } from "~src/commits";
 import { WEB_FLOW_LOOKALIKE, WEB_FLOW_USER } from "./fixtures";
@@ -48,17 +48,62 @@ interface CommitCase {
 	readonly name: string;
 }
 
+/* The matrix is stated as the two halves §3.2 decides on — what the committer settles, and what
+ * the author settles in the one case the committer is GitHub — because the same account in the
+ * other field must not change the answer: an untrusted author under a trusted committer is the
+ * ordinary case of a maintainer committing somebody else's patch, and a trusted author over an
+ * untrusted committer is what forging the author field would look like. */
 const COMMIT_CASES: readonly CommitCase[] = [
-	{ entry: commit(), expected: undefined, name: "a verified trusted commit" },
+	{ entry: commit(), expected: undefined, name: "a verified commit from a trusted committer" },
 	{
-		entry: commit({ author: BOB, committer: BOB }),
+		entry: commit({ author: MALLORY }),
 		expected: undefined,
-		name: "the author doubling as committer",
+		name: "an untrusted author under a trusted committer",
+	},
+	{
+		entry: commit({ author: null }),
+		expected: undefined,
+		name: "an unmapped author under a trusted committer",
+	},
+	{
+		entry: commit({ author: ALICE_LOOKALIKE }),
+		expected: undefined,
+		name: "an author reusing a trusted login under another id, which is not what decides",
+	},
+	{
+		entry: commit({ committer: MALLORY }),
+		expected: "untrusted-commit",
+		name: "an untrusted committer",
+	},
+	{
+		entry: commit({ author: BOB, committer: MALLORY }),
+		expected: "untrusted-commit",
+		name: "an untrusted committer under a trusted author",
+	},
+	{
+		entry: commit({ committer: null }),
+		expected: "untrusted-commit",
+		name: "an unmapped committer",
+	},
+	{
+		entry: commit({ committer: ALICE_LOOKALIKE }),
+		expected: "untrusted-commit",
+		name: "a committer reusing a trusted login under another id",
 	},
 	{
 		entry: commit({ committer: WEB_FLOW_USER }),
 		expected: undefined,
-		name: "a web-flow committer",
+		name: "a web-flow committer with a trusted author",
+	},
+	{
+		entry: commit({ author: MALLORY, committer: WEB_FLOW_USER }),
+		expected: "untrusted-commit",
+		name: "a web-flow committer with an untrusted author",
+	},
+	{
+		entry: commit({ author: null, committer: WEB_FLOW_USER }),
+		expected: "untrusted-commit",
+		name: "a web-flow committer with an unmapped author",
 	},
 	{
 		entry: commit({ committer: WEB_FLOW_LOOKALIKE }),
@@ -75,41 +120,10 @@ const COMMIT_CASES: readonly CommitCase[] = [
 		expected: "unverified-commit",
 		name: "missing verification data",
 	},
-	{ entry: commit({ author: null }), expected: "untrusted-commit", name: "an unmapped author" },
 	{
-		entry: commit({ author: MALLORY }),
-		expected: "untrusted-commit",
-		name: "an untrusted author",
-	},
-	{
-		entry: commit({ author: WEB_FLOW_USER }),
-		expected: "untrusted-commit",
-		name: "a web-flow author",
-	},
-	{
-		entry: commit({ committer: null }),
-		expected: "untrusted-commit",
-		name: "an unmapped committer",
-	},
-	{
-		entry: commit({ committer: MALLORY }),
-		expected: "untrusted-commit",
-		name: "an untrusted committer",
-	},
-	{
-		entry: commit({ author: MALLORY, verification: null }),
+		entry: commit({ committer: MALLORY, verification: null }),
 		expected: "unverified-commit",
 		name: "unverified before untrusted on one commit",
-	},
-	{
-		entry: commit({ author: ALICE_LOOKALIKE, committer: ALICE_LOOKALIKE }),
-		expected: "untrusted-commit",
-		name: "an author reusing a trusted login under another id",
-	},
-	{
-		entry: commit({ author: ALICE, committer: ALICE_LOOKALIKE }),
-		expected: "untrusted-commit",
-		name: "a committer reusing the author's login under another id",
 	},
 ];
 
@@ -125,44 +139,45 @@ const COMMIT_COUNT_CASES: readonly CommitCountCase[] = [
 	{ declared: 2, expected: undefined, fetched: 2 },
 ];
 
-/* The principals are derived from mapped accounts: an unmapped author or committer is settled by
- * checkCommit as untrusted-commit before this runs, so there is no null case to state here. */
-describe("commit principal collection", () => {
+/* Which account a commit is decided on (SPEC.md §3.2): the committer the verified signature binds,
+ * or the author where GitHub is the committer and therefore names no actor. An unmapped account is
+ * a case here rather than a guard the caller runs first, because which of the two has to be mapped
+ * is this function's answer too — the other one is not read at all. */
+describe("commit principal selection", () => {
 	it.each([
 		{
-			author: ALICE,
+			author: MALLORY,
 			committer: BOB,
-			expected: [ALICE, BOB],
-			name: "a distinct author and committer",
+			expected: BOB,
+			name: "the committer, whatever the author field says",
 		},
 		{
-			author: BOB,
-			committer: BOB,
-			expected: [BOB],
-			name: "the author once when the committer repeats it",
+			author: ALICE,
+			committer: null,
+			expected: undefined,
+			name: "nothing when the committer is unmapped",
 		},
-		{ author: ALICE, committer: WEB_FLOW_USER, expected: [ALICE], name: "no web-flow committer" },
+		{
+			author: ALICE,
+			committer: WEB_FLOW_USER,
+			expected: ALICE,
+			name: "the author when GitHub itself is the committer",
+		},
+		{
+			author: null,
+			committer: WEB_FLOW_USER,
+			expected: undefined,
+			name: "nothing when GitHub is the committer and the author is unmapped",
+		},
 		{
 			author: ALICE,
 			committer: WEB_FLOW_LOOKALIKE,
-			expected: [ALICE, WEB_FLOW_LOOKALIKE],
-			name: "a web-flow lookalike committer, which must be resolved like any other",
+			expected: WEB_FLOW_LOOKALIKE,
+			name: "a web-flow lookalike committer, which decides the commit like any other",
 		},
-		{
-			author: WEB_FLOW_USER,
-			committer: BOB,
-			expected: [WEB_FLOW_USER, BOB],
-			name: "web-flow when it is the author",
-		},
-		{
-			author: ALICE,
-			committer: ALICE_LOOKALIKE,
-			expected: [ALICE, ALICE_LOOKALIKE],
-			name: "both accounts when the committer only shares the author's login",
-		},
-	] as const)("collects $name", { timeout: 5000 }, ({ author, committer, expected }) => {
+	] as const)("selects $name", { timeout: 5000 }, ({ author, committer, expected }) => {
 		expect.hasAssertions();
-		expect(commitPrincipals(author, committer)).toStrictEqual(expected);
+		expect(commitPrincipal(author, committer)).toBe(expected);
 	});
 });
 
