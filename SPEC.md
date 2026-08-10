@@ -95,10 +95,11 @@ does is not use it: no request signs a commit or writes a ref, and the permissio
 each per-delivery token unused.
 
 > [!NOTE]
-> Whether an approval posted before the permission was granted starts counting once the
-> installation accepts it is not established here. Where a pull request stays blocked
-> after the grant, redeliver from Recent Deliveries or push again — §6 makes the
-> re-evaluation idempotent, so the worst case is an approval that is already there.
+> Write access is read when the merge requirement is evaluated rather than when the review
+> was posted, so an approval already sitting on an open pull request starts counting the
+> moment the installation accepts the permission. Nothing has to be redelivered and no
+> push is needed: granting it does not leave behind the pull requests that were open at
+> the time.
 
 ### 2.2 Webhook
 
