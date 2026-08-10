@@ -43,9 +43,10 @@ const ALLOWED_BOTS: readonly AccountRef[] = [
 
 /**
  * The account GitHub attributes as committer to commits it creates itself (web
- * UI or API). Accepted as committer only, which is the commit condition's own rule
- * (src/commits.ts); genuine web-flow commits are always GitHub-signed, which the verification
- * check enforces (SPEC.md §3.2).
+ * UI or API). It stands for no actor, so §3.2 decides such a commit on its author instead — the
+ * one place the commit condition reads the author at all (src/commits.ts), and safe only because
+ * genuine web-flow commits are always GitHub-signed, which the verification check enforces, and
+ * GitHub does not sign a commit whose author the caller chose (SPEC.md §3.2).
  */
 const WEB_FLOW: AccountRef = { id: 19_864_447, login: "web-flow" };
 

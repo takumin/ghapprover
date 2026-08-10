@@ -42,9 +42,9 @@ merges it was never meant to block — your own pull requests, and the dependenc
 pull requests Renovate and Dependabot open all week.
 
 ghapprover satisfies that requirement for exactly those pull requests, and nothing else.
-It is not a substitute for review: it approves changes whose authorship is already inside
-the repository's trust boundary, so that the rule keeps applying to everything that is
-not.
+It is not a substitute for review: it approves changes that a principal inside the
+repository's trust boundary signed onto the branch themselves, so that the rule keeps
+applying to everything else.
 
 ## What gets approved
 
@@ -56,12 +56,15 @@ unmet, or cannot be determined, ghapprover does not approve (fail closed).
 2. **Pull request state** — open, not a draft, and its head repository is the repository
    the event came from. Fork pull requests are never approved.
 3. **Author** — the pull request author is a trusted principal.
-4. **Commits** — every commit in the pull request is signature-verified, and its author
-   and committer are trusted principals (the committer may also be `web-flow`, i.e. a
-   commit made through the GitHub web UI or API). A pull request whose commits cannot all
-   be accounted for is refused instead of verified: none at all, more than the 250 the
-   commits API can return, or a fetched list that does not match the count the payload
-   declared.
+4. **Commits** — every commit in the pull request is signature-verified and was
+   committed by a trusted principal. GitHub checks a signature against the committer's
+   email address, so the committer is the party a verified commit is attributed to; the
+   author field is whatever that party typed and is not a trust check. The one exception
+   is a commit made through the GitHub web UI or API, whose committer is `web-flow` and
+   therefore names no actor: that one is decided on its author instead. A pull request
+   whose commits cannot all be accounted for is refused instead of verified: none at all,
+   more than the 250 the commits API can return, or a fetched list that does not match
+   the count the payload declared.
 5. **Not already approved** — no APPROVE review from this App for the current head SHA.
 6. **Still current** — the live pull request has not moved off the head SHA that was
    verified.
@@ -74,10 +77,10 @@ A **trusted principal** is one of:
 - an allowed bot — `renovate[bot]`, `dependabot[bot]`, `autofix-ci[bot]` — matched on
   login, `type == "Bot"`, and numeric user id.
 
-Any other account is untrusted, and a single commit from one blocks approval for the whole
-pull request. `github-actions[bot]` is left out deliberately: it is not one actor but the
-identity every workflow in the repository commits under, so trusting it would extend the
-trust boundary to whatever any workflow does.
+Any other account is untrusted, and a single commit committed by one blocks approval for
+the whole pull request. `github-actions[bot]` is left out deliberately: it is not one
+actor but the identity every workflow in the repository commits under, so trusting it
+would extend the trust boundary to whatever any workflow does.
 
 See [SPEC.md §3](SPEC.md#3-approval-conditions) for the full conditions and the reasoning
 behind each one.
@@ -115,10 +118,11 @@ Deliveries, and a failure can be retried by redelivering it by hand.
 A delivery authored by the owner or an allowed bot costs under 10 API calls on an ordinary
 pull request, against the 50 subrequests per request the Workers free plan allows. Two
 things scale past that, and neither is the size of the change: each _distinct_ principal
-among the commits costs a membership lookup, and both the commit list and this App's own
-review list are read through Link-header pagination at 100 per page — so a pull request
-with hundreds of commits, or one carrying a long review history, spends a subrequest per
-page of each. A delivery that exhausts the allowance fails closed rather than approving.
+among the commits costs a membership lookup (one per commit at worst, memoized within the
+delivery), and both the commit list and this App's own review list are read through
+Link-header pagination at 100 per page — so a pull request with hundreds of commits, or
+one carrying a long review history, spends a subrequest per page of each. A delivery that
+exhausts the allowance fails closed rather than approving.
 
 ## Prerequisites
 
@@ -293,12 +297,17 @@ configuration loading — every approval condition lives in the code and in Git 
   owner is the exception: the membership API is asked about a login, so that one path
   rests on GitHub's own account resolution rather than on an id this Worker compares.
 - **Why signatures matter**: a commit's `author` and `committer` user objects are derived
-  from its email addresses, so anyone with push access can forge them. Requiring
-  `verification.verified` is what makes attribution mean anything — and it is why
-  third-party commits pushed onto a trusted principal's branch block approval.
+  from its email addresses, so anyone with push access can forge either one. Requiring
+  `verification.verified` is what makes one of them mean something: GitHub checks the
+  signature against the committer's email, so a verified commit was committed by a key
+  registered to that account. That is why third-party commits pushed onto a trusted
+  principal's branch block approval — and why the author field, which the committer types
+  freely and no key backs, is not what approval turns on. The guarantee is custody, not
+  authorship: a maintainer who signs a commit onto their own branch is inside the trust
+  boundary whoever the commit says wrote it.
 - **Fork pull requests are refused** before any API call. On a fork, write access to the
-  head branch is not visible to the base repository, so the attribution argument above
-  does not hold.
+  head branch is not visible to the base repository, so the custody argument above does
+  not hold.
 - **TOCTOU**: the live pull request is re-fetched immediately before the review is posted,
   and the approval is anchored to the verified head SHA. A residual window remains and is
   documented rather than papered over — see
@@ -372,7 +381,7 @@ grepped.
 | `head-repo-missing`                             | The head branch's repository was deleted before the delivery was evaluated                                        |
 | `author-not-trusted`                            | The author is not the owner, an org owner, or an allowed bot                                                      |
 | `unverified-commit`                             | A commit is unsigned — sign your commits, or commit through the web UI                                            |
-| `untrusted-commit`                              | Someone outside the trust boundary authored or pushed a commit onto the branch                                    |
+| `untrusted-commit`                              | Someone outside the trust boundary committed onto the branch                                                      |
 | `no-commits`                                    | The pull request declares zero commits, so there is nothing to verify — it fails closed                           |
 | `too-many-commits`                              | More than 250 commits; the commits API cannot return them all, so it fails closed                                 |
 | `commit-count-mismatch`                         | The commits API returned a different number than the payload declared — redeliver, or push again                  |
