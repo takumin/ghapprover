@@ -72,8 +72,34 @@ Components:
 | Permission           | Access       | Purpose                                                                   |
 | -------------------- | ------------ | ------------------------------------------------------------------------- |
 | Pull requests        | Read & write | Fetch PR information and the PR's commit list, and post reviews (APPROVE) |
+| Contents             | Read & write | Never called; what makes the approval count as a required review (below)  |
 | Organization members | Read         | Determine org owners (role=admin)                                         |
 | Metadata             | Read         | (Mandatory default permission)                                            |
+
+Contents is the one permission no code path here reaches for, and it is granted for
+what it signifies rather than for what it does. GitHub counts a review toward a required
+approval only when its author has write access to the repository, and for an App that
+means push access — which is this permission and no other. Without it the review is still
+posted and still shown on the pull request, but it satisfies nothing: `reviewDecision`
+stays `REVIEW_REQUIRED` and the merge box reads "At least 1 approving review is required
+by reviewers with write access". The approval is then a signal an operator reads, not a
+requirement it meets, and no §3.4 configuration changes that — the rule being asked about
+is the count, and the approval never enters it.
+
+Granting it is a real widening and is stated as one: an installation token that could
+only comment and approve can now push to every repository in the installation scope, so a
+leaked private key (§7) costs code rather than an unwanted approval. The trade is what
+buys the App its purpose — an approval that satisfies nothing automates nothing — and it
+is bounded by that scope (§2.3) rather than by anything the Worker does. What the Worker
+does is not use it: no request signs a commit or writes a ref, and the permission rides on
+each per-delivery token unused.
+
+> [!NOTE]
+> Write access is read when the merge requirement is evaluated rather than when the review
+> was posted, so an approval already sitting on an open pull request starts counting the
+> moment the installation accepts the permission. Nothing has to be redelivered and no
+> push is needed: granting it does not leave behind the pull requests that were open at
+> the time.
 
 ### 2.2 Webhook
 
@@ -346,11 +372,12 @@ repositories where human review must remain required, configure one of the follo
 rulesets so that ghapprover's approval alone does not satisfy the required-review
 requirement:
 
-- Set Required approvals to 2 or more (ghapprover's approval counts as 1). This keeps
-  ghapprover's approval from sufficing on its own, which is what this section asks for —
-  but it does not by itself keep a human in the loop, since any other reviewing App or bot
-  on the repository counts toward the number just as well. Prefer the Code Owners rule
-  where the requirement is human review rather than a second approval
+- Set Required approvals to 2 or more (ghapprover's approval counts as 1, the Contents
+  permission in §2.1 being what makes it count at all). This keeps ghapprover's approval
+  from sufficing on its own, which is what this section asks for — but it does not by
+  itself keep a human in the loop, since any other reviewing App or bot on the repository
+  counts toward the number just as well. Prefer the Code Owners rule where the requirement
+  is human review rather than a second approval
 - Enable Require review from Code Owners (the App's bot cannot be a code owner, so its
   approval does not satisfy this requirement). The rule applies only where a PR touches an
   owned path, so it needs a `CODEOWNERS` file covering the repository — a catch-all `*`
