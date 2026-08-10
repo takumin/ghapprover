@@ -162,8 +162,18 @@ Create a new GitHub App on the target user or organization account with:
 | Permission           | Access       | Purpose                                                |
 | -------------------- | ------------ | ------------------------------------------------------ |
 | Pull requests        | Read & write | Read the pull request and its commits, post the review |
+| Contents             | Read & write | Never used by the Worker — see below                   |
 | Organization members | Read         | Determine organization owners                          |
 | Metadata             | Read         | Mandatory default permission                           |
+
+Contents is granted for what it signifies rather than for what it does. GitHub counts a
+review toward a required approval only from a reviewer with write access, and for an App
+that means push access — this permission. Without it the approval is posted and visible
+but satisfies nothing: the merge box keeps reading "At least 1 approving review is
+required by reviewers with write access". Granting it also means a leaked private key can
+push to every repository in the installation scope, which is the trade an approval that
+counts is bought with. No code path here uses it; see
+[SPEC.md §2.1](SPEC.md#21-permissions-least-privilege).
 
 **Events** — subscribe to `pull_request` only.
 
@@ -397,6 +407,7 @@ grepped.
 | `github-api-error` with 403                     | Check `acceptedPermissions` in the log entry — a permission was never granted, or `rateLimitRemaining` is 0       |
 | `github-api-error` with `status: 0`             | The call never reached GitHub, or the delivery spent its whole time budget — redeliver                            |
 | Approved, but the merge is still blocked        | Another required check or a Code Owners review is unsatisfied — ghapprover only approves                          |
+| "Review required" despite the approval          | The App has no Contents permission, so its review is not a required approval — see step 2                         |
 
 GitHub does not redeliver failed webhook deliveries automatically. After fixing a
 configuration problem, redeliver by hand from Recent Deliveries, or push again. Doing so
