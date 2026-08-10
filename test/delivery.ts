@@ -191,16 +191,25 @@ async function postSigned(body: string, eventName = "pull_request", env?: Env): 
 	return dispatch(await signedDelivery(body, {}, eventName), env);
 }
 
+/** Every console method §8's entry can be emitted through, whichever severity it carries (src/log.ts). */
+const LOG_SINKS = ["error", "info", "log", "warn"] as const;
 /* The spy on the one §8 log entry a delivery leaves, installed before the delivery is dispatched
  * and restored when the test finishes rather than by the test itself: a suite that asserted the
  * entry and forgot the restore would leak the spy into the next one, and the failure would land
- * wherever that happened to matter. Each caller is left stating only the entry it expects. */
+ * wherever that happened to matter. Each caller is left stating only the entry it expects. Which
+ * console method carried it is the severity's business (test/log.test.ts) and not each suite's, so
+ * all of them land on one mock here — a suite that had to name the sink would be stating the
+ * severity twice, once as the `level` field of the entry it already spells out and once as the
+ * method, and the two would drift apart one suite at a time. */
 function captureLog(): MockInstance<typeof console.log> {
-	const spy = vi.spyOn(console, "log");
-	onTestFinished(() => {
-		spy.mockRestore();
-	});
-	return spy;
+	const entries = vi.fn<typeof console.log>();
+	for (const sink of LOG_SINKS) {
+		const spy = vi.spyOn(console, sink).mockImplementation(entries);
+		onTestFinished(() => {
+			spy.mockRestore();
+		});
+	}
+	return entries;
 }
 
 interface ExpectedReply {

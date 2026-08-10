@@ -41,9 +41,11 @@ import { sign } from "@octokit/webhooks-methods";
 beforeEach(resetAppBotLogin);
 
 /* SPEC.md §8: the version id comes off the binding rather than the request, so no rejection is
- * early enough to lack it. Stated once here, leaving each case below to name its own fields. */
+ * early enough to lack it, and the severity is `error` for every case below — each is an evaluation
+ * that could not be completed, which is the half of the vocabulary filed that way (log.test.ts
+ * covers the rest). Stated once, leaving each case to name its own fields and override these. */
 function loggedEntry(fields: Readonly<Record<string, string>>): Record<string, string> {
-	const entry: Record<string, string> = { versionId: VERSION_ID };
+	const entry: Record<string, string> = { level: "error", versionId: VERSION_ID };
 	return Object.assign(entry, fields);
 }
 
@@ -290,6 +292,7 @@ describe("the terminal frame", () => {
 			deliveryId: DELIVERY_ID,
 			errorMessage: ANY_MESSAGE,
 			errorName: "TypeError",
+			level: "error",
 			reason: "internal-error",
 		});
 		session.assertDone();
