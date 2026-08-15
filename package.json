@@ -23,7 +23,7 @@
 		"valibot": "1.4.2"
 	},
 	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "0.21.0",
+		"@cloudflare/vitest-pool-workers": "0.21.1",
 		"@octokit/webhooks-types": "7.6.1",
 		"oxfmt": "0.62.0",
 		"oxlint": "1.77.0",
