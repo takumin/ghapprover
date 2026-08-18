@@ -35,7 +35,7 @@
 	"engines": {
 		"node": "24.19.0",
 		"npm": "USE_PNPM",
-		"pnpm": "11.21.0"
+		"pnpm": "11.22.0"
 	},
-	"packageManager": "pnpm@11.21.0"
+	"packageManager": "pnpm@11.22.0"
 }
