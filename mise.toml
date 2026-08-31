@@ -19,7 +19,7 @@ pinact = "4.1.1"
 # `actionlint -shellcheck shellcheck` to lint workflow `run:` blocks.
 "aqua:koalaman/shellcheck" = "0.11.0"
 "aqua:suzuki-shunsuke/ghalint" = "1.5.6"
-"aqua:zizmorcore/zizmor" = "1.29.0"
+"aqua:zizmorcore/zizmor" = "1.30.0"
 "aqua:jqlang/jq" = "1.8.2"
 
 [settings]
