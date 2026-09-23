@@ -136,9 +136,11 @@ const REASON_LEVEL: Record<Reason, LogLevel> = {
 	"payload-too-large": "error",
 	"pr-draft": "info",
 	"pr-not-open": "info",
+	"push-history-incomplete": "warn",
 	"review-rejected": "warn",
 	"too-many-commits": "warn",
 	"untrusted-commit": "info",
+	"untrusted-pusher": "info",
 	"unverified-commit": "info",
 };
 

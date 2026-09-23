@@ -69,15 +69,16 @@ Components:
 
 ### 2.1 Permissions (least privilege)
 
-| Permission           | Access       | Purpose                                                                   |
-| -------------------- | ------------ | ------------------------------------------------------------------------- |
-| Pull requests        | Read & write | Fetch PR information and the PR's commit list, and post reviews (APPROVE) |
-| Contents             | Read & write | Never called; what makes the approval count as a required review (below)  |
-| Organization members | Read         | Determine org owners (role=admin)                                         |
-| Metadata             | Read         | (Mandatory default permission)                                            |
+| Permission           | Access       | Purpose                                                                                      |
+| -------------------- | ------------ | -------------------------------------------------------------------------------------------- |
+| Pull requests        | Read & write | Fetch PR information and the PR's commit list, and post reviews (APPROVE)                    |
+| Contents             | Read & write | Read a branch's push history (§3.2); the write half is what makes the approval count (below) |
+| Organization members | Read         | Determine org owners (role=admin)                                                            |
+| Metadata             | Read         | (Mandatory default permission)                                                               |
 
-Contents is the one permission no code path here reaches for, and it is granted for
-what it signifies rather than for what it does. GitHub counts a review toward a required
+Contents is read in one place — the branch activity list behind §3.2 push custody, which
+needs Contents: read — and its write half is granted for what it signifies rather than
+for what it does. GitHub counts a review toward a required
 approval only when its author has write access to the repository, and for an App that
 means push access — which is this permission and no other. Without it the review is still
 posted and still shown on the pull request, but it satisfies nothing: `reviewDecision`
@@ -91,7 +92,7 @@ only comment and approve can now push to every repository in the installation sc
 leaked private key (§7) costs code rather than an unwanted approval. The trade is what
 buys the App its purpose — an approval that satisfies nothing automates nothing — and it
 is bounded by that scope (§2.3) rather than by anything the Worker does. What the Worker
-does is not use it: no request signs a commit or writes a ref, and the permission rides on
+does is not use the write half: no request signs a commit or writes a ref, and it rides on
 each per-delivery token unused.
 
 > [!NOTE]
@@ -207,6 +208,8 @@ Notes:
   so a lookalike bot is rejected without spending a lookup on it
 - The definition is applied both to the PR author (condition 3) and to every commit's
   principal (§3.2) — its committer, or its author where GitHub itself is the committer.
+  For commit principals only, the coding agent is trusted as well on a PR a trusted
+  human opened (§3.2).
   Memoize membership API results per delivery (in memory) so each distinct user is looked
   up at most once
 - Bots outside the allowlist (e.g. `github-actions[bot]`) are never trusted; commits
@@ -262,6 +265,41 @@ For each commit:
 
 `author` is read in that one case and nowhere else: it is not a second trust check, but
 the same one asked of the only field that names an actor when the committer does not.
+
+One principal is trusted for commits beyond §3.1: the **coding agent** — the `claude`
+account (numeric id `81847`, matched on login **and** id like every other exemption),
+which GitHub attributes Claude Code's commits to through `noreply@anthropic.com` and
+whose key signs them. It is trusted only when the PR author is a trusted principal that
+is not a `Bot`, i.e. the repository owner or an org owner (condition 3 has already
+passed by the time commits are checked). On a bot's PR it is an ordinary untrusted
+account, and it is never trusted as a PR author.
+
+The agent's signature binds its commits to Claude Code, not to whoever ran it, so a
+verified `claude` commit does not by itself say who put it onto the branch. A PR that
+passes on the agent therefore has one more check, **push custody**: the branch's recorded
+updates (`GET /repos/{owner}/{repo}/activity?ref=refs/heads/<head.ref>`, every page) must
+account for the head. Walking the list newest first:
+
+- The newest entry's `after` is the payload's `head.sha`, and every older entry's
+  `after` is the `before` of the entry newer than it — an unbroken chain of updates
+- The chain reaches the push that created the branch (`activity_type` is
+  `branch_creation`)
+- Every entry on it, pushes and force pushes alike, has a non-null `actor` that is a
+  trusted principal (§3.1). The agent itself is not one: it is trusted to commit, never
+  to push
+
+A chain that breaks, does not start at the head, runs out before the creation, or passes
+through a deletion fails as `push-history-incomplete`; an untrusted or unmapped actor as
+`untrusted-pusher`. Both fail closed. A PR with no commit decided on the agent never
+fetches the history: every other commit's signature already binds the account that
+committed it.
+
+> [!NOTE]
+> What this establishes is that every update of the branch was made by a trusted
+> principal, which covers the agent's commits because they can only arrive by one of
+> those updates. It rests on the activity history being complete for the branch; how
+> long GitHub retains it is not documented, and a branch whose early history has aged
+> out fails closed rather than being approved on the part that remains.
 
 If even one commit fails these checks, do not approve. This ensures that if third-party
 commits get pushed into a trusted principal's PR (e.g. someone other than the maintainer
@@ -435,6 +473,9 @@ flowchart TD
     E -->|unsatisfied| R200B["200 (log the reason)"]
     E -->|satisfied| F{"5. Fetch and verify all commits"}
     F -->|unsatisfied| R200C["200 (log the reason)"]
+    F -->|verified, a commit decided on the coding agent| P{"5a. Walk the branch's push history<br>(§3.2 push custody)"}
+    P -->|unsatisfied| R200P["200 (log the reason)"]
+    P -->|satisfied| G
     F -->|verified| G{"6. Check existing reviews<br>(suppress duplicate approvals)"}
     G -->|already approved| R200D["200 (already approved)"]
     G -->|not yet approved| H{"7. Fetch the live PR:<br>open, non-draft, head.sha unchanged?"}
@@ -448,6 +489,8 @@ flowchart TD
   delivery: token issuance, the PR author's membership check (§3 condition 3 — only on an
   org repository with a non-bot author), commit list (up to 3 pages), membership checks
   (one per further distinct non-bot commit principal, memoized within the delivery, §3.1),
+  the branch activity list and membership checks for its actors (only when a commit is
+  decided on the coding agent, §3.2),
   the App slug fetch (`GET /app`, §3 condition 5 — the one call authenticated with the App
   JWT rather than an installation token (§7), the one needing no permission at all, and
   the one made once per isolate rather than once per delivery, below), existing reviews
@@ -553,6 +596,7 @@ the information needed for evaluation comes from the following.
 | Repository / org owner | Webhook payload + GitHub API (§3.1)                                                                                                                                                                                                                                        |
 | Allowed bots           | In-code constant pairing login and numeric user id (e.g. `ALLOWED_BOTS = [{ login: "renovate[bot]", id: 29139614 }, { login: "dependabot[bot]", id: 49699333 }, { login: "autofix-ci[bot]", id: 114827586 }] as const`)                                                    |
 | Web-flow committer     | In-code constant in the same shape (`WEB_FLOW = { login: "web-flow", id: 19864447 }`), used to recognize the committer of a GitHub-signed commit, which §3.2 then decides on its author                                                                                    |
+| Coding agent           | In-code constant in the same shape (`CODING_AGENT = { login: "claude", id: 81847 }`), trusted as a commit principal on a PR a trusted human opened (§3.2)                                                                                                                  |
 
 - To change the allowed bots, edit the constant and redeploy. The configuration is
   version-controlled in Git, and no path exists to rewrite the approval conditions at runtime
@@ -642,31 +686,33 @@ once the body has been parsed.
 `reason` is drawn from a closed vocabulary. This is the list an operator greps, so it is
 exhaustive rather than illustrative:
 
-| `decision` | `reason`                 | `level` | Meaning                                                                   |
-| ---------- | ------------------------ | ------- | ------------------------------------------------------------------------- |
-| approved   | _(none)_                 | info    | The review was posted                                                     |
-| skipped    | `event-out-of-scope`     | info    | Not a `pull_request` event, or an action outside §3 cond. 1               |
-| skipped    | `pr-not-open`            | info    | §3 condition 2: the PR is closed or merged                                |
-| skipped    | `pr-draft`               | info    | §3 condition 2: the PR is a draft                                         |
-| skipped    | `head-repo-missing`      | warn    | §3 condition 2: `head.repo` is null (the head repository was deleted)     |
-| skipped    | `head-repo-forked`       | info    | §3 condition 2: the head repository is not the repository itself (a fork) |
-| skipped    | `author-not-trusted`     | info    | §3 condition 3, including a membership 404                                |
-| skipped    | `no-commits`             | warn    | §3.2: `pull_request.commits` is 0                                         |
-| skipped    | `too-many-commits`       | warn    | §3.2: more than the 250 the commits API can return                        |
-| skipped    | `commit-count-mismatch`  | warn    | §3.2: the fetched list differs from the declared count                    |
-| skipped    | `unverified-commit`      | info    | §3.2: a commit is not `verification.verified`                             |
-| skipped    | `untrusted-commit`       | info    | §3.2: the principal a commit is decided on is not trusted                 |
-| skipped    | `already-approved`       | info    | §3 condition 5 / §6: an own APPROVE for this head exists                  |
-| skipped    | `head-moved`             | warn    | §3.3: the live PR was closed, turned draft, or left the payload's head    |
-| skipped    | `review-rejected`        | warn    | §9: the review POST returned 422                                          |
-| error      | `invalid-signature`      | error   | §4 step 1: signature missing, malformed, or not matching                  |
-| error      | `missing-webhook-secret` | error   | §4 step 1: this Worker has no webhook secret to verify against (§7)       |
-| error      | `payload-too-large`      | error   | §4 step 1: a body above the 2 MiB cap, this Worker's not GitHub's         |
-| error      | `not-found`              | error   | A request outside `POST /webhook`                                         |
-| error      | `invalid-payload`        | error   | The body is not JSON, or not the modeled `pull_request` shape             |
-| error      | `missing-installation`   | error   | The delivery carries no `installation.id` (§7)                            |
-| error      | `github-api-error`       | error   | §9: a GitHub API call failed; the diagnostic fields below accompany it    |
-| error      | `internal-error`         | error   | Any other thrown failure; the diagnostic fields below accompany it        |
+| `decision` | `reason`                  | `level` | Meaning                                                                     |
+| ---------- | ------------------------- | ------- | --------------------------------------------------------------------------- |
+| approved   | _(none)_                  | info    | The review was posted                                                       |
+| skipped    | `event-out-of-scope`      | info    | Not a `pull_request` event, or an action outside §3 cond. 1                 |
+| skipped    | `pr-not-open`             | info    | §3 condition 2: the PR is closed or merged                                  |
+| skipped    | `pr-draft`                | info    | §3 condition 2: the PR is a draft                                           |
+| skipped    | `head-repo-missing`       | warn    | §3 condition 2: `head.repo` is null (the head repository was deleted)       |
+| skipped    | `head-repo-forked`        | info    | §3 condition 2: the head repository is not the repository itself (a fork)   |
+| skipped    | `author-not-trusted`      | info    | §3 condition 3, including a membership 404                                  |
+| skipped    | `no-commits`              | warn    | §3.2: `pull_request.commits` is 0                                           |
+| skipped    | `too-many-commits`        | warn    | §3.2: more than the 250 the commits API can return                          |
+| skipped    | `commit-count-mismatch`   | warn    | §3.2: the fetched list differs from the declared count                      |
+| skipped    | `unverified-commit`       | info    | §3.2: a commit is not `verification.verified`                               |
+| skipped    | `untrusted-commit`        | info    | §3.2: the principal a commit is decided on is not trusted                   |
+| skipped    | `untrusted-pusher`        | info    | §3.2: an update of the branch was made by an untrusted or unmapped actor    |
+| skipped    | `push-history-incomplete` | warn    | §3.2: the branch history does not account for the head back to its creation |
+| skipped    | `already-approved`        | info    | §3 condition 5 / §6: an own APPROVE for this head exists                    |
+| skipped    | `head-moved`              | warn    | §3.3: the live PR was closed, turned draft, or left the payload's head      |
+| skipped    | `review-rejected`         | warn    | §9: the review POST returned 422                                            |
+| error      | `invalid-signature`       | error   | §4 step 1: signature missing, malformed, or not matching                    |
+| error      | `missing-webhook-secret`  | error   | §4 step 1: this Worker has no webhook secret to verify against (§7)         |
+| error      | `payload-too-large`       | error   | §4 step 1: a body above the 2 MiB cap, this Worker's not GitHub's           |
+| error      | `not-found`               | error   | A request outside `POST /webhook`                                           |
+| error      | `invalid-payload`         | error   | The body is not JSON, or not the modeled `pull_request` shape               |
+| error      | `missing-installation`    | error   | The delivery carries no `installation.id` (§7)                              |
+| error      | `github-api-error`        | error   | §9: a GitHub API call failed; the diagnostic fields below accompany it      |
+| error      | `internal-error`          | error   | Any other thrown failure; the diagnostic fields below accompany it          |
 
 `level` is the severity each reason is filed at, and is the axis `decision` is not:
 `decision` says what the delivery did, `level` whether anyone needs to look. Workers Logs

@@ -61,7 +61,11 @@ unmet, or cannot be determined, ghapprover does not approve (fail closed).
    email address, so the committer is the party a verified commit is attributed to; the
    author field is whatever that party typed and is not a trust check. The one exception
    is a commit made through the GitHub web UI or API, whose committer is `web-flow` and
-   therefore names no actor: that one is decided on its author instead. A pull request
+   therefore names no actor: that one is decided on its author instead. On a pull
+   request the owner opened, commits Claude Code signed as the `claude` account are
+   accepted too, provided the branch's push history shows every update of the branch
+   was made by a trusted principal (see
+   [Security considerations](#security-considerations)). A pull request
    whose commits cannot all be accounted for is refused instead of verified: none at all,
    more than the 250 the commits API can return, or a fetched list that does not match
    the count the payload declared.
@@ -162,17 +166,19 @@ Create a new GitHub App on the target user or organization account with:
 | Permission           | Access       | Purpose                                                |
 | -------------------- | ------------ | ------------------------------------------------------ |
 | Pull requests        | Read & write | Read the pull request and its commits, post the review |
-| Contents             | Read & write | Never used by the Worker — see below                   |
+| Contents             | Read & write | Read branch push history; write is explained below     |
 | Organization members | Read         | Determine organization owners                          |
 | Metadata             | Read         | Mandatory default permission                           |
 
-Contents is granted for what it signifies rather than for what it does. GitHub counts a
+The Worker reads Contents only for a branch's push history (`GET /repos/{owner}/{repo}/activity`),
+and only on pull requests carrying Claude Code commits. The write half is granted for what
+it signifies rather than for what it does. GitHub counts a
 review toward a required approval only from a reviewer with write access, and for an App
 that means push access — this permission. Without it the approval is posted and visible
 but satisfies nothing: the merge box keeps reading "At least 1 approving review is
 required by reviewers with write access". Granting it also means a leaked private key can
 push to every repository in the installation scope, which is the trade an approval that
-counts is bought with. No code path here uses it; see
+counts is bought with. No code path here uses the write half; see
 [SPEC.md §2.1](SPEC.md#21-permissions-least-privilege).
 
 **Events** — subscribe to `pull_request` only.
@@ -289,6 +295,9 @@ configuration loading — every approval condition lives in the code and in Git 
 - **Allowed bots** are the `ALLOWED_BOTS` constant in `src/account.ts`, pairing each login
   with its numeric user id. To change them, edit the constant and redeploy. Repositories
   that do not run autofix.ci can drop that entry.
+- **Coding agent** is the `CODING_AGENT` constant in `src/account.ts`: Claude Code's
+  `claude` account, trusted as a committer on pull requests the owner opened and pushed.
+  Remove it to require every commit to be the owner's own.
 - **Target repositories** are controlled by the App's installation scope, and by rulesets
   when the scope is "All repositories".
 - **Target branches** are not a control axis at all: `pull_request.base` is never read, so
@@ -315,6 +324,12 @@ configuration loading — every approval condition lives in the code and in Git 
   freely and no key backs, is not what approval turns on. The guarantee is custody, not
   authorship: a maintainer who signs a commit onto their own branch is inside the trust
   boundary whoever the commit says wrote it.
+- **Coding-agent commits are held to who pushed them**: a `claude` commit is signed by
+  Claude Code, not by the person who ran it, so its signature cannot say who put it onto
+  the branch. ghapprover asks the branch's activity history instead: every update from
+  the branch's creation to the head must have been made by a trusted principal, and a
+  history that does not account for the head is refused. Bot pull requests never accept
+  the agent's commits. See [SPEC.md §3.2](SPEC.md#32-commit-verification).
 - **Fork pull requests are refused** before any API call. On a fork, write access to the
   head branch is not visible to the base repository, so the custody argument above does
   not hold.
@@ -398,6 +413,8 @@ grepped.
 | `author-not-trusted`                            | The author is not the owner, an org owner, or an allowed bot                                                      |
 | `unverified-commit`                             | A commit is unsigned — sign your commits, or commit through the web UI                                            |
 | `untrusted-commit`                              | Someone outside the trust boundary committed onto the branch                                                      |
+| `untrusted-pusher`                              | Someone outside the trust boundary pushed onto a branch carrying Claude Code commits                              |
+| `push-history-incomplete`                       | The branch history does not reach from the head back to its creation — e.g. the branch was deleted or recreated   |
 | `no-commits`                                    | The pull request declares zero commits, so there is nothing to verify — it fails closed                           |
 | `too-many-commits`                              | More than 250 commits; the commits API cannot return them all, so it fails closed                                 |
 | `commit-count-mismatch`                         | The commits API returned a different number than the payload declared — redeliver, or push again                  |

@@ -16,7 +16,14 @@ import type { ApprovalTarget, RepoRef } from "./github";
 import type { CommitProblem, TrustResolver } from "./commits";
 import type { EventPullRequest, GithubAccount, PullRequestEventPayload } from "./types";
 import { apiErrorOutcome, approvedOutcome, errorOutcome, skippedOutcome } from "./outcome";
-import { checkCommitCount, checkCommits, precheckCommitCount } from "./commits";
+import {
+	checkCommitCount,
+	checkCommits,
+	checkPushCustody,
+	commitTrust,
+	hasCodingAgentCommit,
+	precheckCommitCount,
+} from "./commits";
 import {
 	checkPullRequestState,
 	classifyPrincipal,
@@ -30,6 +37,7 @@ import {
 	fetchAppBotLogin,
 	fetchOrgMembership,
 	fetchPullRequest,
+	listBranchActivities,
 	listPullRequestCommits,
 	listPullRequestReviews,
 } from "./github";
@@ -128,9 +136,17 @@ async function checkCommitCondition(
 	const commits = await listPullRequestCommits(client, repo, pullRequest.number);
 	/* A list that does not match the declared count settles the condition on its own, so the
 	 * per-commit walk (and the membership lookups it spends) only runs once the list is whole. */
-	return (
-		checkCommitCount(commits.length, pullRequest.commits) ?? (await checkCommits(commits, trust))
-	);
+	const problem =
+		checkCommitCount(commits.length, pullRequest.commits) ??
+		(await checkCommits(commits, commitTrust(trust, pullRequest.user)));
+	if (problem !== undefined || !hasCodingAgentCommit(commits)) {
+		return problem;
+	}
+	/* Only a PR that passed on the coding agent spends the history fetch: every other commit's
+	 * signature already binds the account that committed it. The pushers are judged on §3.1 trust
+	 * alone — the agent is trusted to commit, never to push. */
+	const activities = await listBranchActivities(client, repo, pullRequest.head.ref);
+	return checkPushCustody(activities, pullRequest.head.sha, trust);
 }
 
 /** SPEC.md §4 steps 7-8: the live TOCTOU check (§3.3), then the review POST. */

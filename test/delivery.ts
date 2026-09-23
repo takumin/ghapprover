@@ -8,7 +8,15 @@
  * with itself about what the pipeline actually calls.
  */
 
-import { APP_BOT, HEAD_SHA, OWNER, PULL_NUMBER, REPOSITORY, repositoryOwnedBy } from "./fixtures";
+import {
+	APP_BOT,
+	HEAD_REF,
+	HEAD_SHA,
+	OWNER,
+	PULL_NUMBER,
+	REPOSITORY,
+	repositoryOwnedBy,
+} from "./fixtures";
 import {
 	APP_ID,
 	INSTALLATION_ID,
@@ -114,7 +122,7 @@ function buildPayload(overrides: PayloadOverrides = {}): string {
 		pull_request: {
 			commits,
 			draft,
-			head: { repo: headRepo, sha: headSha },
+			head: { ref: HEAD_REF, repo: headRepo, sha: headSha },
 			number: PULL_NUMBER,
 			state,
 			user,

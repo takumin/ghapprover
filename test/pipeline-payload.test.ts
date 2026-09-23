@@ -7,7 +7,7 @@
  * never rides along with the path (§8 warning).
  */
 
-import { HEAD_SHA, HUMAN, OWNER, REPOSITORY } from "./fixtures";
+import { HEAD_REF, HEAD_SHA, HUMAN, OWNER, REPOSITORY } from "./fixtures";
 import { describe, expect, it } from "vitest";
 import type { PullRequestEventPayload } from "~src/types";
 import { parsePullRequestEvent } from "~src/pipeline";
@@ -19,7 +19,7 @@ function expectedPayload(): PullRequestEventPayload {
 		pull_request: {
 			commits: 3,
 			draft: false,
-			head: { repo: { id: REPOSITORY.id }, sha: HEAD_SHA },
+			head: { ref: HEAD_REF, repo: { id: REPOSITORY.id }, sha: HEAD_SHA },
 			number: 42,
 			state: "open",
 			user: OWNER,
@@ -54,8 +54,8 @@ const ABSENT_INSTALLATION = merged(expectedPayload(), { installation: undefined 
 /* The two spellings of a gone head repository stay apart: `null` is what GitHub sent and is
  * carried through as sent, an absent key stays an absent key. The reader tests for a repository
  * rather than for which of the two it was (src/decision.ts). */
-const NULL_HEAD_REPO = pr({ head: { repo: null, sha: HEAD_SHA } });
-const ABSENT_HEAD_REPO = pr({ head: { sha: HEAD_SHA } });
+const NULL_HEAD_REPO = pr({ head: { ref: HEAD_REF, repo: null, sha: HEAD_SHA } });
+const ABSENT_HEAD_REPO = pr({ head: { ref: HEAD_REF, sha: HEAD_SHA } });
 
 interface ParseOkCase {
 	readonly expected: unknown;
@@ -134,19 +134,24 @@ const MALFORMED_PAYLOADS: readonly MalformedCase[] = [
 	},
 	{ field: "pull_request.head", name: "head not an object", payload: pr({ head: "deadbeef" }) },
 	{
+		field: "pull_request.head.ref",
+		name: "head ref missing",
+		payload: pr({ head: { repo: { id: REPOSITORY.id }, sha: HEAD_SHA } }),
+	},
+	{
 		field: "pull_request.head.sha",
 		name: "head sha missing",
-		payload: pr({ head: { repo: { id: REPOSITORY.id } } }),
+		payload: pr({ head: { ref: HEAD_REF, repo: { id: REPOSITORY.id } } }),
 	},
 	{
 		field: "pull_request.head.repo",
 		name: "head repo not an object",
-		payload: pr({ head: { repo: "x", sha: HEAD_SHA } }),
+		payload: pr({ head: { ref: HEAD_REF, repo: "x", sha: HEAD_SHA } }),
 	},
 	{
 		field: "pull_request.head.repo.id",
 		name: "head repo id not numeric",
-		payload: pr({ head: { repo: { id: "5" }, sha: HEAD_SHA } }),
+		payload: pr({ head: { ref: HEAD_REF, repo: { id: "5" }, sha: HEAD_SHA } }),
 	},
 	{
 		field: "repository",

@@ -6,15 +6,19 @@
  * membership lookup per commit (SPEC.md §3.1, §4).
  */
 
-import { ORG, OWNER, RENOVATE, RENOVATE_WRONG_ID, WEB_FLOW_USER } from "./fixtures";
 import {
-	buildPayload,
-	expectApproved,
-	expectSkipped,
-	pipelineRoutes,
-	postSigned,
-} from "./delivery";
+	CODING_AGENT_USER,
+	HEAD_SHA,
+	ORG,
+	OWNER,
+	RENOVATE,
+	RENOVATE_WRONG_ID,
+	WEB_FLOW_USER,
+} from "./fixtures";
+import type { GithubAccount, RepositoryActivity } from "~src/types";
 import {
+	activityItem,
+	activityRoute,
 	commitItem,
 	commitsRoute,
 	installTokenRoute,
@@ -23,11 +27,18 @@ import {
 	membershipUrl,
 	reviewPostRoute,
 } from "./github-api";
-import { describe, expect, it } from "vitest";
-import type { GithubAccount } from "~src/types";
+import { beforeEach, describe, expect, it } from "vitest";
+import {
+	buildPayload,
+	expectApproved,
+	expectSkipped,
+	pipelineRoutes,
+	postSigned,
+} from "./delivery";
 import { HTTP_OK } from "~src/http-status";
 import { MAX_VERIFIABLE_COMMITS } from "~src/commits";
 import { installFetchMock } from "./fetch-stub";
+import { resetAppBotLogin } from "~src/github";
 
 /* Two ordinary untrusted commit principals, stated here rather than with the shared account
  * fixtures: this is the only suite that needs them, and what it needs of them is that they are two
@@ -35,6 +46,18 @@ import { installFetchMock } from "./fetch-stub";
  * standing any other suite reasons about. */
 const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User" };
 const OTHER_STRANGER: GithubAccount = { id: 998, login: "eve", type: "User" };
+
+/* A PR of one commit the coding agent committed, and the history entries its branch is walked
+ * back through (SPEC.md §3.2 push custody). */
+const AGENT_COMMITS = [commitItem({ committer: CODING_AGENT_USER })];
+const EARLIER_SHA = "earlier-sha";
+const ZERO_SHA = "0000000000000000000000000000000000000000";
+const AGENT_BRANCH_CREATION = activityItem(ZERO_SHA, { activity_type: "branch_creation" });
+
+/* The bot login GET /app answers with is cached per isolate (src/github.ts), so each approving case
+ * starts empty and consumes the route it plans. */
+// oxlint-disable-next-line vitest/no-hooks, vitest/require-top-level-describe -- see above
+beforeEach(resetAppBotLogin);
 
 describe("commit conditions", () => {
 	/** What the declared count alone settles (SPEC.md §3.2), which is why neither row plans a route. */
@@ -123,6 +146,108 @@ describe("commit custody", () => {
 			session.assertDone();
 		},
 	);
+});
+
+interface CustodySkipCase {
+	readonly history: readonly RepositoryActivity[];
+	readonly name: string;
+	readonly reason: string;
+}
+/* What the history closes: someone else with push access adding the agent's commits to the
+ * owner's branch. Their signature is the agent's either way, so only the push can tell. */
+const CUSTODY_SKIP_CASES: readonly CustodySkipCase[] = [
+	{
+		history: [
+			activityItem(EARLIER_SHA, { actor: STRANGER }),
+			activityItem(ZERO_SHA, { activity_type: "branch_creation", after: EARLIER_SHA }),
+		],
+		name: "a push by someone else",
+		reason: "untrusted-pusher",
+	},
+	{
+		history: [activityItem(ZERO_SHA, { activity_type: "branch_creation", actor: null })],
+		name: "a push by no mapped account",
+		reason: "untrusted-pusher",
+	},
+	{
+		history: [activityItem(ZERO_SHA, { after: EARLIER_SHA })],
+		name: "a history that does not end on the head",
+		reason: "push-history-incomplete",
+	},
+	{
+		history: [activityItem(EARLIER_SHA)],
+		name: "a history that runs out before the branch was created",
+		reason: "push-history-incomplete",
+	},
+	{
+		history: [
+			activityItem(HEAD_SHA, { activity_type: "branch_deletion", after: ZERO_SHA }),
+			AGENT_BRANCH_CREATION,
+		],
+		name: "a branch deleted since",
+		reason: "push-history-incomplete",
+	},
+];
+
+describe("coding-agent commits", () => {
+	/* SPEC.md §3.2: the coding agent commits onto the owner's own pull request as the owner's tool,
+	 * and the branch history says the owner is who pushed it. The agent itself spends no lookup — the
+	 * org case plans no membership route for it — and the owner's push reuses the author's verdict. */
+	it(
+		"approves an owner's pull request the coding agent committed to and the owner pushed",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const session = installFetchMock([
+				installTokenRoute(),
+				membershipAdminRoute(OWNER),
+				activityRoute([AGENT_BRANCH_CREATION], ORG),
+				...pipelineRoutes({ commits: AGENT_COMMITS, owner: ORG, reviews: [] }),
+				reviewPostRoute(HTTP_OK, ORG),
+			]);
+			const response = await postSigned(buildPayload({ repoOwner: ORG }));
+			await expectApproved(response);
+			session.assertDone();
+		},
+	);
+
+	it("skips a bot's pull request the coding agent committed to", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const session = installFetchMock([installTokenRoute(), commitsRoute(AGENT_COMMITS)]);
+		const response = await postSigned(buildPayload({ user: RENOVATE }));
+		await expectSkipped(response, "untrusted-commit");
+		session.assertDone();
+	});
+});
+
+describe("coding-agent push custody", () => {
+	it("approves a history of several owner pushes", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const session = installFetchMock([
+			installTokenRoute(),
+			activityRoute([
+				activityItem(EARLIER_SHA),
+				activityItem(ZERO_SHA, { activity_type: "branch_creation", after: EARLIER_SHA }),
+			]),
+			...pipelineRoutes({ commits: AGENT_COMMITS, reviews: [] }),
+			reviewPostRoute(HTTP_OK),
+		]);
+		const response = await postSigned(buildPayload());
+		await expectApproved(response);
+		session.assertDone();
+	});
+
+	it.each(CUSTODY_SKIP_CASES)("skips $name", { timeout: 5000 }, async ({ history, reason }) => {
+		expect.hasAssertions();
+		const session = installFetchMock([
+			installTokenRoute(),
+			commitsRoute(AGENT_COMMITS),
+			activityRoute(history),
+		]);
+		const response = await postSigned(buildPayload());
+		await expectSkipped(response, reason);
+		session.assertDone();
+	});
 });
 
 describe("principal trust resolution", () => {

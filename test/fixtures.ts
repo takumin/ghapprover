@@ -14,7 +14,7 @@
  * suite builds a payload around them.
  */
 
-import { ALLOWED_BOTS, WEB_FLOW } from "~src/account";
+import { ALLOWED_BOTS, CODING_AGENT, WEB_FLOW } from "~src/account";
 import type { EventRepository, GithubAccount } from "~src/types";
 
 interface AccountOverrides {
@@ -51,6 +51,19 @@ const WEB_FLOW_USER: GithubAccount = {
 
 /** Same login, different account: the committer exemption must not fire on the login alone. */
 const WEB_FLOW_LOOKALIKE: GithubAccount = { id: 999, login: WEB_FLOW.login, type: "User" };
+
+/** The coding agent's account (SPEC.md §3.2), built from the constant itself like the bots above. */
+const CODING_AGENT_USER: GithubAccount = {
+	id: CODING_AGENT.id,
+	login: CODING_AGENT.login,
+	type: "User",
+};
+/** Same login, different account: the coding-agent exemption must not fire on the login alone. */
+const CODING_AGENT_LOOKALIKE: GithubAccount = {
+	id: 998,
+	login: CODING_AGENT.login,
+	type: "User",
+};
 
 /** The slug GET /app answers with (test/github-api.ts), and the App's own bot login below. */
 const APP_SLUG = "ghapprover";
@@ -90,6 +103,8 @@ const REPOSITORY: EventRepository = repositoryOwnedBy();
  */
 const PULL_NUMBER = 5;
 const HEAD_SHA = "head-sha";
+/** The head branch, whose push history SPEC.md §3.2 walks back from that head. */
+const HEAD_REF = "feature";
 /**
  * The organization every §3.1 org-branch case is owned by: the unit suite that drives
  * classifyPrincipal and the delivery suites that serve the membership lookup it defers to have to
@@ -104,6 +119,9 @@ export {
 	APP_BOT,
 	APP_SLUG,
 	AUTOFIX_CI,
+	CODING_AGENT_LOOKALIKE,
+	CODING_AGENT_USER,
+	HEAD_REF,
 	HEAD_SHA,
 	HUMAN,
 	ORG,
