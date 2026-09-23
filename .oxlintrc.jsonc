@@ -56,6 +56,10 @@
 		// answers with. `null` cannot stand in for it -- `null` is a value the GitHub
 		// payloads really carry, which is what unicorn/no-null below now enforces.
 		"eslint/no-undefined": "off",
+		// Tuned to the codebase's one declaration per statement, so each binding
+		// keeps its own comment and diff line. The style category's default
+		// ("always") demanded the opposite once oxlint started carrying the rule.
+		"eslint/one-var": ["error", "never"],
 		// Nursery rules worth having. No enabled category carries them, so each is
 		// named individually.
 		"eslint/no-unreachable-loop": "error",

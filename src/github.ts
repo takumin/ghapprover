@@ -117,7 +117,8 @@ async function requestAppBotLogin(client: GithubClient): Promise<string> {
  * joined. A failure drops the entry by identity, because by then a later delivery may already have
  * installed a lookup of its own, and dropping that one would cost the isolate the sharing it is for. */
 async function attemptAppBotLogin(client: GithubClient): Promise<string> {
-	const lookup = (cachedBotLogin ??= requestAppBotLogin(client));
+	cachedBotLogin ??= requestAppBotLogin(client);
+	const lookup = cachedBotLogin;
 	try {
 		return await lookup;
 	} catch (error) {
