@@ -207,6 +207,8 @@ Notes:
   so a lookalike bot is rejected without spending a lookup on it
 - The definition is applied both to the PR author (condition 3) and to every commit's
   principal (§3.2) — its committer, or its author where GitHub itself is the committer.
+  For commit principals only, the coding agent is trusted as well on a PR a trusted
+  human opened (§3.2).
   Memoize membership API results per delivery (in memory) so each distinct user is looked
   up at most once
 - Bots outside the allowlist (e.g. `github-actions[bot]`) are never trusted; commits
@@ -262,6 +264,23 @@ For each commit:
 
 `author` is read in that one case and nowhere else: it is not a second trust check, but
 the same one asked of the only field that names an actor when the committer does not.
+
+One principal is trusted for commits beyond §3.1: the **coding agent** — the `claude`
+account (numeric id `81847`, matched on login **and** id like every other exemption),
+which GitHub attributes Claude Code's commits to through `noreply@anthropic.com` and
+whose key signs them. It is trusted only when the PR author is a trusted principal that
+is not a `Bot`, i.e. the repository owner or an org owner (condition 3 has already
+passed by the time commits are checked). On a bot's PR it is an ordinary untrusted
+account, and it is never trusted as a PR author.
+
+> [!WARNING]
+> This exemption gives up custody for those commits. The agent's signature binds its
+> commits to Claude Code, not to whoever ran it, so a verified `claude` commit does not
+> establish that the owner put it onto the branch: anyone with push access to the owner's
+> PR branch (a collaborator on a personal repository, an org member with write access)
+> can add Claude Code commits to it and still have the PR approved. The trade is accepted
+> so that an owner's PR written with Claude Code is approvable at all; drop the constant
+> (§5) to restore the custody guarantee.
 
 If even one commit fails these checks, do not approve. This ensures that if third-party
 commits get pushed into a trusted principal's PR (e.g. someone other than the maintainer
@@ -553,6 +572,7 @@ the information needed for evaluation comes from the following.
 | Repository / org owner | Webhook payload + GitHub API (§3.1)                                                                                                                                                                                                                                        |
 | Allowed bots           | In-code constant pairing login and numeric user id (e.g. `ALLOWED_BOTS = [{ login: "renovate[bot]", id: 29139614 }, { login: "dependabot[bot]", id: 49699333 }, { login: "autofix-ci[bot]", id: 114827586 }] as const`)                                                    |
 | Web-flow committer     | In-code constant in the same shape (`WEB_FLOW = { login: "web-flow", id: 19864447 }`), used to recognize the committer of a GitHub-signed commit, which §3.2 then decides on its author                                                                                    |
+| Coding agent           | In-code constant in the same shape (`CODING_AGENT = { login: "claude", id: 81847 }`), trusted as a commit principal on a PR a trusted human opened (§3.2)                                                                                                                  |
 
 - To change the allowed bots, edit the constant and redeploy. The configuration is
   version-controlled in Git, and no path exists to rewrite the approval conditions at runtime

@@ -6,7 +6,15 @@
  * membership lookup per commit (SPEC.md §3.1, §4).
  */
 
-import { ORG, OWNER, RENOVATE, RENOVATE_WRONG_ID, WEB_FLOW_USER } from "./fixtures";
+import {
+	CODING_AGENT_USER,
+	ORG,
+	OWNER,
+	RENOVATE,
+	RENOVATE_WRONG_ID,
+	WEB_FLOW_USER,
+} from "./fixtures";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
 	buildPayload,
 	expectApproved,
@@ -23,11 +31,11 @@ import {
 	membershipUrl,
 	reviewPostRoute,
 } from "./github-api";
-import { describe, expect, it } from "vitest";
 import type { GithubAccount } from "~src/types";
 import { HTTP_OK } from "~src/http-status";
 import { MAX_VERIFIABLE_COMMITS } from "~src/commits";
 import { installFetchMock } from "./fetch-stub";
+import { resetAppBotLogin } from "~src/github";
 
 /* Two ordinary untrusted commit principals, stated here rather than with the shared account
  * fixtures: this is the only suite that needs them, and what it needs of them is that they are two
@@ -35,6 +43,11 @@ import { installFetchMock } from "./fetch-stub";
  * standing any other suite reasons about. */
 const STRANGER: GithubAccount = { id: 999, login: "mallory", type: "User" };
 const OTHER_STRANGER: GithubAccount = { id: 998, login: "eve", type: "User" };
+
+/* The bot login GET /app answers with is cached per isolate (src/github.ts), so each approving case
+ * starts empty and consumes the route it plans. */
+// oxlint-disable-next-line vitest/no-hooks, vitest/require-top-level-describe -- see above
+beforeEach(resetAppBotLogin);
 
 describe("commit conditions", () => {
 	/** What the declared count alone settles (SPEC.md §3.2), which is why neither row plans a route. */
@@ -123,6 +136,42 @@ describe("commit custody", () => {
 			session.assertDone();
 		},
 	);
+});
+
+describe("coding-agent commits", () => {
+	/* SPEC.md §3.2: the coding agent commits onto the owner's own pull request as the owner's tool,
+	 * so it passes without a lookup — the org case below plans no membership route for it. */
+	it(
+		"approves an owner's pull request the coding agent committed to",
+		{ timeout: 5000 },
+		async () => {
+			expect.hasAssertions();
+			const session = installFetchMock([
+				installTokenRoute(),
+				membershipAdminRoute(OWNER),
+				...pipelineRoutes({
+					commits: [commitItem({ committer: CODING_AGENT_USER })],
+					owner: ORG,
+					reviews: [],
+				}),
+				reviewPostRoute(HTTP_OK, ORG),
+			]);
+			const response = await postSigned(buildPayload({ repoOwner: ORG }));
+			await expectApproved(response);
+			session.assertDone();
+		},
+	);
+
+	it("skips a bot's pull request the coding agent committed to", { timeout: 5000 }, async () => {
+		expect.hasAssertions();
+		const session = installFetchMock([
+			installTokenRoute(),
+			commitsRoute([commitItem({ committer: CODING_AGENT_USER })]),
+		]);
+		const response = await postSigned(buildPayload({ user: RENOVATE }));
+		await expectSkipped(response, "untrusted-commit");
+		session.assertDone();
+	});
 });
 
 describe("principal trust resolution", () => {

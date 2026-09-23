@@ -9,7 +9,7 @@
  */
 
 import type { GithubAccount, PullRequestCommit } from "./types";
-import { isWebFlow } from "./account";
+import { isCodingAgent, isWebFlow } from "./account";
 
 /**
  * The PR commits API returns at most 250 commits, so a PR declaring more can never be fully
@@ -81,6 +81,21 @@ function checkCommitCount(fetchedCount: number, declaredCount: number): CommitPr
  */
 type TrustResolver = (account: GithubAccount) => Promise<boolean>;
 
+/**
+ * SPEC.md §3.2: the trust a pull request's commit principals are decided against. The coding agent
+ * is trusted on a pull request a human opened and on no other — the caller runs this only once the
+ * author condition (§3 cond. 3) has passed, so a human author here is the repository or org owner,
+ * and the agent's commits are that owner's tool committing onto their own branch. A bot's pull
+ * request gets the resolver unchanged: nothing about Renovate's branch is the agent's to commit to.
+ */
+function commitTrust(isTrusted: TrustResolver, prAuthor: GithubAccount): TrustResolver {
+	if (prAuthor.type === "Bot") {
+		return isTrusted;
+	}
+	return async (account: GithubAccount): Promise<boolean> =>
+		isCodingAgent(account) || (await isTrusted(account));
+}
+
 /* SPEC.md §3.2 for one commit, in the order the checks must run: the signature, then the trust of
  * the principal it binds. Both are load-bearing in that order — the committer is the principal only
  * *because* a verified signature is checked against its email, and the web-flow branch that hands
@@ -131,6 +146,7 @@ export {
 	checkCommitCount,
 	checkCommits,
 	commitPrincipal,
+	commitTrust,
 	precheckCommitCount,
 };
 export type { CommitProblem, TrustResolver };

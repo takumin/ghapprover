@@ -50,6 +50,14 @@ const ALLOWED_BOTS: readonly AccountRef[] = [
  */
 const WEB_FLOW: AccountRef = { id: 19_864_447, login: "web-flow" };
 
+/**
+ * The account GitHub attributes Claude Code's commits to: `noreply@anthropic.com` maps onto it, and
+ * Claude Code signs them with a key registered to it. It stands for a tool rather than for the
+ * person driving it, so §3.2 trusts it only as the committer on a pull request a trusted human
+ * opened (src/commits.ts) — never on a bot's, and never as a pull request author (SPEC.md §3.2).
+ */
+const CODING_AGENT: AccountRef = { id: 81_847, login: "claude" };
+
 /* The allowlist as the keys it is compared against, derived once at module scope: it is an in-code
  * constant (SPEC.md §5) and is compared against on every delivery, so deriving it per call is work
  * every delivery repeats for nothing. */
@@ -64,4 +72,18 @@ function isWebFlow(account: AccountRef): boolean {
 	return isSameAccount(account, WEB_FLOW);
 }
 
-export { ALLOWED_BOTS, WEB_FLOW, accountKey, isAllowedBot, isSameAccount, isWebFlow };
+/** SPEC.md §3.2: the coding agent itself, matched as the pair like every other exemption. */
+function isCodingAgent(account: AccountRef): boolean {
+	return isSameAccount(account, CODING_AGENT);
+}
+
+export {
+	ALLOWED_BOTS,
+	CODING_AGENT,
+	WEB_FLOW,
+	accountKey,
+	isAllowedBot,
+	isCodingAgent,
+	isSameAccount,
+	isWebFlow,
+};

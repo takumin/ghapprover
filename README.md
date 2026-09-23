@@ -61,7 +61,9 @@ unmet, or cannot be determined, ghapprover does not approve (fail closed).
    email address, so the committer is the party a verified commit is attributed to; the
    author field is whatever that party typed and is not a trust check. The one exception
    is a commit made through the GitHub web UI or API, whose committer is `web-flow` and
-   therefore names no actor: that one is decided on its author instead. A pull request
+   therefore names no actor: that one is decided on its author instead. On a pull
+   request the owner opened, commits Claude Code signed as the `claude` account are
+   accepted too (see [Security considerations](#security-considerations)). A pull request
    whose commits cannot all be accounted for is refused instead of verified: none at all,
    more than the 250 the commits API can return, or a fetched list that does not match
    the count the payload declared.
@@ -289,6 +291,9 @@ configuration loading — every approval condition lives in the code and in Git 
 - **Allowed bots** are the `ALLOWED_BOTS` constant in `src/account.ts`, pairing each login
   with its numeric user id. To change them, edit the constant and redeploy. Repositories
   that do not run autofix.ci can drop that entry.
+- **Coding agent** is the `CODING_AGENT` constant in `src/account.ts`: Claude Code's
+  `claude` account, trusted as a committer on pull requests the owner opened. Remove it
+  to require every commit to be the owner's own.
 - **Target repositories** are controlled by the App's installation scope, and by rulesets
   when the scope is "All repositories".
 - **Target branches** are not a control axis at all: `pull_request.base` is never read, so
@@ -315,6 +320,11 @@ configuration loading — every approval condition lives in the code and in Git 
   freely and no key backs, is not what approval turns on. The guarantee is custody, not
   authorship: a maintainer who signs a commit onto their own branch is inside the trust
   boundary whoever the commit says wrote it.
+- **Coding-agent commits trade custody for convenience**: a `claude` commit is signed by
+  Claude Code, not by the person who ran it, so on an owner's pull request anyone else who
+  can push to that branch can add Claude Code commits and the pull request is still
+  approved. Bot pull requests are unaffected. See
+  [SPEC.md §3.2](SPEC.md#32-commit-verification).
 - **Fork pull requests are refused** before any API call. On a fork, write access to the
   head branch is not visible to the base repository, so the custody argument above does
   not hold.

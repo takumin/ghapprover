@@ -5,15 +5,22 @@
  * without the GitHub API (SPEC.md §12).
  */
 
+import {
+	CODING_AGENT_LOOKALIKE,
+	CODING_AGENT_USER,
+	RENOVATE,
+	WEB_FLOW_LOOKALIKE,
+	WEB_FLOW_USER,
+} from "./fixtures";
 import type { GithubAccount, PullRequestCommit } from "~src/types";
 import {
 	MAX_VERIFIABLE_COMMITS,
 	checkCommit,
 	checkCommitCount,
 	commitPrincipal,
+	commitTrust,
 	precheckCommitCount,
 } from "~src/commits";
-import { WEB_FLOW_LOOKALIKE, WEB_FLOW_USER } from "./fixtures";
 import { describe, expect, it } from "vitest";
 import { accountKey } from "~src/account";
 
@@ -215,6 +222,36 @@ describe("commit verification gate", () => {
 		async ({ entry, expected }) => {
 			expect.hasAssertions();
 			await expect(checkCommit(entry, isTrustedFixture)).resolves.toBe(expected);
+		},
+	);
+});
+
+/* The coding agent is trusted as a commit principal on a human's pull request and on no other, and
+ * as the pair like every exemption: the same login under another id, or a bot's pull request, gets
+ * the resolver's own answer (SPEC.md §3.2). */
+describe("commit principal trust", () => {
+	it.each([
+		{ account: CODING_AGENT_USER, expected: true, name: "the coding agent", prAuthor: ALICE },
+		{ account: ALICE, expected: true, name: "a trusted principal", prAuthor: ALICE },
+		{ account: MALLORY, expected: false, name: "an untrusted principal", prAuthor: ALICE },
+		{
+			account: CODING_AGENT_LOOKALIKE,
+			expected: false,
+			name: "a coding-agent lookalike with a different id",
+			prAuthor: ALICE,
+		},
+		{
+			account: CODING_AGENT_USER,
+			expected: false,
+			name: "the coding agent on a bot's pull request",
+			prAuthor: RENOVATE,
+		},
+	] as const)(
+		"answers $expected for $name",
+		{ timeout: 5000 },
+		async ({ account, expected, prAuthor }) => {
+			expect.hasAssertions();
+			await expect(commitTrust(isTrustedFixture, prAuthor)(account)).resolves.toBe(expected);
 		},
 	);
 });

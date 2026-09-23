@@ -16,7 +16,7 @@ import type { ApprovalTarget, RepoRef } from "./github";
 import type { CommitProblem, TrustResolver } from "./commits";
 import type { EventPullRequest, GithubAccount, PullRequestEventPayload } from "./types";
 import { apiErrorOutcome, approvedOutcome, errorOutcome, skippedOutcome } from "./outcome";
-import { checkCommitCount, checkCommits, precheckCommitCount } from "./commits";
+import { checkCommitCount, checkCommits, commitTrust, precheckCommitCount } from "./commits";
 import {
 	checkPullRequestState,
 	classifyPrincipal,
@@ -129,7 +129,8 @@ async function checkCommitCondition(
 	/* A list that does not match the declared count settles the condition on its own, so the
 	 * per-commit walk (and the membership lookups it spends) only runs once the list is whole. */
 	return (
-		checkCommitCount(commits.length, pullRequest.commits) ?? (await checkCommits(commits, trust))
+		checkCommitCount(commits.length, pullRequest.commits) ??
+		(await checkCommits(commits, commitTrust(trust, pullRequest.user)))
 	);
 }
 
