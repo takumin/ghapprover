@@ -6,7 +6,7 @@
  * commits.test.ts.
  */
 
-import { APP_BOT, HEAD_SHA, HUMAN, OWNER, REPOSITORY } from "./fixtures";
+import { APP_BOT, HEAD_REF, HEAD_SHA, HUMAN, OWNER, REPOSITORY } from "./fixtures";
 import type {
 	EventPullRequest,
 	GithubAccount,
@@ -33,7 +33,14 @@ function eventPullRequest(overrides: PrStateOverrides = {}): EventPullRequest {
 	/* The head repo defaults to the base repository's own id, which is what makes the fixture PR
 	 * not a fork. */
 	const { draft = false, repo = { id: REPOSITORY.id }, state = "open" } = overrides;
-	return { commits: 1, draft, head: { repo, sha: HEAD_SHA }, number: 11, state, user: OWNER };
+	return {
+		commits: 1,
+		draft,
+		head: { ref: HEAD_REF, repo, sha: HEAD_SHA },
+		number: 11,
+		state,
+		user: OWNER,
+	};
 }
 
 interface ReviewOverrides {
@@ -115,7 +122,7 @@ describe("pull request state gate", () => {
 		const withoutHeadRepo: EventPullRequest = {
 			commits: 1,
 			draft: false,
-			head: { sha: HEAD_SHA },
+			head: { ref: HEAD_REF, sha: HEAD_SHA },
 			number: 11,
 			state: "open",
 			user: OWNER,

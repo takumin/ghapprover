@@ -12,10 +12,10 @@
  * one.
  */
 
-import { APP_SLUG, HEAD_SHA, ORG, OWNER, PULL_NUMBER, REPOSITORY } from "./fixtures";
+import { APP_SLUG, HEAD_REF, HEAD_SHA, ORG, OWNER, PULL_NUMBER, REPOSITORY } from "./fixtures";
 import type { ApprovalTarget, RepoRef } from "~src/github";
+import type { GithubAccount, RepositoryActivity } from "~src/types";
 import { HTTP_NOT_FOUND, HTTP_OK } from "~src/http-status";
-import type { GithubAccount } from "~src/types";
 import type { GithubClient } from "~src/client";
 import { PAGE_SIZE } from "~src/github";
 import type { PlannedRoute } from "./fetch-stub";
@@ -189,6 +189,20 @@ function reviewPostRoute(status: number, owner: GithubAccount = OWNER): PlannedR
 	});
 }
 
+/* The §3.2 push history of the head branch, and one entry of it: by default the owner's push onto
+ * the head. */
+function activityRoute(payload: unknown, owner: GithubAccount = OWNER): PlannedRoute {
+	const query = `per_page=${PAGE_SIZE}&ref=${encodeURIComponent(`refs/heads/${HEAD_REF}`)}`;
+	return getRoute(`${BASE}/repos/${owner.login}/${REPO.repo}/activity?${query}`, payload);
+}
+function activityItem(
+	before: string,
+	overrides: Partial<RepositoryActivity> = {},
+): RepositoryActivity {
+	const item: RepositoryActivity = { activity_type: "push", actor: OWNER, after: HEAD_SHA, before };
+	return Object.assign(item, overrides);
+}
+
 /* The §3.1 membership lookup, for one account in the fixture organization: the URL, and the two
  * answers §3.1 turns on. Every route is planned for the account fixture the case names rather than
  * for a login repeated beside it — the two are one choice per case, and a URL built from its own
@@ -262,6 +276,8 @@ export {
 	TOKEN,
 	TOKEN_ENDPOINT,
 	TOKEN_URL,
+	activityItem,
+	activityRoute,
 	appRoute,
 	approvalTarget,
 	commitItem,

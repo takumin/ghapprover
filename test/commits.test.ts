@@ -19,6 +19,7 @@ import {
 	checkCommitCount,
 	commitPrincipal,
 	commitTrust,
+	hasCodingAgentCommit,
 	precheckCommitCount,
 } from "~src/commits";
 import { describe, expect, it } from "vitest";
@@ -254,4 +255,24 @@ describe("commit principal trust", () => {
 			await expect(commitTrust(isTrustedFixture, prAuthor)(account)).resolves.toBe(expected);
 		},
 	);
+});
+
+describe("coding-agent commit detection", () => {
+	it.each([
+		{ commits: [commit()], expected: false, name: "no agent commit" },
+		{ commits: [commit(), commit({ committer: CODING_AGENT_USER })], expected: true, name: "one" },
+		{
+			commits: [commit({ author: CODING_AGENT_USER, committer: WEB_FLOW_USER })],
+			expected: true,
+			name: "the agent as the author of a GitHub-signed commit",
+		},
+		{
+			commits: [commit({ author: CODING_AGENT_USER })],
+			expected: false,
+			name: "the agent as an author no one decides on",
+		},
+	] as const)("answers $expected for $name", { timeout: 5000 }, ({ commits, expected }) => {
+		expect.hasAssertions();
+		expect(hasCodingAgentCommit(commits)).toBe(expected);
+	});
 });

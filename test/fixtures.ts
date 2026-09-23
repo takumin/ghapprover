@@ -103,6 +103,8 @@ const REPOSITORY: EventRepository = repositoryOwnedBy();
  */
 const PULL_NUMBER = 5;
 const HEAD_SHA = "head-sha";
+/** The head branch, whose push history SPEC.md §3.2 walks back from that head. */
+const HEAD_REF = "feature";
 /**
  * The organization every §3.1 org-branch case is owned by: the unit suite that drives
  * classifyPrincipal and the delivery suites that serve the membership lookup it defers to have to
@@ -119,6 +121,7 @@ export {
 	AUTOFIX_CI,
 	CODING_AGENT_LOOKALIKE,
 	CODING_AGENT_USER,
+	HEAD_REF,
 	HEAD_SHA,
 	HUMAN,
 	ORG,

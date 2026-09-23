@@ -9,7 +9,13 @@
 
 import type { GenericSchema, InferOutput } from "valibot";
 import { HTTP_NOT_FOUND, HTTP_UNPROCESSABLE_ENTITY } from "./http-status";
-import type { LivePullRequest, OrgMembership, PullRequestCommit, PullRequestReview } from "./types";
+import type {
+	LivePullRequest,
+	OrgMembership,
+	PullRequestCommit,
+	PullRequestReview,
+	RepositoryActivity,
+} from "./types";
 import { answering, contractCall, contractItems, dispatched } from "./contract-call";
 import {
 	appSchema,
@@ -17,6 +23,7 @@ import {
 	orgMembershipSchema,
 	pullRequestCommitSchema,
 	pullRequestReviewSchema,
+	repositoryActivitySchema,
 } from "./types";
 import type { GithubClient } from "./client";
 
@@ -138,6 +145,33 @@ async function listPullRequestCommits(
 	return commits;
 }
 
+/**
+ * Every recorded update of one branch, newest first, via Link-header pagination (SPEC.md §3.2 push
+ * custody). The ref is spelled in full so a tag of the same name cannot answer for the branch.
+ */
+async function listBranchActivities(
+	client: GithubClient,
+	repo: RepoRef,
+	branch: string,
+): Promise<readonly RepositoryActivity[]> {
+	const endpoint = "GET /repos/{owner}/{repo}/activity";
+	const args = {
+		owner: repo.owner,
+		per_page: PAGE_SIZE,
+		ref: `refs/heads/${branch}`,
+		repo: repo.repo,
+	};
+	const activities = await contractItems(
+		endpoint,
+		async () => {
+			const pages = await client.paginate(endpoint, args);
+			return pages;
+		},
+		repositoryActivitySchema,
+	);
+	return activities;
+}
+
 /** GET /orgs/{org}/memberships/{username}; a 404 means "not a member" → no membership (SPEC.md §9). */
 async function fetchOrgMembership(
 	client: GithubClient,
@@ -233,6 +267,7 @@ export {
 	fetchAppBotLogin,
 	fetchOrgMembership,
 	fetchPullRequest,
+	listBranchActivities,
 	listPullRequestCommits,
 	listPullRequestReviews,
 	resetAppBotLogin,

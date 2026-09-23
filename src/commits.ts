@@ -8,7 +8,7 @@
  * a test supplies a plain function instead of a stubbed API (SPEC.md §12).
  */
 
-import type { GithubAccount, PullRequestCommit } from "./types";
+import type { GithubAccount, PullRequestCommit, RepositoryActivity } from "./types";
 import { isCodingAgent, isWebFlow } from "./account";
 
 /**
@@ -50,8 +50,10 @@ function commitPrincipal(
 type CommitProblem =
 	| "commit-count-mismatch"
 	| "no-commits"
+	| "push-history-incomplete"
 	| "too-many-commits"
 	| "untrusted-commit"
+	| "untrusted-pusher"
 	| "unverified-commit";
 
 /** SPEC.md §3.2: zero commits, or more than the commits API can return, fail closed. */
@@ -140,13 +142,52 @@ async function checkCommits(
 	return undefined;
 }
 
+/** SPEC.md §3.2: whether any commit is decided on the coding agent, which is what makes push custody a question at all. */
+function hasCodingAgentCommit(commits: readonly PullRequestCommit[]): boolean {
+	return commits.some(({ author, committer }) => {
+		const principal = commitPrincipal(author, committer);
+		return principal !== undefined && isCodingAgent(principal);
+	});
+}
+
+/* SPEC.md §3.2 push custody: the coding agent's signature says nothing about who put its commits onto
+ * the branch, so the branch's own history has to. The activities arrive newest first, and each must
+ * pick up where the one after it left off — its `after` the `before` of the newer one, the newest
+ * ending on the head the approval is for — back to the push that created the branch. Every actor on
+ * that chain must be trusted (§3.1). A break anywhere, a history that runs out before the creation, a
+ * deletion in between, or an actor GitHub maps onto no account all fail closed: an update the chain
+ * cannot account for is one whose pusher is unknown. */
+async function checkPushCustody(
+	activities: readonly RepositoryActivity[],
+	headSha: string,
+	isTrusted: TrustResolver,
+): Promise<CommitProblem | undefined> {
+	let expected = headSha;
+	for (const { activity_type: activityType, actor, after, before } of activities) {
+		if (after !== expected) {
+			return "push-history-incomplete";
+		}
+		// oxlint-disable-next-line eslint/no-await-in-loop -- sequential by design: an untrusted actor ends the walk before another lookup is spent
+		if (actor === null || !(await isTrusted(actor))) {
+			return "untrusted-pusher";
+		}
+		if (activityType === "branch_creation") {
+			return undefined;
+		}
+		expected = before;
+	}
+	return "push-history-incomplete";
+}
+
 export {
 	MAX_VERIFIABLE_COMMITS,
 	checkCommit,
 	checkCommitCount,
 	checkCommits,
+	checkPushCustody,
 	commitPrincipal,
 	commitTrust,
+	hasCodingAgentCommit,
 	precheckCommitCount,
 };
 export type { CommitProblem, TrustResolver };

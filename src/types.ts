@@ -101,7 +101,8 @@ const nullableAccountSchema = nullable(accountSchema);
  * not a pull_request payload" — a 500. Both spellings of absence are left as they arrived rather
  * than normalized onto one: the reader tests for a repository, not for which of the two it was. */
 const headRepoSchema = nullish(idRefSchema);
-const headSchema = pipe(object({ repo: headRepoSchema, sha: string() }), readonly());
+/* `ref` is the head branch name, which the push history of SPEC.md §3.2 is looked up by. */
+const headSchema = pipe(object({ ref: string(), repo: headRepoSchema, sha: string() }), readonly());
 
 const pullRequestSchema = pipe(
 	object({
@@ -178,6 +179,22 @@ const pullRequestCommitSchema = pipe(
 );
 type PullRequestCommit = InferOutput<typeof pullRequestCommitSchema>;
 
+/**
+ * `GET /repos/{owner}/{repo}/activity` item subset (SPEC.md §3.2 push custody): the ref update one
+ * activity records, and who made it. `actor` is null when GitHub maps it onto no account.
+ */
+const repositoryActivitySchema = pipe(
+	object({
+		/** "push" | "force_push" | "branch_creation" | "branch_deletion" | "pr_merge" | ... */
+		activity_type: string(),
+		actor: nullableAccountSchema,
+		after: string(),
+		before: string(),
+	}),
+	readonly(),
+);
+type RepositoryActivity = InferOutput<typeof repositoryActivitySchema>;
+
 /** `GET /repos/{owner}/{repo}/pulls/{n}/reviews` item subset (SPEC.md §3 cond. 5). */
 const commitIdSchema = nullable(string());
 const pullRequestReviewSchema = pipe(
@@ -223,6 +240,7 @@ export {
 	pullRequestCommitSchema,
 	pullRequestEventSchema,
 	pullRequestReviewSchema,
+	repositoryActivitySchema,
 };
 export type {
 	EventPullRequest,
@@ -234,4 +252,5 @@ export type {
 	PullRequestEventContract,
 	PullRequestEventPayload,
 	PullRequestReview,
+	RepositoryActivity,
 };

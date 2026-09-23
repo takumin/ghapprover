@@ -54,7 +54,8 @@ const WEB_FLOW: AccountRef = { id: 19_864_447, login: "web-flow" };
  * The account GitHub attributes Claude Code's commits to: `noreply@anthropic.com` maps onto it, and
  * Claude Code signs them with a key registered to it. It stands for a tool rather than for the
  * person driving it, so §3.2 trusts it only as the committer on a pull request a trusted human
- * opened (src/commits.ts) — never on a bot's, and never as a pull request author (SPEC.md §3.2).
+ * opened, and only once the branch history shows a trusted principal pushed every update of it
+ * (src/commits.ts) — never on a bot's, and never as an author or pusher (SPEC.md §3.2).
  */
 const CODING_AGENT: AccountRef = { id: 81_847, login: "claude" };
 
