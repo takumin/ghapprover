@@ -11,7 +11,7 @@
  * value is a freshly rebuilt subset rather than the untrusted JSON itself, while a key
  * GitHub adds later is not a validation failure. Every object is piped through `readonly()`,
  * which keeps the inferred contract as frozen as the hand-written interfaces it replaces.
- * The webhook subset is pinned to the official @octokit/webhooks-types definitions by the
+ * The webhook subset is pinned to the official @octokit/openapi-webhooks-types definitions by the
  * compile-time projection check at the bottom of this file.
  */
 
@@ -29,7 +29,7 @@ import {
 	string,
 } from "valibot";
 import type { InferOutput } from "valibot";
-import type { PullRequestEvent } from "@octokit/webhooks-types";
+import type { operations } from "@octokit/openapi-webhooks-types";
 
 declare global {
 	/**
@@ -220,12 +220,35 @@ const orgMembershipSchema = pipe(
 );
 type OrgMembership = InferOutput<typeof orgMembershipSchema>;
 
+/**
+ * The OpenAPI description marks fields optional or nullable that a `pull_request` delivery always
+ * carries, and that the schema above requires (SPEC.md §11). Only those are restated as sent;
+ * every other field is checked as published, so drift anywhere else still fails the build.
+ */
+type AsDelivered<Event extends { readonly pull_request: { readonly user: object | null } }> = Omit<
+	Event,
+	"pull_request"
+> & {
+	readonly pull_request: Omit<Event["pull_request"], "commits" | "draft" | "user"> & {
+		readonly commits: number;
+		readonly draft: boolean;
+		readonly user: NonNullable<Event["pull_request"]["user"]> & { readonly type: string };
+	};
+};
+
+/** Every `pull_request` action's payload; the `pull-request-review*` events are keyed apart. */
+type PullRequestEvent = {
+	[Key in keyof operations]: Key extends `pull-request/${string}`
+		? AsDelivered<operations[Key]["requestBody"]["content"]["application/json"]>
+		: never;
+}[keyof operations];
+
 /** Resolves only when Payload is assignable to Subset; used as a compile-time assertion. */
 type ProjectionOf<Payload extends Subset, Subset> = Payload;
 
 /**
  * Compile-time projection check (SPEC.md §11): every genuine `pull_request`
- * payload, as defined by the official @octokit/webhooks-types package, must
+ * payload, as defined by the official @octokit/openapi-webhooks-types package, must
  * satisfy the modeled subset above — which is the type inferred from the schema,
  * so tightening the schema is what this check is applied to. If either side
  * drifts, this alias stops compiling. The runtime still validates fail closed
