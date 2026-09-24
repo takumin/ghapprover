@@ -11,7 +11,9 @@ runner:
       - "%f:%l:%c: %m"
       - "%-G%.%#"
   editorconfig-checker:
-    cmd: ec -no-color
+    # `-format default` pinned: in CI, v4 would otherwise auto-select the
+    # `github-actions` format, which the errorformat below cannot parse.
+    cmd: editorconfig-checker -no-color -format default
     errorformat:
       - "%-G%+P%f:"
       - "%\\s%+%l: %m"
