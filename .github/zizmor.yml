@@ -1,0 +1,6 @@
+---
+rules:
+  # The `$/...` syntax this audit asks for is rejected by actionlint, which
+  # still requires `./...` for local actions and reusable workflows.
+  self-repository:
+    disable: true
