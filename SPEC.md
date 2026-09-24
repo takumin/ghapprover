@@ -862,15 +862,15 @@ packages it replaces; where such a package covers a concern, the implementation 
 delegate to it. The one non-Octokit entry is admitted on that same argument rather than
 as an exception to it (see the note below the table):
 
-| Concern                              | Package                         | Notes                                                        |
-| ------------------------------------ | ------------------------------- | ------------------------------------------------------------ |
-| Webhook signature verification (§4)  | `@octokit/webhooks-methods`     | `verify()` is Web Crypto based and timing-safe (§7)          |
-| App JWT and installation tokens (§7) | `@octokit/auth-app`             | RS256 JWT, token issuance, in-memory token cache             |
-| REST calls (§3, §4)                  | `@octokit/core`                 | a delivery-wide `AbortSignal` bounds every dispatch (§4, §9) |
-| Pagination (§3.2, §3 condition 5)    | `@octokit/plugin-paginate-rest` | follows the `Link` header; no manual page loops              |
-| Failure narrowing (§8, §9)           | `@octokit/request-error`        | typed `status` and `response.headers` on a failure (§8)      |
-| Untrusted JSON validation (§3, §4)   | `valibot`                       | schemas are the single source of the §3 contract types       |
-| Webhook payload types                | `@octokit/webhooks-types`       | devDependency; type definitions only, never bundled          |
+| Concern                              | Package                           | Notes                                                        |
+| ------------------------------------ | --------------------------------- | ------------------------------------------------------------ |
+| Webhook signature verification (§4)  | `@octokit/webhooks-methods`       | `verify()` is Web Crypto based and timing-safe (§7)          |
+| App JWT and installation tokens (§7) | `@octokit/auth-app`               | RS256 JWT, token issuance, in-memory token cache             |
+| REST calls (§3, §4)                  | `@octokit/core`                   | a delivery-wide `AbortSignal` bounds every dispatch (§4, §9) |
+| Pagination (§3.2, §3 condition 5)    | `@octokit/plugin-paginate-rest`   | follows the `Link` header; no manual page loops              |
+| Failure narrowing (§8, §9)           | `@octokit/request-error`          | typed `status` and `response.headers` on a failure (§8)      |
+| Untrusted JSON validation (§3, §4)   | `valibot`                         | schemas are the single source of the §3 contract types       |
+| Webhook payload types                | `@octokit/openapi-webhooks-types` | devDependency; type definitions only, never bundled          |
 
 Rules:
 
@@ -897,8 +897,11 @@ Rules:
 > Schemas are the single source of truth for the contract types of §3: those types are
 > inferred from the schemas rather than declared alongside them, so a field tightened in
 > one cannot leave the other looser. The compile-time projection against
-> `@octokit/webhooks-types` is kept and applies to the inferred type, so drift from the
-> official payload definition still fails the build.
+> `@octokit/openapi-webhooks-types` is kept and applies to the inferred type, so drift from the
+> official payload definition still fails the build. That definition leaves `commits`,
+> `draft`, and the author (and its `type`) of `pull_request` optional or nullable although a
+> delivery always carries them; the check restates those four as sent and takes every
+> other field as published.
 >
 > A schema validates; it does not decide. Everything §3 settles — trust, verification,
 > duplication — stays in the pure decision functions of §12, so what the package is
@@ -925,7 +928,7 @@ Rules:
   functions so it can be unit-tested without mocking the GitHub API
 - The §3 contract types are inferred from the validation schemas rather than declared
   beside them (§11), which is what keeps the two from drifting. The projection check
-  against `@octokit/webhooks-types` applies to the inferred type
+  against `@octokit/openapi-webhooks-types` applies to the inferred type
 - `deliveryId` and `errorMessage` are truncated where the log entry is built rather than
   where the value is raised or read, so every path onto a field whose source imposes no
   bound of its own is bounded by one rule (§8). The diagnostic headers come off the failed
