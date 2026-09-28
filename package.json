@@ -30,7 +30,7 @@
 		"oxlint-tsgolint": "7.0.2003",
 		"typescript": "7.0.2",
 		"vitest": "4.1.11",
-		"wrangler": "4.139.0"
+		"wrangler": "4.140.0"
 	},
 	"engines": {
 		"node": "24.21.0",
