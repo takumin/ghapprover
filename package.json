@@ -25,8 +25,8 @@
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "0.22.0",
 		"@octokit/openapi-webhooks-types": "12.1.0",
-		"oxfmt": "0.71.0",
-		"oxlint": "1.86.0",
+		"oxfmt": "0.72.0",
+		"oxlint": "1.87.0",
 		"oxlint-tsgolint": "7.0.2003",
 		"typescript": "7.0.2",
 		"vitest": "4.1.11",
