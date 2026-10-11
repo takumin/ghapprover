@@ -1,6 +1,6 @@
 /**
  * Strict per-test fetch stub standing in for the retired fetchMock helper
- * (this @cloudflare/vitest-pool-workers version no longer exports it from
+ * (this @cloudflare/vitest-plugin version no longer exports it from
  * "cloudflare:test"): serves the planned routes, records every request, and
  * rejects anything unplanned (the disableNetConnect equivalent). Responses
  * carry a JSON content-type (octokit only parses JSON bodies with one) plus

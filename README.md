@@ -480,7 +480,7 @@ flags (`--help` among them) for itself. Separate them with `--` when passing any
 nothing.
 
 Tests use
-`@cloudflare/vitest-pool-workers`, so they execute against the real runtime rather than a
+`@cloudflare/vitest-plugin`, so they execute against the real runtime rather than a
 Node shim.
 
 ## Contributing
