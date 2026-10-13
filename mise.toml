@@ -5,7 +5,7 @@
 [tools]
 # runtime
 node = "24.21.0"
-pnpm = "12.11.1"
+pnpm = "12.11.2"
 # maintenance
 pinact = "5.0.0"
 # lint
