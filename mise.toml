@@ -4,7 +4,7 @@
 
 [tools]
 # runtime
-node = "24.21.0"
+node = "24.22.0"
 pnpm = "12.11.2"
 # maintenance
 pinact = "5.0.0"
