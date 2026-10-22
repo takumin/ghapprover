@@ -87,7 +87,7 @@ async function generatePrivateKeyPem(): Promise<string> {
 	}
 	const exported = await crypto.subtle.exportKey("pkcs8", generated.privateKey);
 	if (!(exported instanceof ArrayBuffer)) {
-		throw new Error("expected an ArrayBuffer export");
+		throw new TypeError("expected an ArrayBuffer export");
 	}
 	const chars = Array.from(new Uint8Array(exported), (byte) => String.fromCodePoint(byte));
 	return wrapPem(btoa(chars.join("")));
