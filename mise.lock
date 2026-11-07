@@ -125,43 +125,50 @@ url = "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellche
 url_api = "https://api.github.com/repos/koalaman/shellcheck/releases/assets/279056944"
 
 [[tools."aqua:reviewdog/reviewdog"]]
-version = "0.21.2"
+version = "0.21.3"
 backend = "aqua:reviewdog/reviewdog"
 
 [tools."aqua:reviewdog/reviewdog"."platforms.linux-arm64"]
-checksum = "sha256:56854c078853ea53c73e1e4d627e6a90d6b68185c46edd46aad8beb94564b948"
-url = "https://github.com/reviewdog/reviewdog/releases/download/v0.21.2/reviewdog_0.21.2_Linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/reviewdog/reviewdog/releases/assets/573154524"
+checksum = "sha256:bf84e546444cbb0325f1f2c6151549c79673117573b737884ba8ecbe9d04dc85"
+checksum_source = "mise-versions"
+url = "https://github.com/reviewdog/reviewdog/releases/download/v0.21.3/reviewdog_0.21.3_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/reviewdog/reviewdog/releases/assets/720779771"
 
 [tools."aqua:reviewdog/reviewdog"."platforms.linux-arm64-musl"]
-checksum = "sha256:56854c078853ea53c73e1e4d627e6a90d6b68185c46edd46aad8beb94564b948"
-url = "https://github.com/reviewdog/reviewdog/releases/download/v0.21.2/reviewdog_0.21.2_Linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/reviewdog/reviewdog/releases/assets/573154524"
+checksum = "sha256:bf84e546444cbb0325f1f2c6151549c79673117573b737884ba8ecbe9d04dc85"
+checksum_source = "mise-versions"
+url = "https://github.com/reviewdog/reviewdog/releases/download/v0.21.3/reviewdog_0.21.3_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/reviewdog/reviewdog/releases/assets/720779771"
 
 [tools."aqua:reviewdog/reviewdog"."platforms.linux-x64"]
-checksum = "sha256:30413aa3c7443e9c3c157fe5766cad40e3bb39a32e210ee69b710a8d5c4b8e51"
-url = "https://github.com/reviewdog/reviewdog/releases/download/v0.21.2/reviewdog_0.21.2_Linux_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/reviewdog/reviewdog/releases/assets/573154534"
+checksum = "sha256:7029c2faf54e1237454cae8f1adf876c965b3d13d054f1a392206459091af4a1"
+checksum_source = "mise-versions"
+url = "https://github.com/reviewdog/reviewdog/releases/download/v0.21.3/reviewdog_0.21.3_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/reviewdog/reviewdog/releases/assets/720779739"
 
 [tools."aqua:reviewdog/reviewdog"."platforms.linux-x64-musl"]
-checksum = "sha256:30413aa3c7443e9c3c157fe5766cad40e3bb39a32e210ee69b710a8d5c4b8e51"
-url = "https://github.com/reviewdog/reviewdog/releases/download/v0.21.2/reviewdog_0.21.2_Linux_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/reviewdog/reviewdog/releases/assets/573154534"
+checksum = "sha256:7029c2faf54e1237454cae8f1adf876c965b3d13d054f1a392206459091af4a1"
+checksum_source = "mise-versions"
+url = "https://github.com/reviewdog/reviewdog/releases/download/v0.21.3/reviewdog_0.21.3_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/reviewdog/reviewdog/releases/assets/720779739"
 
 [tools."aqua:reviewdog/reviewdog"."platforms.macos-arm64"]
-checksum = "sha256:54497b0f3378936caa22a3a11d796acefe4d5f35d86f5cc84c622f941c3c0c68"
-url = "https://github.com/reviewdog/reviewdog/releases/download/v0.21.2/reviewdog_0.21.2_Darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/reviewdog/reviewdog/releases/assets/573154522"
+checksum = "sha256:c2a393e438e1d6dfe64e4a5ee103f1f1e839fff605f26686d6a7083770cd0afd"
+checksum_source = "mise-versions"
+url = "https://github.com/reviewdog/reviewdog/releases/download/v0.21.3/reviewdog_0.21.3_Darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/reviewdog/reviewdog/releases/assets/720779780"
 
 [tools."aqua:reviewdog/reviewdog"."platforms.macos-x64"]
-checksum = "sha256:3002ad37ee7d344de25e3c630a293aa322fc10d7b9c3fc6d4e836b616d084ae5"
-url = "https://github.com/reviewdog/reviewdog/releases/download/v0.21.2/reviewdog_0.21.2_Darwin_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/reviewdog/reviewdog/releases/assets/573154525"
+checksum = "sha256:ca114007f4562062b4b54b422d8d2d21317b548ec64b7848e7e2aea52e490abd"
+checksum_source = "mise-versions"
+url = "https://github.com/reviewdog/reviewdog/releases/download/v0.21.3/reviewdog_0.21.3_Darwin_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/reviewdog/reviewdog/releases/assets/720779737"
 
 [tools."aqua:reviewdog/reviewdog"."platforms.windows-x64"]
-checksum = "sha256:397959e250bfc6bc801fba34b7d4922f2eaa4763deacf7d32ef11bffb284a315"
-url = "https://github.com/reviewdog/reviewdog/releases/download/v0.21.2/reviewdog_0.21.2_Windows_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/reviewdog/reviewdog/releases/assets/573154505"
+checksum = "sha256:055ef6db0cbe744a118fc67e6f5927cbe1f2e7b4d60ab2a68934d8492ff1569a"
+checksum_source = "mise-versions"
+url = "https://github.com/reviewdog/reviewdog/releases/download/v0.21.3/reviewdog_0.21.3_Windows_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/reviewdog/reviewdog/releases/assets/720779784"
 
 [[tools."aqua:rhysd/actionlint"]]
 version = "1.7.12"
