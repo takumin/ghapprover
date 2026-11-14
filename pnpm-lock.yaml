@@ -186,8 +186,8 @@ importers:
         version: 1.5.0(typescript@7.0.2)
     devDependencies:
       '@cloudflare/vitest-plugin':
-        specifier: 1.7.0
-        version: 1.7.0(vitest@5.1.0(vite@8.3.6(esbuild@0.28.2)))
+        specifier: 1.8.0
+        version: 1.8.0(vitest@5.1.0(vite@8.3.6(esbuild@0.28.2)))
       '@octokit/openapi-webhooks-types':
         specifier: 12.2.0
         version: 12.2.0
@@ -225,8 +225,8 @@ packages:
       workerd:
         optional: true
 
-  '@cloudflare/vitest-plugin@1.7.0':
-    resolution: {integrity: sha512-mIXpoJMKamKHrL9eTGVKxIu1Qt+GVHikRqukDkCG7Wtv4x18GIY6akz2PCmpRjDStDC/6J2Yt1XyTM6Pjza38g==}
+  '@cloudflare/vitest-plugin@1.8.0':
+    resolution: {integrity: sha512-HYuHshj+PERyR1RiintBsD6dMXK27Le1Ybt+/7cY6gYRwGuhiR3Y8HyOaaJDgeOcZBkrIi1vsoUUTDILWmvAAA==}
     peerDependencies:
       vitest: ^4.1.0 || ^5.0.0
 
@@ -1379,8 +1379,8 @@ packages:
     resolution: {integrity: sha512-QNgCA/axizZ7kv7RV3nwbRoz+w4watBlwIsyXjwgYHw4eSw5BrR1F2152s3Kz+Bzy/YxjKFHrZl3LzBRbPgYoQ==}
     engines: {node: '>=22.0.0'}
 
-  miniflare@5.20261110.0-beta:
-    resolution: {integrity: sha512-UiJRL6D4pNkHxgZ3QXDCaz/N27FFuuHRRgOmD/SucEZIwDOfWwX7s/n8ZrFemFlURRfnQpBfAdWy8ixsW0yJWA==}
+  miniflare@5.20261110.1-beta:
+    resolution: {integrity: sha512-CO8T1DO3/JFxEWvJ7yaHiPx5Ph/5FhRzYKve6cM8O2frHmY7yWudV5p8FU11bfGRAerChGpuK+l0HoxOCw2nFw==}
     engines: {node: '>=22.12.0'}
     peerDependencies:
       kerberos: ^2.0.0
@@ -1639,8 +1639,8 @@ packages:
       '@cloudflare/workers-types':
         optional: true
 
-  wrangler@4.160.0:
-    resolution: {integrity: sha512-nwzmpu7Hd5Csax02twpCNRAloC+kduXKw9rjfq+oEuo8RnjWRaahSV+qk+p0w88EgafMcDE0XnZRSfOM3lKEKg==}
+  wrangler@4.160.1:
+    resolution: {integrity: sha512-gM8daj5geYTEw+038dV5OQAmrSIo/9e97FoJuNf+r9PllWR0ZnqMI2LXZZDSHpGsMez3mKKFYH5o/hBsf1ZTHg==}
     engines: {node: '>=22.12.0'}
     hasBin: true
     peerDependencies:
@@ -1686,13 +1686,13 @@ snapshots:
     optionalDependencies:
       workerd: 1.20261110.1
 
-  '@cloudflare/vitest-plugin@1.7.0(vitest@5.1.0(vite@8.3.6(esbuild@0.28.2)))':
+  '@cloudflare/vitest-plugin@1.8.0(vitest@5.1.0(vite@8.3.6(esbuild@0.28.2)))':
     dependencies:
       cjs-module-lexer: 1.2.3
       esbuild: 0.28.2
-      miniflare: 5.20261110.0-beta
+      miniflare: 5.20261110.1-beta
       vitest: 5.1.0(vite@8.3.6(esbuild@0.28.2))
-      wrangler: 4.160.0
+      wrangler: 4.160.1
       zod: 4.6.6
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
@@ -2441,7 +2441,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  miniflare@5.20261110.0-beta:
+  miniflare@5.20261110.1-beta:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.35.5
@@ -2709,14 +2709,14 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  wrangler@4.160.0:
+  wrangler@4.160.1:
     dependencies:
       '@cloudflare/kv-asset-handler': 0.5.0
       '@cloudflare/unenv-preset': 2.16.2(unenv@2.0.0-rc.24)(workerd@1.20261110.1)
       '@cspotcode/source-map-support': 0.8.1
       blake3-wasm: 2.1.5
       esbuild: 0.28.2
-      miniflare: 5.20261110.0-beta
+      miniflare: 5.20261110.1-beta
       path-to-regexp: 6.3.0
       unenv: 2.0.0-rc.24
       workerd: 1.20261110.1
